@@ -1,0 +1,79 @@
+{
+  "name": "Jabumarket",
+  "id": "/",
+  "short_name": "Jabumarket",
+  "description": "Buy, sell & find services around JABU.",
+  "start_url": "/",
+  "display": "standalone",
+  "display_override": ["window-controls-overlay", "standalone", "minimal-ui"],
+  "background_color": "#27272a",
+  "theme_color": "#18181b",
+  "orientation": "portrait-primary",
+  "icons": [
+    {
+      "src": "/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icon-192-maskable.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "maskable"
+    },
+    {
+      "src": "/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icon-512-maskable.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ],
+  "screenshots": [
+    {
+      "src": "/images/screenshot-home.jpg",
+      "sizes": "1080x2000",
+      "type": "image/jpeg",
+      "form_factor": "narrow",
+      "label": "Browse listings around JABU"
+    },
+    {
+      "src": "/images/screenshot-vendors.jpg",
+      "sizes": "1080x2000",
+      "type": "image/jpeg",
+      "form_factor": "narrow",
+      "label": "Order food from campus vendors"
+    },
+    {
+      "src": "/images/screenshot-study.jpg",
+      "sizes": "1080x2000",
+      "type": "image/jpeg",
+      "form_factor": "narrow",
+      "label": "Study Hub — materials, MCQs, Q&A"
+    }
+  ],
+  "categories": ["shopping", "education"],
+  "shortcuts": [
+    {
+      "name": "Post a listing",
+      "url": "/post",
+      "description": "Sell something on Jabumarket"
+    },
+    {
+      "name": "Explore listings",
+      "url": "/explore",
+      "description": "Browse all listings"
+    },
+    {
+      "name": "Study Hub",
+      "url": "/study",
+      "description": "Course materials, MCQs, Q&A"
+    }
+  ]
+}
