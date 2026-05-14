@@ -1,9 +1,9 @@
 {
-  "name": "Jabumarket",
-  "id": "/",
-  "short_name": "Jabumarket",
-  "description": "Buy, sell & find services around JABU.",
-  "start_url": "/",
+  "name": "Jabu Study",
+  "id": "/study",
+  "short_name": "Jabu Study",
+  "description": "Course materials, MCQs, Q&A, tutors, and study tools for JABU students.",
+  "start_url": "/study",
   "display": "standalone",
   "display_override": ["window-controls-overlay", "standalone", "minimal-ui"],
   "background_color": "#27272a",
@@ -37,43 +37,29 @@
   ],
   "screenshots": [
     {
-      "src": "/images/screenshot-home.jpg",
-      "sizes": "1080x2000",
-      "type": "image/jpeg",
-      "form_factor": "narrow",
-      "label": "Browse listings around JABU"
-    },
-    {
-      "src": "/images/screenshot-vendors.jpg",
-      "sizes": "1080x2000",
-      "type": "image/jpeg",
-      "form_factor": "narrow",
-      "label": "Order food from campus vendors"
-    },
-    {
       "src": "/images/screenshot-study.jpg",
       "sizes": "1080x2000",
       "type": "image/jpeg",
       "form_factor": "narrow",
-      "label": "Study Hub — materials, MCQs, Q&A"
+      "label": "Study materials, MCQs, and Q&A"
     }
   ],
-  "categories": ["shopping", "education"],
+  "categories": ["education", "productivity"],
   "shortcuts": [
     {
-      "name": "Post a listing",
-      "url": "/post",
-      "description": "Sell something on Jabumarket"
+      "name": "Study Library",
+      "url": "/study/library",
+      "description": "Browse course materials"
     },
     {
-      "name": "Explore listings",
-      "url": "/explore",
-      "description": "Browse all listings"
+      "name": "Practice",
+      "url": "/study/practice",
+      "description": "Practice MCQs"
     },
     {
-      "name": "Study Hub",
-      "url": "/study",
-      "description": "Course materials, MCQs, Q&A"
+      "name": "Q&A",
+      "url": "/study/questions",
+      "description": "Ask and answer questions"
     }
   ]
 }

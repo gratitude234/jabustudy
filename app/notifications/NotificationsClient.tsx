@@ -332,7 +332,7 @@ export default function NotificationsClient() {
               </p>
             </div>
             <Link
-              href="/explore"
+              href="/study"
               className="mt-1 inline-flex items-center gap-2 rounded-2xl border bg-white px-4 py-2.5 text-xs font-semibold text-zinc-900 no-underline hover:bg-zinc-50"
             >
               Browse listings

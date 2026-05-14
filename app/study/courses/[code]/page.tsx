@@ -23,7 +23,7 @@ import {
   Zap,
 } from "lucide-react";
 
-// ── Types ──────────────────────────────────────────────────────────────────────
+// â”€â”€ Types â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 type MaterialType = "past_question" | "handout" | "slides" | "note" | "timetable" | "other" | string;
 
 type Course = {
@@ -119,7 +119,7 @@ type BankState = {
   questionsCount: number;
 };
 
-// ── Helpers ────────────────────────────────────────────────────────────────────
+// â”€â”€ Helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 function norm(v: string) {
   return v.trim().replace(/\s+/g, " ");
 }
@@ -154,7 +154,7 @@ function typeMeta(t: string | null) {
 
 const TYPE_ORDER = ["past_question", "note", "handout", "slides", "timetable", "other"];
 
-// ── Sub-components ─────────────────────────────────────────────────────────────
+// â”€â”€ Sub-components â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 function MaterialCard({ m, courseCode }: { m: Material; courseCode: string }) {
   const title = norm(String(m.title ?? "Untitled material"));
   const meta = typeMeta(m.material_type ?? "other");
@@ -177,11 +177,11 @@ function MaterialCard({ m, courseCode }: { m: Material; courseCode: string }) {
         <p className="truncate text-sm font-semibold text-foreground">{title}</p>
         <p className="mt-0.5 text-xs text-muted-foreground">
           {[meta.label, m.level ? `${m.level}L` : null, m.semester ? `${m.semester} sem` : null]
-            .filter(Boolean).join(" · ")}
+            .filter(Boolean).join(" Â· ")}
         </p>
       </div>
       {typeof m.downloads === "number" && m.downloads > 0 && (
-        <p className="shrink-0 text-xs text-muted-foreground">↓{m.downloads}</p>
+        <p className="shrink-0 text-xs text-muted-foreground">â†“{m.downloads}</p>
       )}
       <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" />
     </Link>
@@ -218,9 +218,9 @@ function PracticeSetCard({ s }: { s: PracticeSet }) {
             <span className="text-xs text-muted-foreground">{s.questions_count} questions</span>
           )}
           {typeof s.time_limit_minutes === "number" && (
-            <span className="text-xs text-muted-foreground">· {s.time_limit_minutes} min</span>
+            <span className="text-xs text-muted-foreground">Â· {s.time_limit_minutes} min</span>
           )}
-          {s.level && <span className="text-xs text-muted-foreground">· {s.level}L</span>}
+          {s.level && <span className="text-xs text-muted-foreground">Â· {s.level}L</span>}
         </div>
         {isAiCourse && sources.length > 0 && (
           <p className="mt-1 text-[11px] text-[#5B35D5]/70 leading-snug">
@@ -229,7 +229,7 @@ function PracticeSetCard({ s }: { s: PracticeSet }) {
               .map((src) => src.title ?? "material")
               .join(", ")
               .slice(0, 80)}
-            {sources.map((s) => s.title ?? "").join(", ").length > 80 ? "…" : ""}
+            {sources.map((s) => s.title ?? "").join(", ").length > 80 ? "â€¦" : ""}
           </p>
         )}
       </div>
@@ -407,7 +407,7 @@ function BankBuilderCard({
               Next batch
             </button>
             <Link
-              href={`/admin/study/practice/${encodeURIComponent(bank!.run.quiz_set_id)}`}
+              href={`/study-admin/question-quality/${encodeURIComponent(bank!.run.quiz_set_id)}`}
               className="inline-flex items-center justify-center gap-2 rounded-2xl border border-border bg-background px-3 py-2.5 text-xs font-extrabold text-foreground no-underline hover:bg-secondary/40"
             >
               <Play className="h-3.5 w-3.5" />
@@ -429,7 +429,7 @@ function BankBuilderCard({
   );
 }
 
-// ── Page ───────────────────────────────────────────────────────────────────────
+// â”€â”€ Page â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 export default function CourseHubPage() {
   const router = useRouter();
   const params = useParams<{ code: string }>();
@@ -707,7 +707,7 @@ export default function CourseHubPage() {
   return (
     <div className="space-y-3 pb-28 md:pb-8">
 
-      {/* ── Hero ──────────────────────────────────────────────────────────────── */}
+      {/* â”€â”€ Hero â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
       <div className="overflow-hidden rounded-3xl border border-border bg-card shadow-sm">
         <div className="bg-[#5B35D5] px-5 pt-5 pb-5">
           <div className="mb-4 flex items-center justify-between">
@@ -731,10 +731,10 @@ export default function CourseHubPage() {
             <p className="mt-1.5 text-sm font-semibold text-white/75 leading-snug">{norm(course.course_title)}</p>
           )}
           {(dept || faculty) && (
-            <p className="mt-0.5 text-xs text-white/50">{[dept, faculty].filter(Boolean).join(" · ")}</p>
+            <p className="mt-0.5 text-xs text-white/50">{[dept, faculty].filter(Boolean).join(" Â· ")}</p>
           )}
 
-          {/* Contextual stats — only show non-zero */}
+          {/* Contextual stats â€” only show non-zero */}
           {!loading && course && (materials.length > 0 || practiceSets.length > 0) && (
             <div className="mt-4 flex flex-wrap gap-2">
               {materials.length > 0 && (
@@ -776,7 +776,7 @@ export default function CourseHubPage() {
 
       {course && (
         <>
-          {/* ── Primary session CTA ──────────────────────────────────────────── */}
+          {/* â”€â”€ Primary session CTA â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
           <div className="rounded-3xl border border-border bg-card p-4 shadow-sm space-y-3">
             <div className="flex items-center gap-2">
               <Zap className="h-4 w-4 text-[#5B35D5]" />
@@ -796,7 +796,7 @@ export default function CourseHubPage() {
                     {[
                       practiceSets[0].questions_count ? `${practiceSets[0].questions_count} questions` : null,
                       practiceSets[0].time_limit_minutes ? `${practiceSets[0].time_limit_minutes} min` : null,
-                    ].filter(Boolean).join(" · ")}
+                    ].filter(Boolean).join(" Â· ")}
                   </p>
                 </div>
                 <Sparkles className="h-5 w-5 shrink-0 text-white/80" />
@@ -849,7 +849,7 @@ export default function CourseHubPage() {
             </div>
           </div>
 
-          {/* ── Level filter ─────────────────────────────────────────────────── */}
+          {/* â”€â”€ Level filter â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
           {canManageBank && compatibleMaterials.length > 0 && (
             <BankBuilderCard
               bank={bank}
@@ -884,7 +884,7 @@ export default function CourseHubPage() {
             </div>
           )}
 
-          {/* ── Past Questions ───────────────────────────────────────────────── */}
+          {/* â”€â”€ Past Questions â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
           {pastQuestions.length > 0 && (
             <div className="rounded-3xl border border-border bg-card p-4 shadow-sm">
               <SectionHeader
@@ -895,7 +895,7 @@ export default function CourseHubPage() {
                       href={`/study/library?type=past_question&q=${encodeURIComponent(code)}`}
                       className="text-xs font-semibold text-[#5B35D5] no-underline"
                     >
-                      See all {pastQuestions.length} →
+                      See all {pastQuestions.length} â†’
                     </Link>
                   ) : undefined
                 }
@@ -908,7 +908,7 @@ export default function CourseHubPage() {
             </div>
           )}
 
-          {/* ── Practice Sets ────────────────────────────────────────────────── */}
+          {/* â”€â”€ Practice Sets â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
           <div className="rounded-3xl border border-border bg-card p-4 shadow-sm">
             <SectionHeader
               title="Practice Sets"
@@ -918,7 +918,7 @@ export default function CourseHubPage() {
                     href={`/study/practice?course=${encodeURIComponent(code)}`}
                     className="text-xs font-semibold text-[#5B35D5] no-underline"
                   >
-                    See all →
+                    See all â†’
                   </Link>
                 ) : undefined
               }
@@ -944,7 +944,7 @@ export default function CourseHubPage() {
             )}
           </div>
 
-          {/* ── Other Materials ──────────────────────────────────────────────── */}
+          {/* â”€â”€ Other Materials â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
           {otherMaterials.length > 0 && (
             <div className="rounded-3xl border border-border bg-card p-4 shadow-sm">
               <SectionHeader title="Materials" />
@@ -1008,7 +1008,7 @@ export default function CourseHubPage() {
             </div>
           )}
 
-          {/* Empty — no materials at all */}
+          {/* Empty â€” no materials at all */}
           {materials.length === 0 && (
             <div className="rounded-3xl border border-dashed border-border bg-card p-6 text-center shadow-sm">
               <div className="mx-auto mb-3 grid h-12 w-12 place-items-center rounded-2xl bg-secondary">
@@ -1025,7 +1025,7 @@ export default function CourseHubPage() {
             </div>
           )}
 
-          {/* ── Q&A ─────────────────────────────────────────────────────────── */}
+          {/* â”€â”€ Q&A â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
           <div className="rounded-3xl border border-border bg-card p-4 shadow-sm">
             <div className="flex items-center justify-between gap-2 mb-3">
               <div className="flex items-center gap-2">
@@ -1037,7 +1037,7 @@ export default function CourseHubPage() {
                   href={`/study/questions?course=${encodeURIComponent(code)}`}
                   className="text-xs font-semibold text-[#5B35D5] no-underline"
                 >
-                  See all →
+                  See all â†’
                 </Link>
               )}
             </div>
@@ -1063,7 +1063,7 @@ export default function CourseHubPage() {
                         </p>
                         <p className="mt-0.5 text-xs text-muted-foreground">
                           {solved ? "Solved" : unanswered ? "Unanswered" : `${q.answers_count} answer${q.answers_count !== 1 ? "s" : ""}`}
-                          {q.created_at ? ` · ${timeAgoShort(q.created_at)}` : ""}
+                          {q.created_at ? ` Â· ${timeAgoShort(q.created_at)}` : ""}
                         </p>
                       </div>
                       {solved && <CheckCircle2 className="h-3.5 w-3.5 shrink-0 text-emerald-500 mt-0.5" />}

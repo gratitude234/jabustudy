@@ -105,7 +105,7 @@ type LatestAttempt = {
   } | null;
 };
 
-// Per-set attempt summary — injected into QuizSetCard for personal context
+// Per-set attempt summary â€” injected into QuizSetCard for personal context
 type SetAttemptSummary = {
   attemptCount: number;         // total submitted attempts on this set
   bestPct: number | null;       // highest score % across submitted attempts
@@ -338,7 +338,7 @@ function DifficultyBadge({ difficulty }: { difficulty: "easy" | "medium" | "hard
         s.className
       )}
     >
-      {difficulty === "easy" ? "●" : difficulty === "medium" ? "◆" : "▲"} {s.label}
+      {difficulty === "easy" ? "â—" : difficulty === "medium" ? "â—†" : "â–²"} {s.label}
     </span>
   );
 }
@@ -432,7 +432,7 @@ function MiniTabs({ value, onChange }: { value: ViewKey; onChange: (v: ViewKey) 
   );
 }
 
-// ─── Score ring ───────────────────────────────────────────────────────────────
+// â”€â”€â”€ Score ring â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 function PracticeHeroAction({
   icon,
@@ -658,13 +658,13 @@ function ScoreRingSmall({ pct }: { pct: number | null }) {
       )}
       <text x={cx} y={cx} textAnchor="middle" dominantBaseline="central"
         fontSize={10} fontWeight={500} fill="currentColor">
-        {pct != null ? `${pct}%` : "—"}
+        {pct != null ? `${pct}%` : "â€”"}
       </text>
     </svg>
   );
 }
 
-// ─── Quiz set card ─────────────────────────────────────────────────────────────
+// â”€â”€â”€ Quiz set card â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 function QuizSetCard({
   s,
@@ -735,7 +735,7 @@ function QuizSetCard({
               )}
               {isMastered && (
                 <span className="inline-flex items-center rounded-full border border-emerald-300/40 bg-emerald-100/30 px-2 py-0.5 text-[10px] font-extrabold text-emerald-800 dark:bg-emerald-950/20 dark:text-emerald-300">
-                  ✓ Mastered
+                  âœ“ Mastered
                 </span>
               )}
             </div>
@@ -770,7 +770,7 @@ function QuizSetCard({
           ) : hasSubmitted ? (
             <div className="mt-2 flex flex-wrap items-center gap-2">
               <span className="text-[11px] font-semibold text-muted-foreground">
-                {summary!.attemptCount}× attempted
+                {summary!.attemptCount}Ã— attempted
               </span>
               {bestPct != null && (
                 <span className="text-[11px] font-extrabold"
@@ -808,7 +808,7 @@ function QuizSetCard({
   );
 }
 
-// ─── Rep status ───────────────────────────────────────────────────────────────
+// â”€â”€â”€ Rep status â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 type RepStatus = "loading" | "not_applied" | "pending" | "rejected" | "approved";
 
@@ -819,7 +819,7 @@ type RepScope = {
   all_levels: boolean;
 } | null;
 
-// ─── Create Set Drawer ────────────────────────────────────────────────────────
+// â”€â”€â”€ Create Set Drawer â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 const SEMESTERS_OPT = ["1st", "2nd", "summer"] as const;
 const LEVELS_OPT    = [100, 200, 300, 400, 500, 600] as const;
@@ -901,7 +901,7 @@ function CreateSetDrawer({
       onCreated(newId);
       onClose();
       // Navigate to the admin editor to add questions
-      router.push(`/admin/study/practice/${newId}`);
+      router.push(`/study-admin/question-quality/${newId}`);
     } catch (e: any) {
       setErr(e?.message || "Failed to create set. Check your permissions.");
     } finally {
@@ -936,7 +936,7 @@ function CreateSetDrawer({
             )}
           >
             {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <PenLine className="h-4 w-4" />}
-            {saving ? "Creating…" : "Create & add questions"}
+            {saving ? "Creatingâ€¦" : "Create & add questions"}
           </button>
         </div>
       }
@@ -954,8 +954,8 @@ function CreateSetDrawer({
           <ShieldCheck className="h-4 w-4 shrink-0 text-muted-foreground" />
           <p className="text-xs font-semibold text-muted-foreground">
             {repScope?.all_levels
-              ? "Rep access — all levels"
-              : `Rep access — level${(repScope?.levels?.length ?? 0) > 1 ? "s" : ""} ${(repScope?.levels ?? []).join(", ")}`}
+              ? "Rep access â€” all levels"
+              : `Rep access â€” level${(repScope?.levels?.length ?? 0) > 1 ? "s" : ""} ${(repScope?.levels ?? []).join(", ")}`}
           </p>
         </div>
 
@@ -977,7 +977,7 @@ function CreateSetDrawer({
           <textarea
             value={description}
             onChange={(e) => setDesc(e.target.value)}
-            placeholder="Short description of what's covered…"
+            placeholder="Short description of what's coveredâ€¦"
             rows={2}
             className="mt-1 w-full resize-none bg-transparent text-sm text-foreground outline-none placeholder:text-muted-foreground"
           />
@@ -1043,7 +1043,7 @@ function CreateSetDrawer({
           <span className="text-xs font-semibold text-muted-foreground">Difficulty</span>
           <div className="mt-2 grid grid-cols-4 gap-1.5">
             {(["", "easy", "medium", "hard"] as const).map((d) => {
-              const label = d === "" ? "Any" : d === "easy" ? "● Easy" : d === "medium" ? "◆ Medium" : "▲ Hard";
+              const label = d === "" ? "Any" : d === "easy" ? "â— Easy" : d === "medium" ? "â—† Medium" : "â–² Hard";
               const active = difficulty === d;
               return (
                 <button
@@ -1066,12 +1066,12 @@ function CreateSetDrawer({
             })}
           </div>
           <p className="mt-1.5 text-[10px] text-muted-foreground">
-            Easy = warm-up / ≤10 Qs · Medium = 11–30 Qs · Hard = exam sim / 30+ Qs
+            Easy = warm-up / â‰¤10 Qs Â· Medium = 11â€“30 Qs Â· Hard = exam sim / 30+ Qs
           </p>
         </div>
 
         <p className="text-xs text-muted-foreground">
-          After creating the set you'll be taken to the editor to add questions. The set starts unpublished — submit it
+          After creating the set you'll be taken to the editor to add questions. The set starts unpublished â€” submit it
           for review when ready.
         </p>
       </div>
@@ -1079,7 +1079,7 @@ function CreateSetDrawer({
   );
 }
 
-// ─── "Suggested for today" widget ────────────────────────────────────────────
+// â”€â”€â”€ "Suggested for today" widget â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 function SuggestedTodayWidget() {
   const [suggestion, setSuggestion] = React.useState<{
@@ -1252,7 +1252,7 @@ function PracticeHomeInner() {
   // Attempts
   const [recentAttempts, setRecentAttempts] = useState<LatestAttempt[]>([]);
 
-  // User prefs — used to personalize the "For you" tab without requiring URL params
+  // User prefs â€” used to personalize the "For you" tab without requiring URL params
   const [userPrefs, setUserPrefs] = useState<{
     course_code?: string | null;
     level?: number | null;
@@ -1275,7 +1275,7 @@ function PracticeHomeInner() {
           .maybeSingle();
         if (data) setUserPrefs(data as any);
       } catch {
-        // non-fatal — for_you falls back to URL params only
+        // non-fatal â€” for_you falls back to URL params only
       }
     })();
   }, []);
@@ -1288,7 +1288,7 @@ function PracticeHomeInner() {
     return () => window.clearTimeout(t);
   }, [toast]);
 
-  // ── Rep status (gates "Create set" button) ──────────────────────────────
+  // â”€â”€ Rep status (gates "Create set" button) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const [repStatus, setRepStatus]   = useState<RepStatus>("loading");
   const [repScope, setRepScope]     = useState<RepScope>(null);
   const [createOpen, setCreateOpen] = useState(false);
@@ -1439,7 +1439,7 @@ function PracticeHomeInner() {
           setDueData(json);
         }
       } catch {
-        // non-fatal — Due Today card just stays hidden
+        // non-fatal â€” Due Today card just stays hidden
       } finally {
         if (mounted) setDueLoading(false);
       }
@@ -1520,7 +1520,7 @@ function PracticeHomeInner() {
     return () => { mounted = false; };
   }, []);
 
-  // ── Per-set attempt summaries ─────────────────────────────────────────────
+  // â”€â”€ Per-set attempt summaries â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   // Loaded whenever the visible set list changes. Gives each card personal
   // context: best score, attempt count, in-progress state.
   const [setAttemptMap, setSetAttemptMap] = useState<Record<string, SetAttemptSummary>>({});
@@ -1596,7 +1596,7 @@ function PracticeHomeInner() {
 
         if (!cancelled) setSetAttemptMap(map);
       } catch {
-        // Non-fatal — cards just show without personal context
+        // Non-fatal â€” cards just show without personal context
       }
     })();
 
@@ -1620,7 +1620,7 @@ function PracticeHomeInner() {
 
       let query = supabase.from("study_quiz_sets").select(selectFields, { count: "exact" });
 
-      // Always filter to published sets — unpublished sets are not accessible to students
+      // Always filter to published sets â€” unpublished sets are not accessible to students
       query = query.eq("published", true);
 
       const qNorm = normalizeQuery(qParam);
@@ -1697,7 +1697,7 @@ function PracticeHomeInner() {
           msg.includes("semester")
         ) {
           setSchemaHint(
-            "Some optional columns are missing (e.g., semester/time_limit/questions_count/published). The page still works — add them later for richer UX."
+            "Some optional columns are missing (e.g., semester/time_limit/questions_count/published). The page still works â€” add them later for richer UX."
           );
         }
 
@@ -1944,7 +1944,7 @@ function PracticeHomeInner() {
       navigated = true;
       startSet(pick.id, "study");
     } catch {
-      // non-fatal — button simply stops loading
+      // non-fatal â€” button simply stops loading
     } finally {
       if (!navigated) setQuickLoading(false);
     }
@@ -2029,7 +2029,7 @@ function PracticeHomeInner() {
           <input
             value={q}
             onChange={(e) => setQ(e.target.value)}
-            placeholder="Search course code, title, topic…"
+            placeholder="Search course code, title, topicâ€¦"
             className="min-w-0 w-full bg-transparent text-sm text-foreground outline-none placeholder:text-muted-foreground"
           />
 
@@ -2064,7 +2064,7 @@ function PracticeHomeInner() {
         {hasAnyFilters ? (
           <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
             <p className="text-xs font-semibold text-muted-foreground">
-              Showing <span className="text-foreground">{total === 0 ? 0 : 1}</span>–
+              Showing <span className="text-foreground">{total === 0 ? 0 : 1}</span>â€“
               <span className="text-foreground">{Math.min(total, sets.length)}</span> of{" "}
               <span className="text-foreground">{total}</span>
             </p>
@@ -2083,7 +2083,7 @@ function PracticeHomeInner() {
           </div>
         ) : (
           <p className="mt-3 text-xs text-muted-foreground">
-            Tip: try <span className="font-semibold">GST101</span> or “Anatomy”.
+            Tip: try <span className="font-semibold">GST101</span> or â€œAnatomyâ€.
           </p>
         )}
 
@@ -2162,7 +2162,7 @@ function PracticeHomeInner() {
       {/* Errors */}
       {loadError ? (
         <div className="rounded-3xl border border-border bg-background p-4">
-          <p className="text-sm font-semibold text-foreground">Couldn’t load practice sets</p>
+          <p className="text-sm font-semibold text-foreground">Couldnâ€™t load practice sets</p>
           <p className="mt-1 text-sm text-muted-foreground">{loadError}</p>
           {schemaHint ? (
             <div className="mt-3 rounded-2xl border border-border bg-muted/40 p-3">
@@ -2323,11 +2323,11 @@ function PracticeHomeInner() {
                     loadingMore ? "opacity-70" : ""
                   )}
                 >
-                  {loadingMore ? "Loading…" : "Load more"}
+                  {loadingMore ? "Loadingâ€¦" : "Load more"}
                   <ArrowRight className="h-4 w-4" />
                 </button>
               ) : (
-                <p className="text-sm font-semibold text-muted-foreground">You’ve reached the end.</p>
+                <p className="text-sm font-semibold text-muted-foreground">Youâ€™ve reached the end.</p>
               )}
             </div>
           ) : null}
@@ -2459,7 +2459,7 @@ function PracticeHomeInner() {
           <p className="text-sm font-semibold text-foreground">Difficulty</p>
           <div className="mt-2 grid grid-cols-3 gap-2">
             {(["", "easy", "medium", "hard"] as const).map((d) => {
-              const label = d === "" ? "Any" : d === "easy" ? "● Easy" : d === "medium" ? "◆ Medium" : "▲ Hard";
+              const label = d === "" ? "Any" : d === "easy" ? "â— Easy" : d === "medium" ? "â—† Medium" : "â–² Hard";
               const active = draftDifficulty === d;
               return (
                 <button
@@ -2616,7 +2616,7 @@ function PracticeHomeInner() {
         open={createOpen}
         onClose={() => setCreateOpen(false)}
         repScope={repScope}
-        onCreated={(id) => setToast(`Set created — redirecting to editor…`)}
+        onCreated={(id) => setToast(`Set created â€” redirecting to editorâ€¦`)}
       />
 
       {/* Request course modal */}

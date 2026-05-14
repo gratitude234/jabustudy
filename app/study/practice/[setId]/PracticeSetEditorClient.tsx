@@ -188,7 +188,7 @@ export default function PracticeSetEditorClient({ setId }: { setId: string }) {
         if (error) throw error;
         const created = data as QuizSet;
         setBanner({ kind: "success", text: "Set created." });
-        router.replace(`/admin/study/practice/${created.id}`);
+        router.replace(`/study-admin/question-quality/${created.id}`);
       } else {
         const { error } = await supabase.from("study_quiz_sets").update(payload).eq("id", setId);
         if (error) throw error;
@@ -211,7 +211,7 @@ export default function PracticeSetEditorClient({ setId }: { setId: string }) {
       const nextPos = questions.length ? (questions[questions.length - 1].position ?? questions.length - 1) + 1 : 0;
       const { data, error } = await supabase
         .from("study_quiz_questions")
-        .insert({ set_id: setId, prompt: "New question…", explanation: null, position: nextPos })
+        .insert({ set_id: setId, prompt: "New questionâ€¦", explanation: null, position: nextPos })
         .select("*")
         .single();
       if (error) throw error;
@@ -275,7 +275,7 @@ export default function PracticeSetEditorClient({ setId }: { setId: string }) {
       const nextPos = list.length ? (list[list.length - 1].position ?? list.length - 1) + 1 : 0;
       const { data, error } = await supabase
         .from("study_quiz_options")
-        .insert({ question_id: questionId, text: "Option…", is_correct: false, position: nextPos })
+        .insert({ question_id: questionId, text: "Optionâ€¦", is_correct: false, position: nextPos })
         .select("*")
         .single();
       if (error) throw error;
@@ -359,7 +359,7 @@ export default function PracticeSetEditorClient({ setId }: { setId: string }) {
     <div className="space-y-4 pb-28 md:pb-6">
       <header className="rounded-3xl border bg-white p-4 shadow-sm sm:p-5">
         <Link
-          href="/admin/study?tab=practice"
+          href="/study-admin/question-quality"
           className="inline-flex items-center gap-2 text-sm font-semibold text-zinc-900 no-underline hover:underline"
         >
           <ArrowLeft className="h-4 w-4" /> Back to CBT sets
@@ -419,7 +419,7 @@ export default function PracticeSetEditorClient({ setId }: { setId: string }) {
               onChange={(e) => setDescription(e.target.value)}
               className="mt-1 w-full rounded-2xl border px-3 py-2 text-sm outline-none focus:ring-2"
               rows={3}
-              placeholder="Optional description…"
+              placeholder="Optional descriptionâ€¦"
             />
           </div>
 
@@ -477,7 +477,7 @@ export default function PracticeSetEditorClient({ setId }: { setId: string }) {
               <label className="text-xs font-semibold text-zinc-700">Difficulty</label>
               <div className="mt-1.5 grid grid-cols-4 gap-1.5">
                 {(["", "easy", "medium", "hard"] as const).map((d) => {
-                  const label = d === "" ? "Unset" : d === "easy" ? "● Easy" : d === "medium" ? "◆ Medium" : "▲ Hard";
+                  const label = d === "" ? "Unset" : d === "easy" ? "â— Easy" : d === "medium" ? "â—† Medium" : "â–² Hard";
                   const active = difficulty === d;
                   return (
                     <button
@@ -500,7 +500,7 @@ export default function PracticeSetEditorClient({ setId }: { setId: string }) {
                 })}
               </div>
               <p className="mt-1 text-[10px] text-zinc-500">
-                Easy = warm-up · Medium = 11–30 Qs · Hard = exam sim
+                Easy = warm-up Â· Medium = 11â€“30 Qs Â· Hard = exam sim
               </p>
             </div>
 
@@ -530,7 +530,7 @@ export default function PracticeSetEditorClient({ setId }: { setId: string }) {
         </div>
 
         {loading ? (
-          <div className="p-10 text-center text-sm text-zinc-600">Loading…</div>
+          <div className="p-10 text-center text-sm text-zinc-600">Loadingâ€¦</div>
         ) : questions.length ? (
           <div className="mt-4 space-y-3">
             {questions
@@ -555,7 +555,7 @@ export default function PracticeSetEditorClient({ setId }: { setId: string }) {
                         <div className="min-w-0">
                           <p className="truncate text-sm font-semibold text-zinc-900">{q.prompt || "(empty question)"}</p>
                           <p className="mt-1 text-xs text-zinc-600">
-                            Options: {opts.length} {hasCorrect ? "•" : "• Missing correct answer"}
+                            Options: {opts.length} {hasCorrect ? "â€¢" : "â€¢ Missing correct answer"}
                           </p>
                         </div>
                       </button>
@@ -734,7 +734,7 @@ export default function PracticeSetEditorClient({ setId }: { setId: string }) {
           </div>
         ) : (
           <div className="mt-6 rounded-2xl border bg-zinc-50 p-6 text-center text-sm text-zinc-600">
-            No questions yet. Click “Add question”.
+            No questions yet. Click â€œAdd questionâ€.
           </div>
         )}
       </div>
@@ -751,7 +751,7 @@ export default function PracticeSetEditorClient({ setId }: { setId: string }) {
             </Link>
           ) : null}
           <Link
-            href="/admin/study?tab=practice"
+            href="/study-admin/question-quality"
             className="inline-flex items-center gap-2 rounded-2xl border bg-white px-3 py-2 text-sm font-semibold hover:bg-zinc-50"
           >
             Back to sets
