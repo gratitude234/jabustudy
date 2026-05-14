@@ -18,6 +18,7 @@
 import { NextResponse } from "next/server";
 import pLimit from "p-limit";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
+import { publicUrl } from "@/lib/publicUrl";
 import { sendUserPush } from "@/lib/webPush";
 
 const WHATSAPP_API_VERSION = "v19.0";
@@ -69,8 +70,8 @@ function buildMessage(to: string, count: number) {
   const plural = count === 1 ? "" : "s";
   const text =
     `You have ${count} spaced repetition card${plural} due today on ` +
-    `Jabumarket Study Hub.\n\nReview now to keep your learning on track: ` +
-    `https://jabumarket.com/study/practice?due=1`;
+    `Jabu Study.\n\nReview now to keep your learning on track: ` +
+    publicUrl("/study/practice?due=1");
 
   return {
     messaging_product: "whatsapp",

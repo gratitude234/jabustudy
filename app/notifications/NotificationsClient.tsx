@@ -7,18 +7,14 @@ import {
   ArrowLeft,
   Bell,
   BellOff,
-  Bookmark,
   BookCheck,
   BookX,
   CheckCheck,
   CheckCircle2,
-  Clock,
   MessageCircle,
   MessageSquarePlus,
   Star,
   ThumbsUp,
-  TrendingDown,
-  Truck,
   Megaphone,
 } from "lucide-react";
 
@@ -75,27 +71,6 @@ function getTypeConfig(type: string): TypeConfig {
         iconColor: "text-violet-600",
         accent: "border-l-violet-400",
       };
-    case "delivery_request":
-      return {
-        icon: <Truck className="h-4 w-4" />,
-        bg: "bg-orange-50",
-        iconColor: "text-orange-600",
-        accent: "border-l-orange-400",
-      };
-    case "price_drop":
-      return {
-        icon: <TrendingDown className="h-4 w-4" />,
-        bg: "bg-emerald-50",
-        iconColor: "text-emerald-600",
-        accent: "border-l-emerald-400",
-      };
-    case "listing_saved":
-      return {
-        icon: <Bookmark className="h-4 w-4" />,
-        bg: "bg-blue-50",
-        iconColor: "text-blue-600",
-        accent: "border-l-blue-400",
-      };
     case "system":
       return {
         icon: <Megaphone className="h-4 w-4" />,
@@ -138,26 +113,12 @@ function getTypeConfig(type: string): TypeConfig {
         iconColor: "text-rose-600 dark:text-rose-400",
         accent: "border-l-rose-400",
       };
-    case "stale_listing":
-      return {
-        icon: <Clock className="h-4 w-4" />,
-        bg: "bg-amber-50",
-        iconColor: "text-amber-600",
-        accent: "border-l-amber-400",
-      };
     case "review_prompt":
       return {
         icon: <Star className="h-4 w-4" />,
         bg: "bg-amber-50",
         iconColor: "text-amber-500",
         accent: "border-l-amber-300",
-      };
-    case "order_status":
-      return {
-        icon: <CheckCircle2 className="h-4 w-4" />,
-        bg: "bg-emerald-50",
-        iconColor: "text-emerald-600",
-        accent: "border-l-emerald-400",
       };
     default:
       return {
@@ -256,7 +217,7 @@ export default function NotificationsClient() {
             <div>
               <p className="text-sm font-semibold text-zinc-900">Sign in to see notifications</p>
               <p className="mt-1 text-xs text-zinc-500">
-                Price drops, listing activity and more — all in one place.
+                Study reminders, answers, approvals and more - all in one place.
               </p>
             </div>
             <Link
@@ -328,14 +289,14 @@ export default function NotificationsClient() {
             <div>
               <p className="text-sm font-semibold text-zinc-900">No notifications yet</p>
               <p className="mt-1 text-xs text-zinc-500 max-w-xs mx-auto">
-                You'll be notified when prices drop on saved listings, or when someone saves yours.
+                You will be notified about study reminders, answers, approvals and milestones.
               </p>
             </div>
             <Link
               href="/study"
               className="mt-1 inline-flex items-center gap-2 rounded-2xl border bg-white px-4 py-2.5 text-xs font-semibold text-zinc-900 no-underline hover:bg-zinc-50"
             >
-              Browse listings
+              Open Study Hub
             </Link>
           </div>
         </div>

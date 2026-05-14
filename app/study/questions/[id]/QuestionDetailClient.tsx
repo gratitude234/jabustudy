@@ -15,10 +15,16 @@ import {
 const ACCENT      = "#5B35D5";
 const ACCENT_BG   = "#EEEDFE";
 const ACCENT_TEXT = "#3C3489";
+const AI_AUTHOR_EMAIL = "ai@jabustudy.app";
+const LEGACY_AI_AUTHOR_EMAIL = "ai@" + "jabu" + "market.app";
+
+function isAiAuthor(email: string | null | undefined) {
+  return email === AI_AUTHOR_EMAIL || email === LEGACY_AI_AUTHOR_EMAIL;
+}
 
 function maskEmail(email: string | null | undefined): string {
   if (!email) return "Anonymous";
-  if (email === "ai@jabumarket.app") return "AI · Gemini";
+  if (isAiAuthor(email)) return "AI · Gemini";
   return (email.split("@")[0] ?? email).replace(/[._]/g, " ");
 }
 
@@ -100,7 +106,7 @@ function AiAnswerButton({ questionId, title, questionBody, courseCode, level, co
         onAnswerAdded({
           id: a.id ?? `ai-${Date.now()}`, question_id: questionId,
           body: a.body, created_at: a.created_at ?? new Date().toISOString(),
-          author_email: "ai@jabumarket.app", author_id: null, is_accepted: false, is_ai: true,
+          author_email: AI_AUTHOR_EMAIL, author_id: null, is_accepted: false, is_ai: true,
         });
       }
     } catch { setState({ status: "error", message: "Network error. Please try again." }); }
@@ -225,8 +231,8 @@ export default function QuestionDetailClient({ id }: { id: string }) {
   const loadSeqRef = useRef(0);
 
   const isMyQuestion     = meId != null && question?.author_id === meId;
-  const humanAnswerCount = answers.filter((a) => !a.is_ai && a.author_email !== "ai@jabumarket.app").length;
-  const hasAiAnswer      = answers.some((a) => a.is_ai || a.author_email === "ai@jabumarket.app");
+  const humanAnswerCount = answers.filter((a) => !a.is_ai && !isAiAuthor(a.author_email)).length;
+  const hasAiAnswer      = answers.some((a) => a.is_ai || isAiAuthor(a.author_email));
 
   const canAnswer = useMemo(() => {
     if (!meId) return false;
@@ -495,7 +501,7 @@ export default function QuestionDetailClient({ id }: { id: string }) {
               ) : (
                 <>
                   {answers.map((a) => {
-                    const isAi = !!(a.is_ai || a.author_email === "ai@jabumarket.app");
+                    const isAi = !!(a.is_ai || isAiAuthor(a.author_email));
                     return a.is_accepted ? (
                       /* Accepted answer — pinned visual with teal banner header */
                       <div key={a.id} className="overflow-hidden rounded-2xl border border-teal-300/50 dark:border-teal-700/40">

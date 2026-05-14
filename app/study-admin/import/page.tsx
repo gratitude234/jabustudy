@@ -344,7 +344,7 @@ function buildSQL(meta: MetaState, questions: Question[]) {
 
   const lines: string[] = [];
   lines.push(`-- ============================================================`);
-  lines.push(`-- Jabumarket Quiz Import`);
+  lines.push(`-- Jabu Study Quiz Import`);
   lines.push(`-- Generated: ${now}`);
   lines.push(`-- Set: ${meta.title}`);
   lines.push(`-- Questions: ${questions.length}`);
@@ -459,7 +459,7 @@ export default function MCQImporter() {
       </Card>
 
       <p className="text-center text-xs text-zinc-400">
-        Jabumarket internal tooling · questions are inserted as unpublished
+        Jabu Study internal tooling · questions are inserted as unpublished
       </p>
     </div>
   );

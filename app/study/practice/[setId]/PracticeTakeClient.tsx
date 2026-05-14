@@ -33,6 +33,7 @@ import {
 import { Card, EmptyState } from "../../_components/StudyUI";
 import { GuidedSourceModal, type GuidedStudyRef } from "../../_components/GuidedSourceModal";
 import { cn, msToClock, normalize } from "@/lib/utils";
+import { publicUrl } from "@/lib/publicUrl";
 import { usePracticeEngine } from "./usePracticeEngine";
 import { supabase } from "@/lib/supabase";
 
@@ -946,7 +947,7 @@ if (err || !meta) {
                   type="button"
                   aria-label="Share score"
                   onClick={async () => {
-                    const text = `I scored ${resultPct}% on "${normalize(meta.title)}" on Jabumarket Study Hub!`;
+                    const text = `I scored ${resultPct}% on "${normalize(meta.title)}" on Jabu Study!`;
                     try {
                       if (typeof navigator.share === "function") {
                         await navigator.share({ text, title: "My Practice Score" });
@@ -966,7 +967,7 @@ if (err || !meta) {
                     onClick={() => {
                       const streakLine = streakCount && streakCount > 1 ? `\n🔥 ${streakCount}-day streak!` : "";
                       const msg = encodeURIComponent(
-                        `I scored ${resultPct}% on "${normalize(meta?.title ?? "a practice set")}"${meta?.course_code ? ` (${meta.course_code})` : ""} on Jabumarket Study Hub!${streakLine}\n\nPractice for free: https://jabumarket.com/study`
+                        `I scored ${resultPct}% on "${normalize(meta?.title ?? "a practice set")}"${meta?.course_code ? ` (${meta.course_code})` : ""} on Jabu Study!${streakLine}\n\nPractice for free: ${publicUrl("/study")}`
                       );
                       window.open(`https://wa.me/?text=${msg}`, "_blank", "noopener,noreferrer");
                     }}
@@ -1018,9 +1019,9 @@ if (err || !meta) {
                   type="button"
                   onClick={() => {
                     const msg = encodeURIComponent(
-                      `🔥 I just hit a ${streakMilestone}-day study streak on Jabumarket Study Hub!\n\n` +
+                      `🔥 I just hit a ${streakMilestone}-day study streak on Jabu Study!\n\n` +
                       `${streakMilestone === 7 ? "One full week" : streakMilestone === 14 ? "Two weeks straight" : streakMilestone === 30 ? "30 days straight" : streakMilestone === 60 ? "60 days of consistent study" : "100 days"} of consistent practice.\n\n` +
-                      `Study smarter: https://jabumarket.com/study`
+                      `Study smarter: ${publicUrl("/study")}`
                     );
                     window.open(`https://wa.me/?text=${msg}`, "_blank", "noopener,noreferrer");
                   }}

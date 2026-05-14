@@ -137,8 +137,7 @@ export function safePushRecent(item: RecentItem): void {
 }
 
 // ---------------------------------------------------------------------------
-// Number / currency helpers (replaces formatNaira() on the homepage,
-// explore page, listing detail page, etc.)
+// Number / currency helpers.
 // ---------------------------------------------------------------------------
 
 /** Format a number as Nigerian Naira. Handles null / non-finite gracefully. */

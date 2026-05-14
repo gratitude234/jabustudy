@@ -1,10 +1,10 @@
 // public/sw.js
-// Service worker for Jabumarket
+// Service worker for Jabu Study
 // — Caching (PWA offline support)
 // — Web Push notifications
 
 const params = new URLSearchParams(self.location.search)
-const CACHE_NAME = 'jabumarket-' + (params.get('v') ?? 'dev')
+const CACHE_NAME = 'jabu-study-' + (params.get('v') ?? 'dev')
 
 // Store VAPID key in SW scope for pushsubscriptionchange re-subscription
 const VAPID_PUBLIC_KEY = params.get('vapid') ?? ''
@@ -14,19 +14,8 @@ const PRECACHE_URLS = ['/offline']
 const NETWORK_ONLY = [
   '/api/',
   '/auth/',
-  '/me',
-  '/me/',
-  '/inbox',
-  '/inbox/',
-  '/my-orders',
-  '/my-listings',
-  '/saved',
   '/notifications',
-  '/vendor/',
-  '/vendor',
-  '/rider/',
   '/study-admin/',
-  '/admin/',
 ]
 
 // ── Install ───────────────────────────────────────────────────────────────────

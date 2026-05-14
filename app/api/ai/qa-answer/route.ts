@@ -93,7 +93,7 @@ Note at the end in one line: "— AI-generated answer. Verify with your lecturer
       question_id: questionId,
       body: result.text,
       is_ai: true,
-      author_email: "ai@jabumarket.app",
+      author_email: "ai@jabustudy.app",
       author_id: null,
       is_accepted: false,
     })

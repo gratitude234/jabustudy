@@ -4,8 +4,8 @@ import { useEffect, useState } from 'react'
 import { usePWAInstall } from './PWAInstallProvider'
 import { X, Download } from 'lucide-react'
 
-const DISMISSED_KEY = 'jm_install_banner_dismissed'
-const VISIT_KEY = 'jm_visit_count'
+const DISMISSED_KEY = 'js_install_banner_dismissed'
+const VISIT_KEY = 'js_visit_count'
 
 export default function PWAInstallBanner() {
   const { canInstall, triggerInstall, isInstalled } = usePWAInstall()
@@ -77,7 +77,7 @@ export default function PWAInstallBanner() {
             />
             <div className="flex-1 min-w-0">
               <p className="text-sm font-semibold text-foreground">
-                Install Jabumarket
+                Install Jabu Study
               </p>
               <p className="text-xs text-muted-foreground mt-0.5">
                 Fast, offline-ready, no app store needed
@@ -110,7 +110,7 @@ export default function PWAInstallBanner() {
           <div className="pointer-events-auto w-full max-w-sm rounded-2xl border border-border bg-card shadow-lg p-4">
             <div className="flex items-start justify-between gap-3">
               <p className="text-sm font-semibold text-foreground">
-                Install Jabumarket on iPhone
+                Install Jabu Study on iPhone
               </p>
               <button
                 onClick={() => {

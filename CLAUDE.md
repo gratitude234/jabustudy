@@ -34,10 +34,7 @@ NEXT_PUBLIC_SITE_URL=        # or VERCEL_URL — used to self-call internal API 
 
 ## Architecture Overview
 
-**Jabumarket** is a Next.js 16 (App Router) + Supabase platform for JABU university students with two domains:
-
-1. **Marketplace** — vendors, product/service listings, couriers, delivery requests, orders
-2. **Study Hub** — course materials, MCQ practice sets, Q&A, tutors, leaderboard, GPA calculator, AI study plan
+**Jabu Study** is a Next.js 16 (App Router) + Supabase platform for JABU university students focused on course materials, MCQ practice sets, Q&A, tutors, leaderboard, GPA calculator, and AI study plans.
 
 ### Supabase Client Pattern
 
@@ -93,21 +90,17 @@ Storage bucket: `study-materials`. Path: `materials/{dept_id}/{course_code}/{mat
 
 Rep uploads go through a separate admin upload path (`/api/study-admin/upload/*`) and are auto-approved. Student uploads go to the queue.
 
-### Food / Meal Ordering
-
-`hooks/useMealBuilder.ts` + `types/meal-builder.ts` implement the food ordering UI. `lib/meal-builder.ts` contains pure builder logic. The meal builder supports stepped ordering (required_single, required_single_qty, required_multi_qty, optional_single, optional_multi) driven by `MenuCategoryInfo` step types. The app/food route and vendor menu API (`/api/vendor/menu`) feed into this flow.
-
 ### AI Integration
 
 `lib/gemini.ts` wraps Gemini 2.5 Flash-Lite via direct REST calls (no SDK). **Server-only** — never import in client components. Exports `gemini(prompt)` and `geminiJson<T>(prompt)`.
 
-AI routes under `app/api/ai/`: `summarize` (material summary), `qa-answer` (Q&A auto-answer), `study-plan` (personalised plan), `explain` (concept explanation), `parse-mcq` (bulk MCQ import), `price-suggest` (marketplace).
+AI routes under `app/api/ai/`: `summarize` (material summary), `qa-answer` (Q&A auto-answer), `study-plan` (personalised plan), `explain` (concept explanation), `parse-mcq` (bulk MCQ import).
 
 ### Notifications
 
 Two parallel notification systems:
 - **In-app**: `lib/studyNotify.ts` inserts rows into `notifications` table. Fire-and-forget — errors swallowed. Self-notifications are skipped.
-- **Web Push**: `lib/webPush.ts` — `sendUserPush(userId, payload)`, `sendVendorPush(vendorId, payload)`, `sendRiderPush(riderId, payload)`. Requires VAPID env vars. Auto-removes expired subscriptions (410/404). Fire-and-forget — never throws.
+- **Web Push**: `lib/webPush.ts` — `sendUserPush(userId, payload)`. Requires VAPID env vars. Auto-removes expired subscriptions (410/404). Fire-and-forget — never throws.
 - **WhatsApp**: `lib/whatsapp.ts` + cron at `app/api/cron/streak-reminder/route.ts` (runs 19:00 UTC daily via Vercel Cron).
 
 `lib/studyAdmin/notifyUploader.ts` — helpers for notifying uploaders on material approval/rejection.
@@ -119,8 +112,6 @@ The app is a full PWA. `public/sw.js` is the service worker (registered by `comp
 ### Cron Jobs
 
 `app/api/cron/streak-reminder/route.ts` — streak reminder via WhatsApp (19:00 UTC daily).
-`app/api/cron/stale-listings/route.ts` — marks old marketplace listings as stale (10:00 UTC daily).
-
 Both are configured in `vercel.json` and authenticated with `CRON_SECRET` Bearer token (support GET and POST).
 
 ### API Response Convention
@@ -131,8 +122,7 @@ Route Handlers return `{ ok: true, ...data }` on success and `{ ok: false, code,
 
 - shadcn/ui components in `components/ui/` (Tailwind CSS v4 + `tw-animate-css`). Style: `new-york`, base color: `neutral`, CSS variables enabled.
 - `lib/utils.ts` — `cn()`, `normalizeStr()`, `safeSearchTerm()`, `buildHref()`, `timeAgo()` / `formatWhen()`, `msToClock()`, `formatNaira()`, `asInt()`, `clamp()`, `pctToColor()`, `pctToBg()`, `formatDuration()`, `fmtPct()`, `safePushRecent()`, `currentAcademicSessionFallback()`
-- `lib/types.ts` — shared Marketplace/Vendor/Quiz types
-- `types/meal-builder.ts` — food ordering step/menu types
+- `lib/types.ts` — shared Study quiz/practice types
 
 ### WAT Timezone
 

@@ -21,7 +21,7 @@ import { Drawer } from "@/components/ui/Drawer";
 import { SelectRow } from "@/components/ui/study-filters";
 
 // ─── Brand accent ─────────────────────────────────────────────────────────────
-// Study Hub accent — indigo. Keep separate from marketplace orange (#FF5C00).
+// Study Hub accent: indigo.
 const ACCENT = "#5B35D5";
 const ACCENT_BG = "#EEEDFE"; // purple-50
 const ACCENT_TEXT = "#3C3489"; // purple-800

@@ -20,7 +20,6 @@ import {
   MessageCircleQuestion,
   PenLine,
   Settings,
-  Store,
   Target,
   UploadCloud,
   UserRound,
@@ -438,22 +437,6 @@ function StudyMeInner() {
           </div>
         </Card>
       </section>
-
-      <Link
-        href="/me"
-        className="flex items-center justify-between gap-3 rounded-2xl border border-border bg-card px-4 py-3 text-sm no-underline shadow-sm transition hover:bg-secondary/20"
-      >
-        <span className="flex min-w-0 items-center gap-3">
-          <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-background text-muted-foreground">
-            <Store className="h-4 w-4" />
-          </span>
-          <span className="min-w-0">
-            <span className="block truncate font-semibold text-foreground">JABU Market account</span>
-            <span className="mt-0.5 block truncate text-xs text-muted-foreground">Buying, selling, orders and delivery live separately.</span>
-          </span>
-        </span>
-        <ArrowRight className="h-4 w-4 shrink-0 text-muted-foreground" />
-      </Link>
 
       {countsLoading ? (
         <div className="flex items-center justify-center gap-2 text-xs text-muted-foreground">

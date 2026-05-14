@@ -4,6 +4,7 @@ import AppChrome from "@/components/layout/AppChrome";
 import ServiceWorkerRegister from "@/components/ServiceWorkerRegister";
 import PWAInstallProvider from "@/components/PWAInstallProvider";
 import { AuthProvider } from "@/contexts/AuthContext";
+import { metadataBaseUrl } from "@/lib/publicUrl";
 
 export const viewport: Viewport = {
   themeColor: [
@@ -15,14 +16,12 @@ export const viewport: Viewport = {
 };
 
 export const metadata: Metadata = {
-  metadataBase: new URL(
-    process.env.NEXT_PUBLIC_SITE_URL ?? "https://jabumarket.com"
-  ),
+  metadataBase: metadataBaseUrl(),
   title: {
-    default: "Jabumarket",
-    template: "%s — Jabumarket",
+    default: "Jabu Study",
+    template: "%s - Jabu Study",
   },
-  description: "Buy, sell & find services around JABU.",
+  description: "Course materials, MCQs, Q&A, tutors, and study tools for JABU students.",
   manifest: "/manifest.json",
   icons: {
     icon: [
@@ -36,19 +35,17 @@ export const metadata: Metadata = {
   appleWebApp: {
     capable: true,
     statusBarStyle: "default",
-    title: "Jabumarket",
+    title: "Jabu Study",
   },
   formatDetection: { telephone: false },
   openGraph: {
     type: "website",
-    siteName: "Jabumarket",
-    title: "Jabumarket",
-    description: "Buy, sell & find services around JABU.",
+    siteName: "Jabu Study",
+    title: "Jabu Study",
+    description: "Course materials, MCQs, Q&A, tutors, and study tools for JABU students.",
   },
   twitter: {
     card: "summary_large_image",
-    site: "@jabumarket",
-    creator: "@jabumarket",
   },
 };
 

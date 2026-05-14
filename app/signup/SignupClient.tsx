@@ -19,11 +19,11 @@ function cx(...classes: Array<string | false | null | undefined>) {
 
 function normalizeNext(next: string | null) {
   const n = (next ?? "").trim();
-  if (!n) return "/me";
-  if (!n.startsWith("/")) return "/me";
-  if (n.startsWith("//")) return "/me";
+  if (!n) return "/study/me";
+  if (!n.startsWith("/")) return "/study/me";
+  if (n.startsWith("//")) return "/study/me";
   const lowered = decodeURIComponent(n).toLowerCase();
-  if (lowered.includes("http://") || lowered.includes("https://")) return "/me";
+  if (lowered.includes("http://") || lowered.includes("https://")) return "/study/me";
   return n;
 }
 
@@ -146,7 +146,7 @@ export default function SignupClient() {
       if (data.session && data.user) {
         await upsertProfile(data.user.id, nm, em);
         toast({ type: "success", text: "Account created ✅ Redirecting…" });
-        router.replace(next || "/me");
+        router.replace(next || "/study/me");
         router.refresh();
         return;
       }
@@ -218,7 +218,7 @@ export default function SignupClient() {
             </button>
           </div>
           <div className="mt-4">
-            <Link href={`/login?next=${encodeURIComponent(next || "/me")}`}
+            <Link href={`/login?next=${encodeURIComponent(next || "/study/me")}`}
               className="inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-black px-4 py-2.5 text-sm font-medium text-white hover:opacity-90 no-underline">
               Go to login <ArrowRight className="h-4 w-4" />
             </Link>
@@ -237,7 +237,7 @@ export default function SignupClient() {
       <div className="rounded-3xl border bg-white p-4 sm:p-5">
         <h1 className="text-lg font-semibold text-zinc-900">Create your account</h1>
         <p className="mt-1 text-sm text-zinc-600">
-          For students buying, selling, or ordering food on campus.
+          For JABU students using course materials, practice sets, Q&A and study tools.
         </p>
       </div>
 
@@ -257,7 +257,7 @@ export default function SignupClient() {
             </div>
             {!nameValid && fullName.trim().length > 0
               ? <p className="text-[11px] text-rose-700">Enter at least 2 characters.</p>
-              : <p className="text-[11px] text-zinc-500">This is how you appear to vendors.</p>}
+              : <p className="text-[11px] text-zinc-500">This is how you appear across Jabu Study.</p>}
           </div>
 
           {/* Email */}
@@ -326,7 +326,7 @@ export default function SignupClient() {
           <div className="pt-1 text-center">
             <p className="text-xs text-zinc-600">
               Already have an account?{" "}
-              <Link href={`/login?next=${encodeURIComponent(next || "/me")}`}
+              <Link href={`/login?next=${encodeURIComponent(next || "/study/me")}`}
                 className="font-semibold text-zinc-900 underline underline-offset-4">
                 Sign in
               </Link>

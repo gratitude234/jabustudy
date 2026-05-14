@@ -22,10 +22,10 @@ function cx(...classes: Array<string | false | null | undefined>) {
 
 function normalizeNext(next: string | null) {
   const n = (next ?? "").trim();
-  if (!n) return "/me";
+  if (!n) return "/study/me";
 
-  if (!n.startsWith("/")) return "/me";
-  if (n.startsWith("//")) return "/me";
+  if (!n.startsWith("/")) return "/study/me";
+  if (n.startsWith("//")) return "/study/me";
 
   let decoded = n;
   try {
@@ -35,7 +35,7 @@ function normalizeNext(next: string | null) {
   }
 
   const lowered = decoded.toLowerCase();
-  if (lowered.includes("http://") || lowered.includes("https://")) return "/me";
+  if (lowered.includes("http://") || lowered.includes("https://")) return "/study/me";
 
   return n;
 }
@@ -99,7 +99,7 @@ export default function CallbackClient() {
       // Tiny delay for smoother UX
       await new Promise((r) => setTimeout(r, 200));
 
-      router.replace(next || "/me");
+      router.replace(next || "/study/me");
       router.refresh();
     } catch (e: any) {
       console.error(e);
@@ -166,7 +166,7 @@ export default function CallbackClient() {
               </button>
 
               <Link
-                href={`/login?next=${encodeURIComponent(next || "/me")}`}
+                href={`/login?next=${encodeURIComponent(next || "/study/me")}`}
                 className="inline-flex w-full items-center justify-center gap-2 rounded-2xl border bg-white px-4 py-2.5 text-sm font-medium text-zinc-900 hover:bg-zinc-50 no-underline"
               >
                 Go to login
@@ -200,7 +200,7 @@ export default function CallbackClient() {
           {phase === "success" ? (
             <div className="mt-5">
               <Link
-                href={next || "/me"}
+                href={next || "/study/me"}
                 className="inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-black px-4 py-2.5 text-sm font-medium text-white hover:opacity-90 no-underline"
               >
                 Continue

@@ -24,14 +24,14 @@ function cx(...classes: Array<string | false | null | undefined>) {
 
 function normalizeNext(next: string | null) {
   const n = (next ?? "").trim();
-  if (!n) return "/";
+  if (!n) return "/study/me";
 
   // Only allow internal, absolute-path routes
-  if (!n.startsWith("/")) return "/";
-  if (n.startsWith("//")) return "/";
+  if (!n.startsWith("/")) return "/study/me";
+  if (n.startsWith("//")) return "/study/me";
   // Block attempts to smuggle protocol via encoding
   const lowered = decodeURIComponent(n).toLowerCase();
-  if (lowered.includes("http://") || lowered.includes("https://")) return "/";
+  if (lowered.includes("http://") || lowered.includes("https://")) return "/study/me";
 
   return n;
 }
@@ -147,7 +147,7 @@ export default function LoginClient() {
       }
 
       setToast({ type: "success", text: "Welcome back ✅" });
-      router.replace(next || "/");
+      router.replace(next || "/study/me");
       router.refresh();
     } finally {
       if (alive.current) setLoading(false);
@@ -167,7 +167,7 @@ export default function LoginClient() {
     try {
       const redirectTo =
         typeof window !== "undefined"
-          ? `${window.location.origin}/auth/callback?next=${encodeURIComponent("/me")}`
+          ? `${window.location.origin}/auth/callback?next=${encodeURIComponent("/study/me")}`
           : undefined;
 
       const { error } = await supabase.auth.resetPasswordForEmail(em, { redirectTo });
@@ -195,7 +195,7 @@ export default function LoginClient() {
           <div className="min-w-0 flex-1">
             <h1 className="text-lg font-semibold text-zinc-900">Sign in</h1>
             <p className="mt-1 text-sm text-zinc-600">
-              Secure access to your account and seller dashboard.
+              Secure access to your Jabu Study account.
             </p>
           </div>
         </div>

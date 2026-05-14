@@ -7,10 +7,6 @@
     {
       "path": "/api/cron/srs-reminder",
       "schedule": "0 7 * * *"
-    },
-    {
-      "path": "/api/cron/stale-listings",
-      "schedule": "0 10 * * *"
     }
   ]
 }
