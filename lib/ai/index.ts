@@ -222,6 +222,19 @@ export function parseJsonText<T>(text: string): T {
   }
 }
 
+function jsonRepairPrompt(text: string) {
+  const clipped = text.length > 80_000
+    ? `${text.slice(0, 80_000)}\n\n[TRUNCATED]`
+    : text;
+  return `Repair the malformed JSON below.
+Return ONLY valid JSON.
+Do not add markdown, comments, explanations, or extra wrapper text.
+Preserve the same data and structure as closely as possible.
+
+Malformed JSON:
+${clipped}`;
+}
+
 export async function generateText(config: AiRequestConfig): Promise<AiTextResult> {
   const result = await withProviderFallback("generateText", config, (provider) => callTextProvider(provider, config));
   if ("error" in result) {
@@ -248,6 +261,31 @@ export async function generateJson<T>(config: AiRequestConfig): Promise<AiJsonRe
     };
   } catch (error) {
     logAiFailure(result.provider, "parseJson", error);
+    const repairConfig: AiRequestConfig = {
+      ...jsonConfig,
+      messages: [userMessage(jsonRepairPrompt(result.text))],
+      temperature: 0,
+      maxTokens: Math.max(jsonConfig.maxTokens ?? 600, 1000),
+      modelRole: "fast",
+      responseMimeType: "application/json",
+    };
+    const repaired = await withProviderFallback("repairJson", repairConfig, (provider) => callTextProvider(provider, repairConfig));
+    if (!("error" in repaired)) {
+      try {
+        return {
+          ok: true,
+          data: parseJsonText<T>(repaired.text),
+          provider: repaired.provider,
+          model: repaired.model,
+          fallbackProvider: repaired.fallbackProvider,
+          fallbackReason: repaired.fallbackReason,
+          rawText: repaired.text,
+        };
+      } catch (repairError) {
+        logAiFailure(repaired.provider, "parseRepairedJson", repairError);
+      }
+    }
+
     return {
       ok: false,
       error: errorMessage(error),
