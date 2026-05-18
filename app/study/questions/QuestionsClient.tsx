@@ -17,7 +17,6 @@ import {
 import { Drawer } from "@/components/ui/Drawer";
 import { SelectRow, ToggleRow } from "@/components/ui/study-filters";
 
-const ACCENT = "#5B35D5";
 
 type SortKey  = "newest" | "upvoted" | "answered" | "unanswered";
 type LevelKey = "" | "100" | "200" | "300" | "400" | "500" | "600";
@@ -59,24 +58,24 @@ function QuestionCard({ q, saved, saving, onToggleSave }: {
         solved
           ? "border-l-4 border-l-emerald-500"
           : unanswered
-          ? "border-l-4 border-l-[#5B35D5]"
+          ? "border-l-4 border-l-primary"
           : ""
       )}
     >
       <div className="min-w-0 flex-1">
         <p className="text-sm font-medium leading-snug text-foreground">{title}</p>
         {q.body && q.body.trim().length > 0 && (
-          <p className="mt-1 line-clamp-1 text-xs text-muted-foreground leading-relaxed">{q.body.trim()}</p>
+          <p className="mt-1 line-clamp-1 text-xs text-muted-brand leading-relaxed">{q.body.trim()}</p>
         )}
 
         <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
           {code && (
-            <span className="rounded-full border border-border bg-background px-2 py-0.5 text-[10px] text-muted-foreground">
+            <span className="rounded-full border border-border bg-background px-2 py-0.5 text-[10px] text-muted-brand">
               {code}
             </span>
           )}
           {lvl && (
-            <span className="rounded-full border border-border bg-background px-2 py-0.5 text-[10px] text-muted-foreground">
+            <span className="rounded-full border border-border bg-background px-2 py-0.5 text-[10px] text-muted-brand">
               {lvl}L
             </span>
           )}
@@ -91,21 +90,21 @@ function QuestionCard({ q, saved, saving, onToggleSave }: {
               Unanswered
             </span>
           ) : (
-            <span className="rounded-full border border-border bg-background px-2 py-0.5 text-[10px] text-muted-foreground">
+            <span className="rounded-full border border-border bg-background px-2 py-0.5 text-[10px] text-muted-brand">
               {answers} answer{answers !== 1 ? "s" : ""}
             </span>
           )}
         </div>
 
         <div className="mt-2 flex items-center gap-3">
-          <span className="inline-flex items-center gap-1 text-[10px] text-muted-foreground">
+          <span className="inline-flex items-center gap-1 text-[10px] text-muted-brand">
             <ThumbsUp className="h-3 w-3" /> {upvotes}
           </span>
-          <span className="inline-flex items-center gap-1 text-[10px] text-muted-foreground">
+          <span className="inline-flex items-center gap-1 text-[10px] text-muted-brand">
             <MessagesSquare className="h-3 w-3" /> {answers}
           </span>
           {q.created_at && (
-            <span className="text-[10px] text-muted-foreground">{formatWhen(q.created_at)}</span>
+            <span className="text-[10px] text-muted-brand">{formatWhen(q.created_at)}</span>
           )}
         </div>
       </div>
@@ -365,14 +364,14 @@ function QuestionsInner() {
 
       {!isProfileComplete && (
         <Link href="/study/onboarding"
-          className="flex items-center justify-between gap-3 rounded-2xl border border-[#5B35D5]/20 bg-[#EEEDFE] px-4 py-3 text-sm font-semibold text-[#3B24A8] no-underline hover:bg-[#5B35D5]/10 dark:border-[#5B35D5]/30 dark:bg-[#5B35D5]/10 dark:text-indigo-200">
+          className="flex items-center justify-between gap-3 rounded-2xl border border-primary/20 bg-primary-light px-4 py-3 text-sm font-semibold text-primary-text no-underline hover:bg-primary/10 dark:border-primary/30 dark:bg-primary/10 dark:text-indigo-200">
           <span>Set your department to see questions from your courses.</span>
           <ArrowRight className="h-4 w-4 shrink-0" />
         </Link>
       )}
 
       {isProfileComplete && !personalizedOff ? (
-        <div className="flex items-center justify-between gap-3 rounded-2xl border border-[#5B35D5]/20 bg-[#EEEDFE] px-4 py-3 text-sm text-[#3B24A8] dark:border-[#5B35D5]/30 dark:bg-[#5B35D5]/10 dark:text-indigo-200">
+        <div className="flex items-center justify-between gap-3 rounded-2xl border border-primary/20 bg-primary-light px-4 py-3 text-sm text-primary-text dark:border-primary/30 dark:bg-primary/10 dark:text-indigo-200">
           <span className="min-w-0">Showing questions for {scopeLabel ?? "your courses"}.</span>
           <Link
             href="/study/questions?personalized=0"
@@ -382,9 +381,9 @@ function QuestionsInner() {
           </Link>
         </div>
       ) : personalizedOff ? (
-        <div className="flex items-center justify-between gap-3 rounded-2xl border border-border bg-card px-4 py-3 text-sm text-muted-foreground">
+        <div className="flex items-center justify-between gap-3 rounded-2xl border border-border bg-card px-4 py-3 text-sm text-muted-brand">
           <span>Browsing all Study questions.</span>
-          <Link href="/study/questions" className="shrink-0 text-xs font-bold text-[#5B35D5] underline underline-offset-2">
+          <Link href="/study/questions" className="shrink-0 text-xs font-bold text-primary underline underline-offset-2">
             Back to my courses
           </Link>
         </div>
@@ -392,20 +391,20 @@ function QuestionsInner() {
 
       {/* Page header */}
       <div>
-        <h1 className="text-xl font-extrabold tracking-tight text-foreground">Q&amp;A Forum</h1>
-        <p className="mt-0.5 text-xs text-muted-foreground">
+        <h1 className="font-[family-name:var(--font-bricolage)] text-xl font-extrabold tracking-tight text-foreground">Q&amp;A Forum</h1>
+        <p className="mt-0.5 text-xs text-muted-brand">
           {total > 0 ? `${total} question${total !== 1 ? "s" : ""} · ask, answer, learn` : "Ask, answer, learn with your peers"}
         </p>
       </div>
 
       {/* Merged search bar — detects course code pattern automatically */}
       <div className="flex items-center gap-2 rounded-2xl border border-border bg-background px-3 py-2">
-        <Search className="h-4 w-4 shrink-0 text-muted-foreground" />
+        <Search className="h-4 w-4 shrink-0 text-muted-brand" />
         <input
           value={q}
           onChange={(e) => setQ(e.target.value)}
           placeholder="Search or enter course code (e.g. GST101)…"
-          className="w-full bg-transparent text-sm text-foreground outline-none placeholder:text-muted-foreground"
+          className="w-full bg-transparent text-sm text-foreground outline-none placeholder:text-muted-brand"
         />
         {q && (
           <button type="button" onClick={() => setQ("")}
@@ -452,8 +451,8 @@ function QuestionsInner() {
                 "flex-shrink-0 rounded-full border px-3 py-1.5 text-xs font-medium transition",
                 "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
                 isActive
-                  ? "border-[#5B35D5]/25 bg-[#EEEDFE] text-[#3B24A8]"
-                  : "border-border bg-background text-muted-foreground hover:text-foreground hover:bg-secondary/40"
+                  ? "border-primary/25 bg-primary-light text-primary-text"
+                  : "border-border bg-background text-muted-brand hover:text-foreground hover:bg-secondary/40"
               )}
             >
               {label}
@@ -471,7 +470,7 @@ function QuestionsInner() {
               }))}
               className={cn(
                 "flex-shrink-0 rounded-full border px-3 py-1.5 text-xs font-medium transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-                active ? "border-[#5B35D5]/25 bg-[#EEEDFE] text-[#3B24A8]" : "border-border bg-background text-muted-foreground hover:text-foreground hover:bg-secondary/40"
+                active ? "border-primary/25 bg-primary-light text-primary-text" : "border-border bg-background text-muted-brand hover:text-foreground hover:bg-secondary/40"
               )}
             >
               {lvl}L
@@ -482,7 +481,7 @@ function QuestionsInner() {
 
       {/* Auto-filter notice */}
       {autoFilteredLevel && levelParam === autoFilteredLevel && (
-        <div className="flex items-center gap-2 text-xs text-muted-foreground">
+        <div className="flex items-center gap-2 text-xs text-muted-brand">
           <span>Filtered to <span className="font-medium text-foreground">Level {autoFilteredLevel}</span></span>
           <button type="button" onClick={() => {
             setAutoFilteredLevel(null);
@@ -500,7 +499,7 @@ function QuestionsInner() {
       {err && (
         <div className="rounded-2xl border border-border bg-background p-4">
           <p className="text-sm font-medium text-foreground">Couldn't load questions</p>
-          <p className="mt-1 text-xs text-muted-foreground">{err}</p>
+          <p className="mt-1 text-xs text-muted-brand">{err}</p>
           <button type="button" onClick={() => fetchPage(1)}
             className="mt-3 inline-flex items-center gap-2 rounded-2xl border border-border bg-secondary px-4 py-2.5 text-sm font-medium text-foreground hover:opacity-90">
             Try again <ArrowRight className="h-4 w-4" />
@@ -526,8 +525,7 @@ function QuestionsInner() {
           description={hasAnyFilters ? "Try clearing filters or a different search." : "Be the first to ask something."}
           action={
             <Link href="/study/questions/ask"
-              className="inline-flex items-center gap-2 rounded-2xl px-4 py-3 text-sm font-medium text-white no-underline"
-              style={{ background: ACCENT }}>
+              className="inline-flex items-center gap-2 rounded-2xl bg-primary px-4 py-3 text-sm font-medium text-white no-underline">
               <MessageSquarePlus className="h-4 w-4" /> Ask a question
             </Link>
           }
@@ -550,7 +548,7 @@ function QuestionsInner() {
                 {loadingMore ? <><Loader2 className="h-4 w-4 animate-spin" /> Loading…</> : <>Load more <ChevronDown className="h-4 w-4" /></>}
               </button>
             ) : (
-              <p className="text-sm text-muted-foreground">You've reached the end.</p>
+              <p className="text-sm text-muted-brand">You've reached the end.</p>
             )}
           </div>
         </>
@@ -566,8 +564,7 @@ function QuestionsInner() {
               Reset
             </button>
             <button type="button" onClick={applyFilters}
-              className="inline-flex flex-1 items-center justify-center rounded-2xl px-4 py-3 text-sm font-medium text-white"
-              style={{ background: ACCENT }}>
+              className="inline-flex flex-1 items-center justify-center rounded-2xl bg-primary px-4 py-3 text-sm font-medium text-white">
               Apply
             </button>
           </div>
@@ -602,9 +599,9 @@ function QuestionsInner() {
         href="/study/questions/ask"
         className={cn(
           "fixed bottom-24 right-4 z-40 flex items-center justify-center rounded-full no-underline",
-          "bg-[#5B35D5] text-white shadow-lg shadow-[#5B35D5]/30",
-          "hover:bg-[#4526B8]",
-          "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#5B35D5] focus-visible:ring-offset-2",
+          "bg-primary text-white shadow-lg shadow-primary/30",
+          "hover:opacity-90",
+          "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2",
           "md:bottom-8 md:right-8"
         )}
         style={{ width: 52, height: 52 }}

@@ -12,9 +12,6 @@ import {
   Sparkles, ThumbsUp, Zap,
 } from "lucide-react";
 
-const ACCENT      = "#5B35D5";
-const ACCENT_BG   = "#EEEDFE";
-const ACCENT_TEXT = "#3C3489";
 const AI_AUTHOR_EMAIL = "ai@jabustudy.app";
 const LEGACY_AI_AUTHOR_EMAIL = "ai@" + "jabu" + "market.app";
 
@@ -116,14 +113,13 @@ function AiAnswerButton({ questionId, title, questionBody, courseCode, level, co
 
   if (state.status === "loading") {
     return (
-      <div className="flex items-center gap-3 rounded-2xl border px-3 py-3"
-        style={{ borderColor: "#AFA9EC", background: ACCENT_BG }}>
-        <span className="grid h-8 w-8 shrink-0 place-items-center rounded-xl" style={{ background: ACCENT }}>
+      <div className="flex items-center gap-3 rounded-2xl border border-primary/30 bg-primary-light px-3 py-3">
+        <span className="grid h-8 w-8 shrink-0 place-items-center rounded-xl bg-primary">
           <Loader2 className="h-4 w-4 animate-spin text-white" />
         </span>
         <div>
-          <p className="text-xs font-medium" style={{ color: ACCENT_TEXT }}>Generating AI answer…</p>
-          <p className="text-[11px]" style={{ color: "#534AB7" }}>Powered by Gemini</p>
+          <p className="text-xs font-medium text-primary-text">Generating AI answer…</p>
+          <p className="text-[11px] text-primary/70">Powered by Gemini</p>
         </div>
       </div>
     );
@@ -147,27 +143,25 @@ function AiAnswerButton({ questionId, title, questionBody, courseCode, level, co
   if (compact) {
     return (
       <button type="button" onClick={askAi}
-        className="flex w-full items-center gap-2 rounded-2xl border px-3 py-2 text-left hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-        style={{ borderColor: "#AFA9EC", background: ACCENT_BG }}>
-        <Zap className="h-4 w-4 shrink-0" style={{ color: ACCENT }} />
-        <p className="text-xs font-medium" style={{ color: ACCENT_TEXT }}>Also get an AI take</p>
-        <Sparkles className="ml-auto h-3.5 w-3.5 shrink-0" style={{ color: ACCENT }} />
+        className="flex w-full items-center gap-2 rounded-2xl border border-primary/30 bg-primary-light px-3 py-2 text-left hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+        <Zap className="h-4 w-4 shrink-0 text-primary" />
+        <p className="text-xs font-medium text-primary-text">Also get an AI take</p>
+        <Sparkles className="ml-auto h-3.5 w-3.5 shrink-0 text-primary" />
       </button>
     );
   }
 
   return (
     <button type="button" onClick={askAi}
-      className="flex w-full items-center gap-3 rounded-2xl border px-3 py-3 text-left hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-      style={{ borderColor: "#AFA9EC", background: ACCENT_BG }}>
-      <span className="grid h-8 w-8 shrink-0 place-items-center rounded-xl" style={{ background: ACCENT }}>
+      className="flex w-full items-center gap-3 rounded-2xl border border-primary/30 bg-primary-light px-3 py-3 text-left hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+      <span className="grid h-8 w-8 shrink-0 place-items-center rounded-xl bg-primary">
         <Zap className="h-4 w-4 text-white" />
       </span>
       <div className="min-w-0 flex-1">
-        <p className="text-xs font-medium" style={{ color: ACCENT_TEXT }}>Get an AI answer</p>
-        <p className="text-[11px]" style={{ color: "#534AB7" }}>No human answers yet — ask Gemini for a starting point</p>
+        <p className="text-xs font-medium text-primary-text">Get an AI answer</p>
+        <p className="text-[11px] text-primary/70">No human answers yet — ask Gemini for a starting point</p>
       </div>
-      <Sparkles className="h-3.5 w-3.5 shrink-0" style={{ color: ACCENT }} />
+      <Sparkles className="h-3.5 w-3.5 shrink-0 text-primary" />
     </button>
   );
 }
@@ -202,7 +196,7 @@ function AnswerUpvoteButton({ answerId, initialCount, meId, onError }: {
     <button type="button" onClick={toggle} disabled={loading}
       className={cn(
         "inline-flex items-center gap-1.5 rounded-xl border px-2.5 py-1.5 text-xs font-medium transition-colors",
-        voted ? "border-[#5B35D5]/25 bg-[#EEEDFE] text-[#3B24A8]" : "border-border bg-background text-foreground hover:bg-secondary/60",
+        voted ? "border-primary/25 bg-primary-light text-primary-text" : "border-border bg-background text-foreground hover:bg-secondary/60",
         loading && "opacity-60 cursor-not-allowed"
       )}>
       {loading ? <Loader2 className="h-3 w-3 animate-spin" /> : <ThumbsUp className="h-3 w-3" />}
@@ -414,7 +408,7 @@ export default function QuestionDetailClient({ id }: { id: string }) {
             <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-destructive" />
             <div>
               <p className="text-sm font-medium text-foreground">Couldn't load question</p>
-              <p className="mt-1 text-sm text-muted-foreground">{error}</p>
+              <p className="mt-1 text-sm text-muted-brand">{error}</p>
               <button type="button" onClick={load}
                 className="mt-3 inline-flex items-center gap-2 rounded-2xl border border-border bg-secondary px-4 py-2.5 text-sm font-medium text-foreground hover:opacity-90">
                 <RotateCcw className="h-4 w-4" /> Try again
@@ -433,22 +427,22 @@ export default function QuestionDetailClient({ id }: { id: string }) {
                   <CheckCircle2 className="h-3 w-3" /> Solved
                 </span>
               ) : (
-                <span className="rounded-full bg-secondary px-2.5 py-1 text-xs text-muted-foreground">Open</span>
+                <span className="rounded-full bg-secondary px-2.5 py-1 text-xs text-muted-brand">Open</span>
               )}
               {isMyQuestion && (
-                <span className="rounded-full border border-border bg-background px-2.5 py-1 text-xs text-muted-foreground">
+                <span className="rounded-full border border-border bg-background px-2.5 py-1 text-xs text-muted-brand">
                   Your question
                 </span>
               )}
             </div>
 
-            <h1 className="mt-3 text-base font-medium leading-snug text-foreground">{question.title}</h1>
+            <h1 className="mt-3 font-[family-name:var(--font-bricolage)] text-base font-medium leading-snug text-foreground">{question.title}</h1>
             {question.body && (
-              <p className="mt-2 whitespace-pre-wrap text-sm text-muted-foreground">{question.body}</p>
+              <p className="mt-2 whitespace-pre-wrap text-sm text-muted-brand">{question.body}</p>
             )}
 
             <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
-              <span className="text-xs text-muted-foreground">
+              <span className="text-xs text-muted-brand">
                 By <span className="font-medium capitalize text-foreground">{maskEmail(question.author_email)}</span>
                 {" · "}{formatWhen(question.created_at)}
               </span>
@@ -456,7 +450,7 @@ export default function QuestionDetailClient({ id }: { id: string }) {
                 <button type="button" onClick={toggleUpvote} disabled={myVoteLoading}
                   className={cn(
                     "inline-flex items-center gap-2 rounded-2xl border px-3 py-2 text-xs font-medium transition-colors",
-                    myUpvoted ? "border-[#5B35D5]/25 bg-[#EEEDFE] text-[#3B24A8]" : "border-border bg-background text-foreground hover:bg-secondary/60",
+                    myUpvoted ? "border-primary/25 bg-primary-light text-primary-text" : "border-border bg-background text-foreground hover:bg-secondary/60",
                     myVoteLoading && "opacity-70"
                   )}>
                   {myVoteLoading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <ThumbsUp className="h-3.5 w-3.5" />}
@@ -475,7 +469,7 @@ export default function QuestionDetailClient({ id }: { id: string }) {
             <p className="text-sm font-medium text-foreground">
               Answers
               {answers.length > 0 && (
-                <span className="ml-2 rounded-full border border-border bg-secondary px-2 py-0.5 text-xs text-muted-foreground">
+                <span className="ml-2 rounded-full border border-border bg-secondary px-2 py-0.5 text-xs text-muted-brand">
                   {humanAnswerCount}{hasAiAnswer ? " + AI" : ""}
                 </span>
               )}
@@ -484,7 +478,7 @@ export default function QuestionDetailClient({ id }: { id: string }) {
             <div className="mt-4 space-y-3">
               {answers.length === 0 ? (
                 <>
-                  <p className="text-sm text-muted-foreground">No answers yet. Be the first to help.</p>
+                  <p className="text-sm text-muted-brand">No answers yet. Be the first to help.</p>
                   {question && (
                     <AiAnswerButton questionId={question.id} title={question.title}
                       questionBody={question.body} courseCode={question.course_code}
@@ -492,7 +486,7 @@ export default function QuestionDetailClient({ id }: { id: string }) {
                   )}
                   {question?.created_at && (Date.now() - new Date(question.created_at).getTime()) > 86_400_000 && (
                     <Link href={`/study/tutors${question.course_code ? `?course=${encodeURIComponent(question.course_code)}` : ""}`}
-                      className="mt-2 inline-flex items-center gap-2 rounded-2xl border border-border bg-background px-4 py-2.5 text-sm font-medium text-muted-foreground no-underline hover:text-foreground hover:bg-secondary/50">
+                      className="mt-2 inline-flex items-center gap-2 rounded-2xl border border-border bg-background px-4 py-2.5 text-sm font-medium text-muted-brand no-underline hover:text-foreground hover:bg-secondary/50">
                       <GraduationCap className="h-4 w-4" />
                       Find a tutor for {question.course_code ?? "this course"} →
                     </Link>
@@ -516,7 +510,7 @@ export default function QuestionDetailClient({ id }: { id: string }) {
                         <div className="bg-card p-4">
                           <p className="whitespace-pre-wrap text-sm leading-relaxed text-foreground">{a.body}</p>
                           <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
-                            <span className="text-xs text-muted-foreground">
+                            <span className="text-xs text-muted-brand">
                               <span className="font-medium capitalize text-foreground">{maskEmail(a.author_email)}</span>
                               {" · "}{formatWhen(a.created_at)}
                             </span>
@@ -531,22 +525,20 @@ export default function QuestionDetailClient({ id }: { id: string }) {
                       </div>
                     ) : (
                       /* Regular or AI answer */
-                      <div key={a.id} className="rounded-2xl border p-4"
-                        style={isAi ? { borderColor: "#AFA9EC", background: ACCENT_BG } : undefined}>
+                      <div key={a.id} className={cn("rounded-2xl border p-4", isAi && "border-primary/30 bg-primary-light")}>
                         {isAi && (
                           <div className="mb-2 flex items-center gap-2">
-                            <span className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium"
-                              style={{ background: ACCENT, color: "#fff" }}>
+                            <span className="inline-flex items-center gap-1 rounded-full bg-primary px-2 py-0.5 text-[10px] font-medium text-white">
                               <Sparkles className="h-2.5 w-2.5" /> AI · Gemini
                             </span>
-                            <span className="text-[10px]" style={{ color: "#534AB7" }}>Verify before your exam</span>
+                            <span className="text-[10px] text-primary/70">Verify before your exam</span>
                           </div>
                         )}
                         <p className="whitespace-pre-wrap text-sm leading-relaxed text-foreground">{a.body}</p>
                         <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
-                          <span className="text-xs text-muted-foreground">
+                          <span className="text-xs text-muted-brand">
                             {isAi ? (
-                              <span style={{ color: ACCENT_TEXT }}>{maskEmail(a.author_email)}</span>
+                              <span className="text-primary-text">{maskEmail(a.author_email)}</span>
                             ) : (
                               <>
                                 <span className="font-medium capitalize text-foreground">{maskEmail(a.author_email)}</span>
@@ -599,14 +591,14 @@ export default function QuestionDetailClient({ id }: { id: string }) {
                 <p className="text-sm font-extrabold text-foreground">
                   What else can help?
                 </p>
-                <p className="mt-0.5 text-xs text-muted-foreground">
+                <p className="mt-0.5 text-xs text-muted-brand">
                   Resources for {question.course_code}
                 </p>
               </div>
 
               {courseResources.materials.length > 0 && (
                 <div className="border-b border-border px-4 py-3">
-                  <p className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                  <p className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-muted-brand">
                     Study materials
                   </p>
                   <div className="space-y-2">
@@ -621,20 +613,20 @@ export default function QuestionDetailClient({ id }: { id: string }) {
                           "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                         )}
                       >
-                        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-[#EEEDFE] dark:bg-[#5B35D5]/10">
-                          <BookOpen className="h-3.5 w-3.5 text-[#5B35D5] dark:text-indigo-300" />
+                        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-primary-light dark:bg-primary/10">
+                          <BookOpen className="h-3.5 w-3.5 text-primary dark:text-indigo-300" />
                         </div>
                         <div className="min-w-0 flex-1">
                           <p className="truncate text-sm font-semibold text-foreground">
                             {m.title ?? "Material"}
                           </p>
                           {m.downloads != null && (
-                            <p className="text-xs text-muted-foreground">
+                            <p className="text-xs text-muted-brand">
                               {m.downloads.toLocaleString()} downloads
                             </p>
                           )}
                         </div>
-                        <ArrowRight className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                        <ArrowRight className="h-3.5 w-3.5 shrink-0 text-muted-brand" />
                       </Link>
                     ))}
                   </div>
@@ -643,7 +635,7 @@ export default function QuestionDetailClient({ id }: { id: string }) {
 
               {courseResources.practiceSets.length > 0 && (
                 <div className="px-4 py-3">
-                  <p className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                  <p className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-muted-brand">
                     Practice sets
                   </p>
                   <div className="space-y-2">
@@ -658,20 +650,20 @@ export default function QuestionDetailClient({ id }: { id: string }) {
                           "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                         )}
                       >
-                        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-[#EEEDFE] dark:bg-[#5B35D5]/10">
-                          <Zap className="h-3.5 w-3.5 text-[#5B35D5] dark:text-indigo-300" />
+                        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-primary-light dark:bg-primary/10">
+                          <Zap className="h-3.5 w-3.5 text-primary dark:text-indigo-300" />
                         </div>
                         <div className="min-w-0 flex-1">
                           <p className="truncate text-sm font-semibold text-foreground">
                             {s.title ?? "Practice set"}
                           </p>
                           {s.questions_count != null && (
-                            <p className="text-xs text-muted-foreground">
+                            <p className="text-xs text-muted-brand">
                               {s.questions_count} question{s.questions_count !== 1 ? "s" : ""}
                             </p>
                           )}
                         </div>
-                        <ArrowRight className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                        <ArrowRight className="h-3.5 w-3.5 shrink-0 text-muted-brand" />
                       </Link>
                     ))}
                   </div>
@@ -687,10 +679,9 @@ export default function QuestionDetailClient({ id }: { id: string }) {
         <div className="mx-auto w-full max-w-6xl">
         {!meId ? (
           <div className="flex items-center justify-between gap-3 rounded-2xl border border-border bg-background px-4 py-3">
-            <p className="text-sm text-muted-foreground">Sign in to post an answer</p>
+            <p className="text-sm text-muted-brand">Sign in to post an answer</p>
             <Link href="/login"
-              className="inline-flex items-center rounded-2xl px-3 py-2 text-sm font-medium text-white no-underline"
-              style={{ background: ACCENT }}>
+              className="inline-flex items-center rounded-2xl bg-primary px-3 py-2 text-sm font-medium text-white no-underline">
               Sign in
             </Link>
           </div>
@@ -703,10 +694,10 @@ export default function QuestionDetailClient({ id }: { id: string }) {
               placeholder="Write your answer… (min 10 characters)"
               maxLength={ANSWER_MAX}
               rows={4}
-              className="w-full resize-none rounded-2xl border border-border bg-background p-3 text-sm text-foreground outline-none placeholder:text-muted-foreground focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:ring-offset-background"
+              className="w-full resize-none rounded-2xl border border-border bg-background p-3 text-sm text-foreground outline-none placeholder:text-muted-brand focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:ring-offset-background"
             />
             <div className="flex items-center justify-between gap-2">
-              <span className={cn("text-xs tabular-nums", answerBody.length > ANSWER_MAX - 100 ? "text-rose-600" : "text-muted-foreground")}>
+              <span className={cn("text-xs tabular-nums", answerBody.length > ANSWER_MAX - 100 ? "text-rose-600" : "text-muted-brand")}>
                 {answerBody.length}/{ANSWER_MAX}
               </span>
               <div className="flex gap-2">
@@ -716,8 +707,7 @@ export default function QuestionDetailClient({ id }: { id: string }) {
                   Cancel
                 </button>
                 <button type="button" onClick={postAnswer} disabled={!canAnswer || posting}
-                  className={cn("inline-flex items-center gap-2 rounded-2xl px-4 py-2.5 text-sm font-medium text-white transition", (!canAnswer || posting) ? "opacity-50" : "hover:opacity-90")}
-                  style={{ background: ACCENT }}>
+                  className={cn("inline-flex items-center gap-2 rounded-2xl bg-primary px-4 py-2.5 text-sm font-medium text-white transition", (!canAnswer || posting) ? "opacity-50" : "hover:opacity-90")}>
                   {posting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
                   Post answer
                 </button>
@@ -728,10 +718,10 @@ export default function QuestionDetailClient({ id }: { id: string }) {
           <button type="button"
             onClick={() => { setExpanded(true); setTimeout(() => textareaRef.current?.focus(), 50); }}
             className="flex w-full items-center gap-3 rounded-2xl border border-border bg-background px-4 py-3 text-left hover:bg-secondary/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
-            <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-xl" style={{ background: ACCENT }}>
+            <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-xl bg-primary">
               <Send className="h-3.5 w-3.5 text-white" />
             </div>
-            <span className="text-sm text-muted-foreground">Write an answer…</span>
+            <span className="text-sm text-muted-brand">Write an answer…</span>
           </button>
         )}
         </div>

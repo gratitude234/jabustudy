@@ -7,8 +7,6 @@ import { useEffect, useMemo, useState } from "react";
 import { supabase } from "@/lib/supabase";
 import { ArrowLeft, ExternalLink, Loader2, Search, Send, ShieldAlert } from "lucide-react";
 
-const ACCENT = "#5B35D5";
-
 const LEVELS    = ["100", "200", "300", "400", "500", "600"] as const;
 const TITLE_MAX = 120;
 const BODY_MAX  = 3000;
@@ -180,27 +178,26 @@ export default function AskQuestionClient() {
 
       {/* Page header */}
       <div>
-        <h1 className="text-lg font-medium text-foreground">Ask a question</h1>
-        <p className="mt-1 text-sm text-muted-foreground">
+        <h1 className="font-[family-name:var(--font-bricolage)] text-lg font-medium text-foreground">Ask a question</h1>
+        <p className="mt-1 text-sm text-muted-brand">
           Be specific — it gets you better answers faster.
         </p>
       </div>
 
       {/* Auth gate */}
       {!userId && (
-        <div className="rounded-2xl border border-[#5B35D5]/20 bg-[#EEEDFE] p-4 dark:border-[#5B35D5]/30 dark:bg-[#5B35D5]/10">
+        <div className="rounded-2xl border border-primary/20 bg-primary-light p-4 dark:border-primary/30 dark:bg-primary/10">
           <div className="flex items-start gap-3">
-            <div className="mt-0.5 grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-[#5B35D5]">
+            <div className="mt-0.5 grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-primary">
               <ShieldAlert className="h-4 w-4 text-white" />
             </div>
             <div className="min-w-0 flex-1">
               <p className="text-sm font-medium text-foreground">Sign in required</p>
-              <p className="mt-1 text-sm text-muted-foreground">
+              <p className="mt-1 text-sm text-muted-brand">
                 You need to be signed in to ask questions and post answers.
               </p>
               <Link href="/login"
-                className="mt-3 inline-flex items-center gap-2 rounded-2xl px-4 py-2 text-sm font-medium text-white no-underline hover:opacity-90"
-                style={{ background: ACCENT }}>
+                className="mt-3 inline-flex items-center gap-2 rounded-2xl bg-primary px-4 py-2 text-sm font-medium text-white no-underline hover:opacity-90">
                 Sign in
               </Link>
             </div>
@@ -211,7 +208,7 @@ export default function AskQuestionClient() {
       {userId && profileComplete === false ? (
         <Link
           href="/study/onboarding?next=/study/questions/ask"
-          className="flex items-center justify-between gap-3 rounded-2xl border border-[#5B35D5]/20 bg-[#EEEDFE] px-4 py-3 text-sm font-semibold text-[#3B24A8] no-underline hover:bg-[#5B35D5]/10 dark:border-[#5B35D5]/30 dark:bg-[#5B35D5]/10 dark:text-indigo-200"
+          className="flex items-center justify-between gap-3 rounded-2xl border border-primary/20 bg-primary-light px-4 py-3 text-sm font-semibold text-primary-text no-underline hover:bg-primary/10 dark:border-primary/30 dark:bg-primary/10 dark:text-indigo-200"
         >
           <span>Complete your academic profile so questions reach your courses first.</span>
           <ExternalLink className="h-4 w-4 shrink-0" />
@@ -224,10 +221,10 @@ export default function AskQuestionClient() {
         {/* Title */}
         <div className="p-4">
           <div className="flex items-center justify-between mb-2">
-            <label className="text-xs font-medium uppercase tracking-widest text-muted-foreground">
+            <label className="text-xs font-medium uppercase tracking-widest text-muted-brand">
               Title
             </label>
-            <span className={cn("text-xs tabular-nums", titleRemaining < 20 ? "text-rose-600" : "text-muted-foreground")}>
+            <span className={cn("text-xs tabular-nums", titleRemaining < 20 ? "text-rose-600" : "text-muted-brand")}>
               {title.length}/{TITLE_MAX}
             </span>
           </div>
@@ -235,7 +232,7 @@ export default function AskQuestionClient() {
             value={title}
             onChange={(e) => setTitle(e.target.value)}
             placeholder="e.g. How do I calculate standard deviation in GST101?"
-            className="w-full bg-transparent text-sm text-foreground outline-none placeholder:text-muted-foreground"
+            className="w-full bg-transparent text-sm text-foreground outline-none placeholder:text-muted-brand"
             maxLength={TITLE_MAX}
           />
           {title.length > 0 && (
@@ -243,7 +240,7 @@ export default function AskQuestionClient() {
               <div
                 className={cn(
                   "h-full rounded-full transition-all",
-                  titleRemaining < 20 ? "bg-rose-500" : "bg-[#5B35D5]"
+                  titleRemaining < 20 ? "bg-rose-500" : "bg-primary"
                 )}
                 style={{ width: `${Math.min(100, (title.length / TITLE_MAX) * 100)}%` }}
               />
@@ -254,12 +251,12 @@ export default function AskQuestionClient() {
         {title.trim().length >= 15 && (similarLoading || similarQuestions.length > 0) && (
           <div className="rounded-2xl border-t border-border bg-card overflow-hidden">
             <div className="flex items-center gap-2 border-b border-border px-4 py-2.5">
-              <Search className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-              <p className="text-xs font-semibold text-muted-foreground">
+              <Search className="h-3.5 w-3.5 shrink-0 text-muted-brand" />
+              <p className="text-xs font-semibold text-muted-brand">
                 Similar questions already asked
               </p>
               {similarLoading && (
-                <Loader2 className="ml-auto h-3 w-3 animate-spin text-muted-foreground" />
+                <Loader2 className="ml-auto h-3 w-3 animate-spin text-muted-brand" />
               )}
             </div>
 
@@ -282,7 +279,7 @@ export default function AskQuestionClient() {
                       </p>
                       <div className="mt-1 flex flex-wrap items-center gap-2">
                         {q.course_code && (
-                          <span className="text-[10px] text-muted-foreground">
+                          <span className="text-[10px] text-muted-brand">
                             {q.course_code}
                           </span>
                         )}
@@ -294,17 +291,17 @@ export default function AskQuestionClient() {
                             Solved
                           </span>
                         ) : q.answers_count && q.answers_count > 0 ? (
-                          <span className="text-[10px] text-muted-foreground">
+                          <span className="text-[10px] text-muted-brand">
                             {q.answers_count} answer{q.answers_count !== 1 ? "s" : ""}
                           </span>
                         ) : (
-                          <span className="text-[10px] text-muted-foreground">
+                          <span className="text-[10px] text-muted-brand">
                             Unanswered
                           </span>
                         )}
                       </div>
                     </div>
-                    <ExternalLink className="mt-0.5 h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                    <ExternalLink className="mt-0.5 h-3.5 w-3.5 shrink-0 text-muted-brand" />
                   </a>
                 ))}
               </div>
@@ -312,7 +309,7 @@ export default function AskQuestionClient() {
 
             {similarQuestions.length > 0 && (
               <div className="border-t border-border px-4 py-2.5">
-                <p className="text-[11px] text-muted-foreground">
+                <p className="text-[11px] text-muted-brand">
                   Check these first — your question may already be answered. You can still post if yours is different.
                 </p>
               </div>
@@ -323,7 +320,7 @@ export default function AskQuestionClient() {
         {/* Course + Level side by side */}
         <div className="grid grid-cols-2 divide-x divide-border">
           <div className="p-4">
-            <label className="block text-xs font-medium uppercase tracking-widest text-muted-foreground mb-2">
+            <label className="block text-xs font-medium uppercase tracking-widest text-muted-brand mb-2">
               Course
             </label>
             <input
@@ -331,7 +328,7 @@ export default function AskQuestionClient() {
               onChange={(e) => setCourse(e.target.value.toUpperCase())}
               placeholder="GST101"
               list="study-question-course-options"
-              className="w-full bg-transparent text-sm text-foreground outline-none placeholder:text-muted-foreground"
+              className="w-full bg-transparent text-sm text-foreground outline-none placeholder:text-muted-brand"
             />
             <datalist id="study-question-course-options">
               {courseOptions.map((option) => (
@@ -340,10 +337,10 @@ export default function AskQuestionClient() {
                 </option>
               ))}
             </datalist>
-            <p className="mt-1 text-[10px] text-muted-foreground">Optional</p>
+            <p className="mt-1 text-[10px] text-muted-brand">Optional</p>
           </div>
           <div className="p-4">
-            <label className="block text-xs font-medium uppercase tracking-widest text-muted-foreground mb-2">
+            <label className="block text-xs font-medium uppercase tracking-widest text-muted-brand mb-2">
               Level
             </label>
             <select
@@ -362,10 +359,10 @@ export default function AskQuestionClient() {
         {/* Details */}
         <div className="p-4">
           <div className="flex items-center justify-between mb-2">
-            <label className="text-xs font-medium uppercase tracking-widest text-muted-foreground">
+            <label className="text-xs font-medium uppercase tracking-widest text-muted-brand">
               Details
             </label>
-            <span className={cn("text-xs tabular-nums", bodyRemaining < 200 ? "text-rose-600" : "text-muted-foreground")}>
+            <span className={cn("text-xs tabular-nums", bodyRemaining < 200 ? "text-rose-600" : "text-muted-brand")}>
               {body.length}/{BODY_MAX}
             </span>
           </div>
@@ -373,7 +370,7 @@ export default function AskQuestionClient() {
             value={body}
             onChange={(e) => setBody(e.target.value)}
             placeholder="Explain what you tried, what you don't understand, and include the exact question if possible."
-            className="w-full resize-none bg-transparent text-sm text-foreground outline-none placeholder:text-muted-foreground"
+            className="w-full resize-none bg-transparent text-sm text-foreground outline-none placeholder:text-muted-brand"
             style={{ minHeight: 120 }}
             maxLength={BODY_MAX}
           />
@@ -381,8 +378,8 @@ export default function AskQuestionClient() {
       </div>
 
       {/* Tip — nudges for better questions */}
-      <div className="rounded-2xl px-4 py-3" style={{ background: "#EEEDFE" }}>
-        <p className="text-xs leading-relaxed" style={{ color: ACCENT_TEXT }}>
+      <div className="rounded-2xl bg-primary-light px-4 py-3">
+        <p className="text-xs leading-relaxed text-primary-text">
           Questions with a course code get 3× more answers. Add context — what did you try, and where did you get stuck?
         </p>
       </div>
@@ -401,9 +398,9 @@ export default function AskQuestionClient() {
         onClick={submit}
         className={cn(
           "inline-flex w-full items-center justify-center gap-2 rounded-2xl py-3.5 text-sm font-medium text-white transition",
-          (!canSubmit || loading) ? "opacity-50 cursor-not-allowed" : "hover:opacity-90"
+          (!canSubmit || loading) ? "opacity-50 cursor-not-allowed" : "hover:opacity-90",
+          "bg-primary"
         )}
-        style={{ background: ACCENT }}
       >
         {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
         {loading ? "Posting…" : "Post question"}
@@ -412,5 +409,3 @@ export default function AskQuestionClient() {
   );
 }
 
-// Re-export ACCENT_TEXT so it's available in the same file scope
-const ACCENT_TEXT = "#3C3489";

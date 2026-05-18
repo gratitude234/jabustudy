@@ -247,8 +247,8 @@ function PdfViewer({ url, heightClass = "h-[70vh]", page }: { url: string; heigh
       {loading && (
         <div className="absolute inset-0 z-10 grid place-items-center bg-background">
           <div className="flex flex-col items-center gap-3">
-            <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-            <p className="text-xs text-muted-foreground">Loading PDF…</p>
+            <Loader2 className="h-6 w-6 animate-spin text-muted-brand" />
+            <p className="text-xs text-muted-brand">Loading PDF…</p>
           </div>
         </div>
       )}
@@ -256,7 +256,7 @@ function PdfViewer({ url, heightClass = "h-[70vh]", page }: { url: string; heigh
         <div className="grid h-full place-items-center p-6 text-center">
           <div>
             <p className="text-sm font-semibold text-foreground">Couldn't load PDF</p>
-            <p className="mt-1 text-xs text-muted-foreground">Your browser may be blocking the file.</p>
+            <p className="mt-1 text-xs text-muted-brand">Your browser may be blocking the file.</p>
             <div className="mt-4 flex flex-wrap justify-center gap-2">
               {!useFallback && (
                 <button type="button" onClick={() => { setUseFallback(true); setErrored(false); }}
@@ -334,8 +334,8 @@ function ResolvedFileViewer({
     return (
       <div className={cn("grid w-full place-items-center rounded-2xl border border-border bg-background", heightClass)}>
         <div className="flex flex-col items-center gap-3">
-          <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-          <p className="text-xs text-muted-foreground">Preparing preview...</p>
+          <Loader2 className="h-6 w-6 animate-spin text-muted-brand" />
+          <p className="text-xs text-muted-brand">Preparing preview...</p>
         </div>
       </div>
     );
@@ -346,7 +346,7 @@ function ResolvedFileViewer({
       <div className={cn("grid w-full place-items-center rounded-2xl border border-border bg-background p-6 text-center", heightClass)}>
         <div>
           <p className="text-sm font-semibold text-foreground">Preview could not load</p>
-          <p className="mt-1 text-xs text-muted-foreground">{error ?? "Try again or open the file directly."}</p>
+          <p className="mt-1 text-xs text-muted-brand">{error ?? "Try again or open the file directly."}</p>
           <div className="mt-4 flex flex-wrap justify-center gap-2">
             <button
               type="button"
@@ -383,12 +383,12 @@ function ImageViewer({ url, title, heightClass = "h-[70vh]" }: { url: string; ti
       onClick={() => setZoomed((v) => !v)} title={zoomed ? "Click to zoom out" : "Click to zoom in"}>
       {loading && (
         <div className="absolute inset-0 z-10 grid place-items-center bg-background">
-          <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+          <Loader2 className="h-6 w-6 animate-spin text-muted-brand" />
         </div>
       )}
       {errored ? (
         <div className="grid h-full place-items-center p-6 text-center">
-          <p className="text-sm text-muted-foreground">Image failed to load.</p>
+          <p className="text-sm text-muted-brand">Image failed to load.</p>
         </div>
       ) : (
         // eslint-disable-next-line @next/next/no-img-element
@@ -400,7 +400,7 @@ function ImageViewer({ url, title, heightClass = "h-[70vh]" }: { url: string; ti
           draggable={false} />
       )}
       {!loading && !errored && (
-        <div className="pointer-events-none absolute bottom-2 right-2 flex items-center gap-1 rounded-full border border-border bg-background/80 px-2 py-1 text-[10px] font-semibold text-muted-foreground backdrop-blur">
+        <div className="pointer-events-none absolute bottom-2 right-2 flex items-center gap-1 rounded-full border border-border bg-background/80 px-2 py-1 text-[10px] font-semibold text-muted-brand backdrop-blur">
           {zoomed ? <ZoomOut className="h-3 w-3" /> : <ZoomIn className="h-3 w-3" />}
           {zoomed ? "Zoom out" : "Zoom in"}
         </div>
@@ -419,10 +419,10 @@ function InlinePreview({ url, title, kind, onAskAI }: { url: string; title: stri
         className="flex w-full items-center justify-between gap-4 px-4 py-3.5 text-left transition-colors hover:bg-secondary/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset"
         aria-expanded={open}>
         <div className="flex items-center gap-3">
-          {kind === "pdf" ? <FileText className="h-4 w-4 shrink-0 text-muted-foreground" /> : <ImageIcon className="h-4 w-4 shrink-0 text-muted-foreground" />}
+          {kind === "pdf" ? <FileText className="h-4 w-4 shrink-0 text-muted-brand" /> : <ImageIcon className="h-4 w-4 shrink-0 text-muted-brand" />}
           <div>
             <p className="text-sm font-semibold text-foreground">{open ? "Hide preview" : `Preview ${kind === "pdf" ? "PDF" : "image"}`}</p>
-            {!open && <p className="text-xs text-muted-foreground">Tap to expand inline</p>}
+            {!open && <p className="text-xs text-muted-brand">Tap to expand inline</p>}
           </div>
         </div>
         <div className="flex items-center gap-2">
@@ -430,7 +430,7 @@ function InlinePreview({ url, title, kind, onAskAI }: { url: string; title: stri
             className="inline-flex items-center gap-1 rounded-lg border border-border bg-background px-2.5 py-1.5 text-xs font-semibold text-foreground hover:bg-secondary/50">
             Open <ExternalLink className="h-3 w-3" />
           </a>
-          {open ? <ChevronUp className="h-4 w-4 text-muted-foreground" /> : <ChevronDown className="h-4 w-4 text-muted-foreground" />}
+          {open ? <ChevronUp className="h-4 w-4 text-muted-brand" /> : <ChevronDown className="h-4 w-4 text-muted-brand" />}
         </div>
       </button>
       {open && (
@@ -445,10 +445,10 @@ function InlinePreview({ url, title, kind, onAskAI }: { url: string; title: stri
                   className={cn(
                     "absolute bottom-3 right-3 z-10",
                     "inline-flex items-center gap-1.5 rounded-full",
-                    "bg-[#5B35D5] px-3.5 py-2 text-xs font-extrabold text-white",
-                    "shadow-lg hover:bg-[#4526B8]",
+                    "bg-primary px-3.5 py-2 text-xs font-extrabold text-white",
+                    "shadow-lg hover:opacity-90",
                     "focus-visible:outline-none focus-visible:ring-2",
-                    "focus-visible:ring-[#5B35D5] focus-visible:ring-offset-2"
+                    "focus-visible:ring-primary focus-visible:ring-offset-2"
                   )}
                 >
                   <Sparkles className="h-3.5 w-3.5" />
@@ -507,7 +507,7 @@ function PreviewModal({
           <div className="min-w-0">
             <p className="truncate text-sm font-semibold text-foreground">{title}</p>
             {normalizedPage(page) && (
-              <p className="mt-0.5 text-[11px] font-semibold text-muted-foreground">Go to page {normalizedPage(page)}</p>
+              <p className="mt-0.5 text-[11px] font-semibold text-muted-brand">Go to page {normalizedPage(page)}</p>
             )}
           </div>
           <div className="flex items-center gap-2">
@@ -517,7 +517,7 @@ function PreviewModal({
             </a>
             {resumeLabel && (
               <button type="button" onClick={onClose}
-                className="hidden items-center gap-2 rounded-2xl bg-[#5B4FD9] px-3 py-2 text-sm font-semibold text-white hover:bg-[#4A3FC8] md:inline-flex">
+                className="hidden items-center gap-2 rounded-2xl bg-primary px-3 py-2 text-sm font-semibold text-white hover:opacity-90 md:inline-flex">
                 <ArrowLeft className="h-3.5 w-3.5" /> {resumeLabel}
               </button>
             )}
@@ -534,7 +534,7 @@ function PreviewModal({
             <div className="grid h-48 place-items-center p-6 text-center">
               <div>
                 <p className="text-sm font-semibold text-foreground">Preview not available</p>
-                <p className="mt-1 text-sm text-muted-foreground">Tap "Open" to view in a new tab.</p>
+                <p className="mt-1 text-sm text-muted-brand">Tap "Open" to view in a new tab.</p>
               </div>
             </div>
           )}
@@ -544,7 +544,7 @@ function PreviewModal({
             <button
               type="button"
               onClick={onClose}
-              className="inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-[#5B4FD9] px-4 py-3 text-sm font-semibold text-white hover:bg-[#4A3FC8]"
+              className="inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-primary px-4 py-3 text-sm font-semibold text-white hover:opacity-90"
             >
               <ArrowLeft className="h-4 w-4" /> {resumeLabel}
             </button>
@@ -1004,7 +1004,7 @@ export default function MaterialDetailClient({
       <div className="overflow-hidden rounded-3xl border border-border shadow-sm">
 
         {/* Purple gradient banner */}
-        <div className="relative bg-gradient-to-br from-[#5B4FD9] to-[#7B6FE9] px-5 pt-5 pb-6">
+        <div className="relative bg-gradient-to-br from-primary to-primary/60 px-5 pt-5 pb-6">
           <div className="pointer-events-none absolute -top-10 -right-8 h-40 w-40 rounded-full bg-white/[0.06]" />
           <div className="pointer-events-none absolute -bottom-8 left-4 h-24 w-24 rounded-full bg-white/[0.04]" />
 
@@ -1023,7 +1023,7 @@ export default function MaterialDetailClient({
             </div>
             <div className="min-w-0 flex-1">
               <div className="flex flex-wrap items-center gap-2">
-                <h1 className="text-xl font-bold leading-snug tracking-tight text-white">{title}</h1>
+                <h1 className="font-[family-name:var(--font-bricolage)] text-xl font-bold leading-snug tracking-tight text-white">{title}</h1>
                 {m.verified && (
                   <span className="inline-flex items-center gap-1 rounded-full bg-emerald-400/20 px-2 py-0.5 text-[11px] font-semibold text-emerald-100">
                     <CheckCircle2 className="h-3 w-3" /> Verified
@@ -1053,10 +1053,10 @@ export default function MaterialDetailClient({
           <div className="rounded-3xl border border-border bg-background p-3">
             <div className="mb-3 flex items-start justify-between gap-3">
               <div>
-                <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">File actions</p>
+                <p className="text-xs font-semibold uppercase tracking-wider text-muted-brand">File actions</p>
                 <p className="mt-1 text-sm font-semibold text-foreground">Download, save, or share this material.</p>
               </div>
-              <span className="shrink-0 rounded-full border border-border bg-card px-2.5 py-1 text-[11px] font-semibold text-muted-foreground">
+              <span className="shrink-0 rounded-full border border-border bg-card px-2.5 py-1 text-[11px] font-semibold text-muted-brand">
                 {badge}
               </span>
             </div>
@@ -1067,9 +1067,9 @@ export default function MaterialDetailClient({
               onClick={(e) => { if (!hasFile) { e.preventDefault(); return; } handleDownload(); }}
               className={cn(
                 "inline-flex flex-1 items-center justify-center gap-2 rounded-2xl px-4 py-3 text-sm font-semibold no-underline transition",
-                "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#5B4FD9] focus-visible:ring-offset-2",
-                !hasFile ? "pointer-events-none border border-border/60 bg-muted text-muted-foreground"
-                  : "bg-[#5B4FD9] text-white hover:bg-[#4A3FC8] active:scale-[0.98]"
+                "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2",
+                !hasFile ? "pointer-events-none border border-border/60 bg-muted text-muted-brand"
+                  : "bg-primary text-white hover:opacity-90 active:scale-[0.98]"
               )}>
               <Download className="h-4 w-4" /> Download PDF
             </a>
@@ -1078,7 +1078,7 @@ export default function MaterialDetailClient({
               className={cn(
                 "inline-flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl border transition",
                 "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
-                saved ? "border-[#5B4FD9]/30 bg-[#EEEDFE] text-[#3A2EB8]" : "border-border/60 bg-background text-foreground hover:bg-secondary/50",
+                saved ? "border-primary/30 bg-primary-light text-primary-text" : "border-border/60 bg-background text-foreground hover:bg-secondary/50",
                 saving ? "opacity-60" : ""
               )}>
               {saved ? <BookmarkCheck className="h-4 w-4" /> : <Bookmark className="h-4 w-4" />}
@@ -1090,7 +1090,7 @@ export default function MaterialDetailClient({
             </button>
           </div>
 
-          <p className="mt-3 text-xs text-muted-foreground">
+          <p className="mt-3 text-xs text-muted-brand">
             {downloads.toLocaleString("en-NG")} downloads
             {upvoteCount > 0 && ` · ${upvoteCount} found helpful`}
           </p>
@@ -1099,10 +1099,10 @@ export default function MaterialDetailClient({
 
           {/* AI feature cluster */}
           {(isAiGenSupported(m) || kind === "pdf") && (
-          <div className="space-y-3 rounded-3xl border border-[#5B4FD9]/20 bg-[#EEEDFE]/40 p-3">
+          <div className="space-y-3 rounded-3xl border border-primary/20 bg-primary-light/40 p-3">
             <div>
-              <p className="text-xs font-semibold uppercase tracking-wider text-[#5B4FD9]">AI study tools</p>
-              <p className="mt-1 text-sm font-semibold text-[#3A2EB8]">Turn this file into practice or ask questions about it.</p>
+              <p className="text-xs font-semibold uppercase tracking-wider text-primary">AI study tools</p>
+              <p className="mt-1 text-sm font-semibold text-primary-text">Turn this file into practice or ask questions about it.</p>
             </div>
 
             <div className="space-y-2">
@@ -1110,13 +1110,13 @@ export default function MaterialDetailClient({
             {isAiGenSupported(m) && (
               <button type="button"
                 onClick={() => setQuizState("config")}
-                className="flex w-full items-center gap-3 rounded-xl border border-[#5B4FD9]/20 bg-[#EEEDFE]/70 px-4 py-3.5 text-left transition hover:bg-[#EEEDFE] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#5B4FD9]">
-                <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-[#5B4FD9] text-white">
+                className="flex w-full items-center gap-3 rounded-xl border border-primary/20 bg-primary-light/70 px-4 py-3.5 text-left transition hover:bg-primary-light focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary">
+                <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-primary text-white">
                   <Sparkles className="h-4 w-4" />
                 </span>
                 <div className="min-w-0 flex-1">
-                  <p className="text-sm font-bold text-[#3A2EB8]">Generate Practice Questions</p>
-                  <p className="text-xs text-[#5B4FD9]/70">AI-powered exam prep from this material</p>
+                  <p className="text-sm font-bold text-primary-text">Generate Practice Questions</p>
+                  <p className="text-xs text-primary/70">AI-powered exam prep from this material</p>
                 </div>
               </button>
             )}
@@ -1125,17 +1125,17 @@ export default function MaterialDetailClient({
               <button type="button" onClick={() => setChatOpen((v) => !v)}
                 className={cn(
                   "flex w-full items-center gap-3 rounded-xl border px-4 py-3.5 text-left transition",
-                  "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#5B4FD9]",
+                  "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary",
                   chatOpen
-                    ? "border-[#5B4FD9]/30 bg-[#EEEDFE]"
+                    ? "border-primary/30 bg-primary-light"
                     : "border-border/60 bg-background hover:bg-secondary/40"
                 )}>
-                <span className={cn("grid h-9 w-9 shrink-0 place-items-center rounded-xl", chatOpen ? "bg-[#5B4FD9] text-white" : "bg-secondary text-muted-foreground")}>
+                <span className={cn("grid h-9 w-9 shrink-0 place-items-center rounded-xl", chatOpen ? "bg-primary text-white" : "bg-secondary text-muted-brand")}>
                   <Send className="h-4 w-4" />
                 </span>
                 <div className="min-w-0 flex-1">
-                  <p className={cn("text-sm font-bold", chatOpen ? "text-[#3A2EB8]" : "text-foreground")}>Ask AI</p>
-                  <p className="text-xs text-muted-foreground">Ask anything about this PDF</p>
+                  <p className={cn("text-sm font-bold", chatOpen ? "text-primary-text" : "text-foreground")}>Ask AI</p>
+                  <p className="text-xs text-muted-brand">Ask anything about this PDF</p>
                 </div>
               </button>
             )}
@@ -1143,35 +1143,35 @@ export default function MaterialDetailClient({
 
             {/* Chat panel */}
             {kind === "pdf" && chatOpen && (
-        <div id="material-chat-panel" className="overflow-hidden rounded-2xl border border-[#5B4FD9]/25 bg-card">
+        <div id="material-chat-panel" className="overflow-hidden rounded-2xl border border-primary/25 bg-card">
           <div className="flex items-center justify-between border-b border-border/60 px-4 py-3">
             <div className="flex items-center gap-2">
-              <Sparkles className="h-4 w-4 text-[#5B4FD9]" />
+              <Sparkles className="h-4 w-4 text-primary" />
               <p className="text-sm font-semibold text-foreground">Ask AI about this material</p>
             </div>
             <div className="flex items-center gap-2">
               {chatHistory.length > 0 && (
                 <button type="button" onClick={() => { setChatHistory([]); setChatError(null); }}
-                  className="rounded-xl border border-border/60 px-3 py-1.5 text-xs font-medium text-muted-foreground transition hover:bg-secondary/30 hover:text-foreground">
+                  className="rounded-xl border border-border/60 px-3 py-1.5 text-xs font-medium text-muted-brand transition hover:bg-secondary/30 hover:text-foreground">
                   Clear
                 </button>
               )}
               <button type="button" onClick={() => setChatOpen(false)}
-                className="grid h-7 w-7 place-items-center rounded-xl border border-border/60 text-muted-foreground hover:bg-secondary/40">
+                className="grid h-7 w-7 place-items-center rounded-xl border border-border/60 text-muted-brand hover:bg-secondary/40">
                 <X className="h-3.5 w-3.5" />
               </button>
             </div>
           </div>
           <div className="flex max-h-72 flex-col gap-3 overflow-y-auto px-4 py-3">
             {chatHistory.length === 0 && (
-              <p className="py-4 text-center text-xs text-muted-foreground">
+              <p className="py-4 text-center text-xs text-muted-brand">
                 Ask anything about this document. AI answers only from its content.
               </p>
             )}
             {chatHistory.map((msg) => (
               <div key={msg.id} className={cn("max-w-[88%] rounded-2xl px-3.5 py-2.5 text-sm leading-relaxed whitespace-pre-wrap",
-                msg.role === "user" ? "ml-auto bg-[#5B4FD9] text-white" : "mr-auto bg-[#EEEDFE] text-[#3A2EB8]")}>
-                {msg.text || (<span className="flex items-center gap-1.5 text-[#5B4FD9]/60"><Loader2 className="h-3 w-3 animate-spin" /> Thinking…</span>)}
+                msg.role === "user" ? "ml-auto bg-primary text-white" : "mr-auto bg-primary-light text-primary-text")}>
+                {msg.text || (<span className="flex items-center gap-1.5 text-primary/60"><Loader2 className="h-3 w-3 animate-spin" /> Thinking…</span>)}
               </div>
             ))}
             {chatError && <p className="text-center text-xs text-red-500">{chatError}</p>}
@@ -1182,9 +1182,9 @@ export default function MaterialDetailClient({
               onChange={(e) => setChatInput(e.target.value)}
               onKeyDown={(e) => { if (e.key === "Enter") handleChatSend(); }}
               placeholder="Ask a question…" disabled={chatLoading}
-              className="flex-1 rounded-xl border border-border/60 bg-background px-3 py-2 text-sm outline-none transition focus:border-[#5B4FD9] focus:ring-2 focus:ring-[#5B4FD9]/20 disabled:opacity-60" />
+              className="flex-1 rounded-xl border border-border/60 bg-background px-3 py-2 text-sm outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/20 disabled:opacity-60" />
             <button type="button" onClick={handleChatSend} disabled={chatLoading || !chatInput.trim()}
-              className="inline-flex h-9 w-9 items-center justify-center rounded-xl bg-[#5B4FD9] text-white transition hover:bg-[#3A2EB8] disabled:opacity-50">
+              className="inline-flex h-9 w-9 items-center justify-center rounded-xl bg-primary text-white transition hover:opacity-90 disabled:opacity-50">
               {chatLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <ArrowRight className="h-4 w-4" />}
             </button>
           </div>
@@ -1212,23 +1212,23 @@ export default function MaterialDetailClient({
 
       {/* About card */}
       <div className="rounded-2xl border border-border bg-card p-5">
-        <p className="mb-4 text-xs font-semibold uppercase tracking-wider text-muted-foreground">About this material</p>
+        <p className="mb-4 text-xs font-semibold uppercase tracking-wider text-muted-brand">About this material</p>
         <div className="grid grid-cols-2 gap-x-6 gap-y-4">
           <div>
-            <p className="text-xs text-muted-foreground">Course</p>
+            <p className="text-xs text-muted-brand">Course</p>
             {course ? (
               <>
                 <p className="mt-1 text-base font-bold text-foreground">{course.course_code}</p>
-                {course.course_title && <p className="mt-0.5 text-xs text-muted-foreground line-clamp-1">{course.course_title}</p>}
+                {course.course_title && <p className="mt-0.5 text-xs text-muted-brand line-clamp-1">{course.course_title}</p>}
                 <Link href={`/study/courses/${encodeURIComponent(course.course_code)}`}
-                  className="mt-2 inline-flex items-center gap-1 text-xs font-semibold text-[#5B4FD9] hover:underline">
+                  className="mt-2 inline-flex items-center gap-1 text-xs font-semibold text-primary hover:underline">
                   View course <ArrowRight className="h-3 w-3" />
                 </Link>
               </>
-            ) : <p className="mt-1 text-sm text-muted-foreground">—</p>}
+            ) : <p className="mt-1 text-sm text-muted-brand">—</p>}
           </div>
           <div>
-            <p className="text-xs text-muted-foreground">Level</p>
+            <p className="text-xs text-muted-brand">Level</p>
             <p className="mt-1 text-base font-bold text-foreground">{course?.level ? `${course.level}L` : "—"}</p>
             {m.verified && (
               <span className="mt-1.5 inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-[11px] font-semibold text-emerald-700 dark:bg-emerald-900/20 dark:text-emerald-400">
@@ -1240,11 +1240,11 @@ export default function MaterialDetailClient({
         <div className="my-4 border-t border-border/60" />
         <div className="flex items-center justify-between gap-3">
           <div className="flex min-w-0 items-center gap-2.5">
-            <div className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-[#EEEDFE] text-[11px] font-bold text-[#5B4FD9]">
+            <div className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-primary-light text-[11px] font-bold text-primary">
               {getInitials(m.uploader_email)}
             </div>
             <div className="min-w-0">
-              <p className="text-[10px] text-muted-foreground">Uploaded by</p>
+              <p className="text-[10px] text-muted-brand">Uploaded by</p>
               <div className="flex min-w-0 flex-wrap items-center gap-2">
                 <p className="truncate text-xs font-semibold text-foreground">
                   {m.uploader_email ? obfuscateEmail(m.uploader_email) : "A student"}
@@ -1253,8 +1253,8 @@ export default function MaterialDetailClient({
                   <span
                     className={cn(
                       "inline-flex items-center gap-1 rounded-full px-2 py-0.5",
-                      "border border-[#AFA9EC] bg-[#EEEDFE] text-[10px] font-semibold",
-                      "text-[#3C3489] dark:border-[#5B35D5]/40 dark:bg-[#5B35D5]/10",
+                      "border border-primary/30 bg-primary-light text-[10px] font-semibold",
+                      "text-primary-text dark:border-primary/40 dark:bg-primary/10",
                       "dark:text-indigo-200"
                     )}
                   >
@@ -1266,7 +1266,7 @@ export default function MaterialDetailClient({
             </div>
           </div>
           <div className="shrink-0 text-right">
-            <p className="text-[10px] text-muted-foreground">Downloads</p>
+            <p className="text-[10px] text-muted-brand">Downloads</p>
             <p className="text-xl font-bold text-foreground">{downloads.toLocaleString("en-NG")}</p>
           </div>
         </div>
@@ -1276,7 +1276,7 @@ export default function MaterialDetailClient({
       {relatedMaterials.length > 0 && (
         <div className="rounded-3xl border border-border bg-card p-4">
           <div className="mb-3">
-            <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Related materials</p>
+            <p className="text-xs font-semibold uppercase tracking-wider text-muted-brand">Related materials</p>
             <p className="mt-1 text-sm font-semibold text-foreground">More for {course?.course_code ?? "this course"}</p>
           </div>
           <div className="space-y-2">
@@ -1285,9 +1285,9 @@ export default function MaterialDetailClient({
                 className="flex items-center justify-between gap-3 rounded-2xl border border-border bg-card px-4 py-3 no-underline transition hover:bg-secondary/50">
                 <div className="min-w-0">
                   <p className="truncate text-sm font-semibold text-foreground">{r.title ?? "Untitled"}</p>
-                  <p className="mt-0.5 text-xs text-muted-foreground">{r.material_type?.replace("_", " ")} · {r.downloads ?? 0} downloads</p>
+                  <p className="mt-0.5 text-xs text-muted-brand">{r.material_type?.replace("_", " ")} · {r.downloads ?? 0} downloads</p>
                 </div>
-                <ArrowRight className="h-4 w-4 shrink-0 text-muted-foreground" />
+                <ArrowRight className="h-4 w-4 shrink-0 text-muted-brand" />
               </Link>
             ))}
           </div>
@@ -1296,7 +1296,7 @@ export default function MaterialDetailClient({
 
       {/* Report */}
       <div className="rounded-2xl border border-border/50 bg-background p-3 text-center">
-        <Link href="/study/report" className="inline-flex items-center gap-1.5 text-xs text-muted-foreground transition hover:text-foreground">
+        <Link href="/study/report" className="inline-flex items-center gap-1.5 text-xs text-muted-brand transition hover:text-foreground">
           Something wrong with this material? Report it →
         </Link>
       </div>
@@ -1348,11 +1348,11 @@ export default function MaterialDetailClient({
                      "Results"}
                   </p>
                   {quizState === "quiz" && (
-                    <p className="text-xs text-[#5B4FD9] font-semibold">{correctCount}/{currentQuestionIndex} correct</p>
+                    <p className="text-xs text-primary font-semibold">{correctCount}/{currentQuestionIndex} correct</p>
                   )}
                   {generationAi && (quizState === "quiz" || quizState === "results") && (
                     <p
-                      className="mt-1 max-w-[300px] truncate text-[11px] font-semibold text-muted-foreground"
+                      className="mt-1 max-w-[300px] truncate text-[11px] font-semibold text-muted-brand"
                       title={`${generationAi.provider} · ${generationAi.model} · ${generationAi.inputMode}`}
                     >
                       {formatAiProvider(generationAi)} · {formatAiModel(generationAi)}
@@ -1368,7 +1368,7 @@ export default function MaterialDetailClient({
                   )}
                   {generationAi && formatAiReason(generationAi) && (quizState === "quiz" || quizState === "results") && (
                     <p
-                      className="mt-0.5 max-w-[300px] line-clamp-2 text-[10px] font-medium leading-snug text-muted-foreground"
+                      className="mt-0.5 max-w-[300px] line-clamp-2 text-[10px] font-medium leading-snug text-muted-brand"
                       title={formatAiReason(generationAi)}
                     >
                       {formatAiReason(generationAi)}
@@ -1376,7 +1376,7 @@ export default function MaterialDetailClient({
                   )}
                 </div>
                 <button type="button" onClick={() => setQuizState("idle")}
-                  className="grid h-8 w-8 place-items-center rounded-full border border-border bg-background text-muted-foreground hover:bg-secondary/50 focus-visible:outline-none">
+                  className="grid h-8 w-8 place-items-center rounded-full border border-border bg-background text-muted-brand hover:bg-secondary/50 focus-visible:outline-none">
                   <X className="h-4 w-4" />
                 </button>
               </div>
@@ -1385,14 +1385,14 @@ export default function MaterialDetailClient({
               {quizState === "config" && (
                 <div className="flex-1 overflow-y-auto px-4 py-5 space-y-6">
                   <div>
-                    <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">Number of questions</p>
+                    <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-muted-brand">Number of questions</p>
                     <div className="flex gap-2">
                       {([5, 10, 15, 20] as const).map((n) => (
                         <button key={n} type="button"
                           onClick={() => setQuizConfig((c) => ({ ...c, count: n }))}
                           className={cn("flex-1 rounded-xl border py-2.5 text-sm font-semibold transition focus-visible:outline-none",
                             quizConfig.count === n
-                              ? "border-[#5B4FD9] bg-[#5B4FD9] text-white"
+                              ? "border-primary bg-primary text-white"
                               : "border-border bg-background text-foreground hover:bg-secondary/50"
                           )}>
                           {n}
@@ -1402,7 +1402,7 @@ export default function MaterialDetailClient({
                   </div>
 
                   <div>
-                    <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">Difficulty</p>
+                    <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-muted-brand">Difficulty</p>
                     <div className="flex flex-col gap-2">
                       {([
                         { value: "easy", label: "Easy warm-up", sub: "Recall & definitions" },
@@ -1413,14 +1413,14 @@ export default function MaterialDetailClient({
                           onClick={() => setQuizConfig((c) => ({ ...c, difficulty: value }))}
                           className={cn("flex items-center gap-3 rounded-xl border px-4 py-3 text-left transition focus-visible:outline-none",
                             quizConfig.difficulty === value
-                              ? "border-[#5B4FD9] bg-[#EEEDFE]"
+                              ? "border-primary bg-primary-light"
                               : "border-border bg-background hover:bg-secondary/40"
                           )}>
                           <div className={cn("h-4 w-4 shrink-0 rounded-full border-2",
-                            quizConfig.difficulty === value ? "border-[#5B4FD9] bg-[#5B4FD9]" : "border-border")} />
+                            quizConfig.difficulty === value ? "border-primary bg-primary" : "border-border")} />
                           <div>
-                            <p className={cn("text-sm font-semibold", quizConfig.difficulty === value ? "text-[#3A2EB8]" : "text-foreground")}>{label}</p>
-                            <p className="text-xs text-muted-foreground">{sub}</p>
+                            <p className={cn("text-sm font-semibold", quizConfig.difficulty === value ? "text-primary-text" : "text-foreground")}>{label}</p>
+                            <p className="text-xs text-muted-brand">{sub}</p>
                           </div>
                         </button>
                       ))}
@@ -1428,18 +1428,18 @@ export default function MaterialDetailClient({
                   </div>
 
                   <div>
-                    <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">Focus area <span className="normal-case font-normal text-muted-foreground">(optional)</span></p>
+                    <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-muted-brand">Focus area <span className="normal-case font-normal text-muted-brand">(optional)</span></p>
                     <input type="text" value={quizConfig.focus}
                       onChange={(e) => setQuizConfig((c) => ({ ...c, focus: e.target.value }))}
                       placeholder="e.g. continuity and limits"
-                      className="w-full rounded-xl border border-border bg-background px-4 py-2.5 text-sm outline-none transition focus:border-[#5B4FD9] focus:ring-2 focus:ring-[#5B4FD9]/20" />
+                      className="w-full rounded-xl border border-border bg-background px-4 py-2.5 text-sm outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/20" />
                   </div>
 
                   {genQsError && <p className="text-center text-xs text-red-500">{genQsError}</p>}
 
                   <div className="pb-4">
                     <button type="button" onClick={handleGenerateQuestions}
-                      className="inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-[#5B4FD9] px-4 py-3.5 text-sm font-semibold text-white transition hover:bg-[#4A3FC8] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#5B4FD9]">
+                      className="inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-primary px-4 py-3.5 text-sm font-semibold text-white transition hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary">
                       <Sparkles className="h-4 w-4" />
                       Generate {quizConfig.count} questions
                     </button>
@@ -1450,8 +1450,8 @@ export default function MaterialDetailClient({
               {/* ── Panel B: Loading ── */}
               {quizState === "loading" && (
                 <div className="flex flex-1 flex-col items-center justify-center gap-3 py-16">
-                  <Loader2 className="h-8 w-8 animate-spin text-[#5B4FD9]" />
-                  <p className="text-sm text-muted-foreground">Generating {quizConfig.count} questions…</p>
+                  <Loader2 className="h-8 w-8 animate-spin text-primary" />
+                  <p className="text-sm text-muted-brand">Generating {quizConfig.count} questions…</p>
                 </div>
               )}
 
@@ -1460,7 +1460,7 @@ export default function MaterialDetailClient({
                 <>
                   {/* Progress bar */}
                   <div className="h-1 bg-secondary">
-                    <div className="h-full bg-[#5B4FD9] transition-all"
+                    <div className="h-full bg-primary transition-all"
                       style={{ width: `${((currentQuestionIndex + 1) / qs.length) * 100}%` }} />
                   </div>
                   <div className="flex-1 overflow-y-auto px-4 py-5 pb-36">
@@ -1475,12 +1475,12 @@ export default function MaterialDetailClient({
                           </span>
                         )}
                         {currentQ.questionKind && (
-                          <span className="rounded-full border border-border bg-secondary/40 px-2.5 py-1 text-[10px] font-bold text-muted-foreground">
+                          <span className="rounded-full border border-border bg-secondary/40 px-2.5 py-1 text-[10px] font-bold text-muted-brand">
                             {currentQ.questionKind.replace(/_/g, " ")}
                           </span>
                         )}
                         {currentQ.cognitiveLevel && (
-                          <span className="rounded-full border border-border bg-secondary/40 px-2.5 py-1 text-[10px] font-bold text-muted-foreground">
+                          <span className="rounded-full border border-border bg-secondary/40 px-2.5 py-1 text-[10px] font-bold text-muted-brand">
                             {currentQ.cognitiveLevel}
                           </span>
                         )}
@@ -1524,9 +1524,9 @@ export default function MaterialDetailClient({
                             className={cn(
                               "flex w-full items-start gap-2.5 rounded-xl border px-3.5 py-2.5 text-sm text-left transition focus-visible:outline-none",
                               !answered && "hover:bg-secondary/50 border-border/60 text-foreground",
-                              answered && isCorrect && "border-[#5B4FD9] bg-[#EEEDFE] font-semibold text-[#3A2EB8]",
+                              answered && isCorrect && "border-primary bg-primary-light font-semibold text-primary-text",
                               answered && isChosen && !isCorrect && "border-red-400 bg-red-50 font-semibold text-red-700",
-                              answered && !isCorrect && !isChosen && "border-border/40 text-muted-foreground opacity-60",
+                              answered && !isCorrect && !isChosen && "border-border/40 text-muted-brand opacity-60",
                             )}>
                             <span className="shrink-0 font-bold">{key}.</span>
                             <span>{currentQ.options[key]}</span>
@@ -1535,8 +1535,8 @@ export default function MaterialDetailClient({
                       })}
                     </div>
                     {answered && (
-                      <div className="mt-4 rounded-xl border border-[#5B4FD9]/20 bg-[#EEEDFE]/60 px-4 py-3">
-                        <p className="text-xs leading-relaxed text-[#3A2EB8]/85">
+                      <div className="mt-4 rounded-xl border border-primary/20 bg-primary-light/60 px-4 py-3">
+                        <p className="text-xs leading-relaxed text-primary-text/85">
                           <span className="font-semibold">Explanation: </span>{currentQ.explanation}
                         </p>
                       </div>
@@ -1552,7 +1552,7 @@ export default function MaterialDetailClient({
                           setCurrentQuestionIndex((i) => i + 1);
                         }
                       }}
-                      className="flex-1 rounded-2xl border border-border bg-background py-3 text-sm font-semibold text-muted-foreground transition hover:bg-secondary/50 focus-visible:outline-none">
+                      className="flex-1 rounded-2xl border border-border bg-background py-3 text-sm font-semibold text-muted-brand transition hover:bg-secondary/50 focus-visible:outline-none">
                       Skip
                     </button>
                     <button type="button"
@@ -1564,7 +1564,7 @@ export default function MaterialDetailClient({
                           setCurrentQuestionIndex((i) => i + 1);
                         }
                       }}
-                      className="flex-[2] rounded-2xl bg-[#5B4FD9] py-3 text-sm font-semibold text-white transition hover:bg-[#4A3FC8] disabled:opacity-40 focus-visible:outline-none">
+                      className="flex-[2] rounded-2xl bg-primary py-3 text-sm font-semibold text-white transition hover:opacity-90 disabled:opacity-40 focus-visible:outline-none">
                       Next →
                     </button>
                   </div>
@@ -1584,7 +1584,7 @@ export default function MaterialDetailClient({
                         strokeLinecap="round"
                         transform={`rotate(-90 ${scoreRingCx} ${scoreRingCx})`} />
                       <text x={scoreRingCx} y={scoreRingCx} textAnchor="middle" dominantBaseline="central"
-                        fontSize={18} fontWeight={700} fill="currentColor">{correctCount}/{qs.length}</text>
+                        fontSize={18} fontWeight={700} fill="currentColor" fontFamily="var(--font-bricolage)">{correctCount}/{qs.length}</text>
                     </svg>
                     <p className="text-sm font-semibold text-foreground">
                       {scoreRingPct >= 80 ? "Excellent!" : scoreRingPct >= 60 ? "Good effort" : "Keep practising"}
@@ -1594,23 +1594,23 @@ export default function MaterialDetailClient({
                   {/* Stat pills */}
                   <div className="flex gap-2">
                     <div className="flex-1 rounded-xl border border-border bg-background py-3 text-center">
-                      <p className="text-lg font-bold text-[#5B4FD9]">{correctCount}</p>
-                      <p className="text-[10px] text-muted-foreground uppercase tracking-wide">Correct</p>
+                      <p className="text-lg font-bold text-primary">{correctCount}</p>
+                      <p className="text-[10px] text-muted-brand uppercase tracking-wide">Correct</p>
                     </div>
                     <div className="flex-1 rounded-xl border border-border bg-background py-3 text-center">
                       <p className="text-lg font-bold text-red-500">{missedList.length}</p>
-                      <p className="text-[10px] text-muted-foreground uppercase tracking-wide">Missed</p>
+                      <p className="text-[10px] text-muted-brand uppercase tracking-wide">Missed</p>
                     </div>
                     <div className="flex-1 rounded-xl border border-border bg-background py-3 text-center">
-                      <p className="text-lg font-bold text-muted-foreground">{skippedCount}</p>
-                      <p className="text-[10px] text-muted-foreground uppercase tracking-wide">Skipped</p>
+                      <p className="text-lg font-bold text-muted-brand">{skippedCount}</p>
+                      <p className="text-[10px] text-muted-brand uppercase tracking-wide">Skipped</p>
                     </div>
                   </div>
 
                   {/* Missed questions list */}
                   {missedList.length > 0 && (
                     <div className="space-y-3">
-                      <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Missed questions</p>
+                      <p className="text-xs font-semibold uppercase tracking-wider text-muted-brand">Missed questions</p>
                       {missedList.map(({ q, i, ans }) => (
                         <div key={i} className="rounded-2xl border border-border bg-background p-4 space-y-2">
                           <p className="text-sm font-semibold text-foreground">{q.question}</p>
@@ -1621,7 +1621,7 @@ export default function MaterialDetailClient({
                               </span>
                             )}
                           </div>
-                          <p className="text-xs text-[#5B4FD9] font-semibold">
+                          <p className="text-xs text-primary font-semibold">
                             Correct: {q.answer}. {q.options[q.answer]}
                           </p>
                         </div>
@@ -1641,7 +1641,7 @@ export default function MaterialDetailClient({
                   <button type="button"
                     onClick={handleGenerateMore}
                     disabled={generatingMore}
-                    className="inline-flex w-full items-center justify-center gap-2 rounded-2xl border border-[#5B4FD9] bg-[#EEEDFE] px-4 py-3 text-sm font-semibold text-[#3A2EB8] transition hover:bg-[#E5E2FF] disabled:opacity-50 focus-visible:outline-none">
+                    className="inline-flex w-full items-center justify-center gap-2 rounded-2xl border border-primary bg-primary-light px-4 py-3 text-sm font-semibold text-primary-text transition hover:opacity-90 disabled:opacity-50 focus-visible:outline-none">
                     {generatingMore
                       ? <><Loader2 className="h-4 w-4 animate-spin" /> Generating…</>
                       : <><Sparkles className="h-4 w-4" /> Generate {quizConfig.count} more questions</>
@@ -1666,12 +1666,12 @@ export default function MaterialDetailClient({
                   )}
                   {savedSetId ? (
                     <Link href="/study/practice"
-                      className="inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-[#5B4FD9] px-4 py-3 text-sm font-semibold text-white transition hover:bg-[#4A3FC8] focus-visible:outline-none">
+                      className="inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-primary px-4 py-3 text-sm font-semibold text-white transition hover:opacity-90 focus-visible:outline-none">
                       Saved — view on practice page →
                     </Link>
                   ) : (
                     <button type="button" onClick={handleSaveQuestions} disabled={savingQs}
-                      className="inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-[#5B4FD9] px-4 py-3 text-sm font-semibold text-white transition hover:bg-[#4A3FC8] disabled:opacity-60 focus-visible:outline-none">
+                      className="inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-primary px-4 py-3 text-sm font-semibold text-white transition hover:opacity-90 disabled:opacity-60 focus-visible:outline-none">
                       {savingQs ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
                       {savingQs ? "Saving…" : "Save to practice library"}
                     </button>

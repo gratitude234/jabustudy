@@ -142,7 +142,7 @@ function Chip({
         "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background",
         active
           ? "border-border bg-secondary text-foreground"
-          : "border-border/60 bg-background text-muted-foreground hover:bg-secondary/50 hover:text-foreground",
+          : "border-border/60 bg-background text-muted-brand hover:bg-secondary/50 hover:text-foreground",
         className
       )}
     >
@@ -174,7 +174,7 @@ function ToggleRow({
     >
       <div className="min-w-0">
         <p className="text-sm font-semibold">{label}</p>
-        {desc ? <p className="mt-0.5 text-xs text-muted-foreground">{desc}</p> : null}
+        {desc ? <p className="mt-0.5 text-xs text-muted-brand">{desc}</p> : null}
       </div>
       <div
         className={cn(
@@ -203,7 +203,7 @@ function SelectRow({
 }) {
   return (
     <label className="block rounded-2xl border border-border bg-background p-3">
-      <span className="text-xs font-semibold text-muted-foreground">{label}</span>
+      <span className="text-xs font-semibold text-muted-brand">{label}</span>
       <select
         value={value}
         onChange={(e) => onChange(e.target.value)}
@@ -235,14 +235,14 @@ function TextRow({
 }) {
   return (
     <label className="block rounded-2xl border border-border bg-background p-3">
-      <span className="text-xs font-semibold text-muted-foreground">{label}</span>
+      <span className="text-xs font-semibold text-muted-brand">{label}</span>
       <input
         value={value}
         onChange={(e) => onChange(e.target.value)}
         placeholder={placeholder}
-        className="mt-1 w-full bg-transparent text-sm text-foreground outline-none placeholder:text-muted-foreground"
+        className="mt-1 w-full bg-transparent text-sm text-foreground outline-none placeholder:text-muted-brand"
       />
-      {hint ? <p className="mt-1 text-xs text-muted-foreground">{hint}</p> : null}
+      {hint ? <p className="mt-1 text-xs text-muted-brand">{hint}</p> : null}
     </label>
   );
 }
@@ -382,7 +382,7 @@ function PreviewModal({
         <div className="flex items-center justify-between gap-3 border-b border-border p-4">
           <div className="min-w-0">
             <p className="truncate text-sm font-semibold text-foreground">{title}</p>
-            <p className="mt-0.5 text-xs text-muted-foreground">Preview</p>
+            <p className="mt-0.5 text-xs text-muted-brand">Preview</p>
           </div>
 
           <div className="flex items-center gap-2">
@@ -425,7 +425,7 @@ function PreviewModal({
               <div className="grid h-full place-items-center p-6 text-center">
                 <div>
                   <p className="text-sm font-semibold text-foreground">Preview not available</p>
-                  <p className="mt-1 text-sm text-muted-foreground">
+                  <p className="mt-1 text-sm text-muted-brand">
                     Tap &quot;Open&quot; to view this file in a new tab.
                   </p>
                 </div>
@@ -459,14 +459,14 @@ function MaterialCard({
   const isPopular = dlCount > 50;
 
   const typeStyle: Record<string, { border: string; iconBg: string; iconText: string; abbr: string }> = {
-    past_question: { border: "border-l-[3px] border-l-[#5B35D5] rounded-l-none rounded-r-3xl", iconBg: "bg-[#EEEDFE]", iconText: "text-[#5B35D5]", abbr: "PQ" },
+    past_question: { border: "border-l-[3px] border-l-primary rounded-l-none rounded-r-3xl", iconBg: "bg-primary-light", iconText: "text-primary", abbr: "PQ" },
     handout: { border: "border-l-[3px] border-l-[#1D9E75] rounded-l-none rounded-r-3xl", iconBg: "bg-[#E1F5EE]", iconText: "text-[#1D9E75]", abbr: "H" },
     note: { border: "border-l-[3px] border-l-[#378ADD] rounded-l-none rounded-r-3xl", iconBg: "bg-[#E6F1FB]", iconText: "text-[#185FA5]", abbr: "N" },
     slides: { border: "border-l-[3px] border-l-[#D85A30] rounded-l-none rounded-r-3xl", iconBg: "bg-[#FAECE7]", iconText: "text-[#993C1D]", abbr: "S" },
-    timetable: { border: "border-l-[3px] border-l-[#888780] rounded-l-none rounded-r-3xl", iconBg: "bg-secondary", iconText: "text-muted-foreground", abbr: "T" },
-    other: { border: "border-l-[3px] border-l-[#888780] rounded-l-none rounded-r-3xl", iconBg: "bg-secondary", iconText: "text-muted-foreground", abbr: "F" },
+    timetable: { border: "border-l-[3px] border-l-[#888780] rounded-l-none rounded-r-3xl", iconBg: "bg-secondary", iconText: "text-muted-brand", abbr: "T" },
+    other: { border: "border-l-[3px] border-l-[#888780] rounded-l-none rounded-r-3xl", iconBg: "bg-secondary", iconText: "text-muted-brand", abbr: "F" },
   };
-  const ts = typeStyle[m.material_type ?? ""] ?? { border: "rounded-3xl", iconBg: "bg-secondary", iconText: "text-muted-foreground", abbr: "?" };
+  const ts = typeStyle[m.material_type ?? ""] ?? { border: "rounded-3xl", iconBg: "bg-secondary", iconText: "text-muted-brand", abbr: "?" };
 
   const fileLabel =
     kind === "pdf" ? "PDF"
@@ -487,22 +487,22 @@ function MaterialCard({
         <div className="flex items-start gap-3">
           <div className={cn("grid h-11 w-11 shrink-0 place-items-center rounded-xl border border-border/60", ts.iconBg)}>
             <span className={cn("text-[11px] font-extrabold leading-none", ts.iconText)}>{ts.abbr}</span>
-            <span className="mt-0.5 font-mono text-[8px] font-medium text-muted-foreground">{fileLabel}</span>
+            <span className="mt-0.5 font-mono text-[8px] font-medium text-muted-brand">{fileLabel}</span>
           </div>
           <div className="min-w-0 flex-1">
             <p className="text-sm font-semibold leading-snug text-foreground line-clamp-2">{title}</p>
-            {metaLine && <p className="mt-1 text-xs text-muted-foreground">{metaLine}</p>}
+            {metaLine && <p className="mt-1 text-xs text-muted-brand">{metaLine}</p>}
             <div className="mt-2 flex flex-wrap items-center gap-1.5">
               {courseCode && (
                 <Link
                   href={`/study/courses/${encodeURIComponent(courseCode)}`}
                   onClick={(e) => e.stopPropagation()}
-                  className="rounded-full border border-[#5B35D5]/25 bg-[#EEEDFE] px-2 py-0.5 text-[11px] font-semibold text-[#3B24A8] no-underline hover:bg-[#5B35D5]/15 transition"
+                  className="rounded-full border border-primary/25 bg-primary-light px-2 py-0.5 text-[11px] font-semibold text-primary-text no-underline hover:bg-primary/15 transition"
                 >
                   {courseCode}
                 </Link>
               )}
-              <span className="rounded-full border border-border bg-background px-2 py-0.5 text-[11px] font-semibold text-muted-foreground">
+              <span className="rounded-full border border-border bg-background px-2 py-0.5 text-[11px] font-semibold text-muted-brand">
                 {dlCount.toLocaleString("en-NG")} downloads
               </span>
               {isPopular && (
@@ -525,7 +525,7 @@ function MaterialCard({
               href={`/api/study/materials/${m.id}/download`}
               download
               onClick={(e) => { e.stopPropagation(); onDownload(); }}
-              className={cn("inline-flex items-center gap-1.5 rounded-xl bg-[#5B35D5] px-2.5 py-2 text-xs font-semibold text-white no-underline","hover:bg-[#4526B8]","focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#5B35D5] focus-visible:ring-offset-2")}
+              className={cn("inline-flex items-center gap-1.5 rounded-xl bg-primary px-2.5 py-2 text-xs font-semibold text-white no-underline","hover:opacity-90","focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2")}
               aria-label="Download"
             >
               <Download className="h-3.5 w-3.5" /> Download
@@ -537,7 +537,7 @@ function MaterialCard({
               className={cn(
                 "grid h-8 w-8 place-items-center rounded-xl border transition",
                 "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
-                saved ? "border-[#5B35D5]/30 bg-[#EEEDFE] text-[#5B35D5]" : "border-border bg-background text-muted-foreground hover:bg-secondary/50",
+                saved ? "border-primary/30 bg-primary-light text-primary" : "border-border bg-background text-muted-brand hover:bg-secondary/50",
                 saving ? "opacity-70" : ""
               )}
               aria-label={saved ? "Unsave material" : "Save material"}
@@ -548,7 +548,7 @@ function MaterialCard({
         </div>
       </Link>
 
-      <div className="flex items-center gap-3 border-t border-border px-4 py-2 text-[11px] text-muted-foreground">
+      <div className="flex items-center gap-3 border-t border-border px-4 py-2 text-[11px] text-muted-brand">
         <span>{formatWhen(m.created_at)}</span>
         {(m.up_votes ?? 0) > 0 && (
           <><span>·</span><span className="text-emerald-700 dark:text-emerald-400">👍 {m.up_votes} found helpful</span></>
@@ -1311,7 +1311,7 @@ export default function MaterialsClient() {
       <StudyTabs contributorStatus={repStatus ?? undefined} />
 
       {prefsLoaded && scopeDept && !personalizedOff ? (
-        <div className="flex items-center justify-between gap-3 rounded-2xl border border-[#5B35D5]/20 bg-[#EEEDFE] px-4 py-3 text-sm text-[#3B24A8] dark:border-[#5B35D5]/30 dark:bg-[#5B35D5]/10 dark:text-indigo-200">
+        <div className="flex items-center justify-between gap-3 rounded-2xl border border-primary/20 bg-primary-light px-4 py-3 text-sm text-primary-text dark:border-primary/30 dark:bg-primary/10 dark:text-indigo-200">
           <span className="min-w-0">
             Showing your {myBadge ?? "academic"} materials first.
           </span>
@@ -1329,9 +1329,9 @@ export default function MaterialsClient() {
           </Link>
         </div>
       ) : personalizedOff ? (
-        <div className="flex items-center justify-between gap-3 rounded-2xl border border-border bg-card px-4 py-3 text-sm text-muted-foreground">
+        <div className="flex items-center justify-between gap-3 rounded-2xl border border-border bg-card px-4 py-3 text-sm text-muted-brand">
           <span>Browsing all Study materials.</span>
-          <Link href="/study/library" className="shrink-0 text-xs font-bold text-[#5B35D5] underline underline-offset-2">
+          <Link href="/study/library" className="shrink-0 text-xs font-bold text-primary underline underline-offset-2">
             Back to my scope
           </Link>
         </div>
@@ -1343,25 +1343,25 @@ export default function MaterialsClient() {
           href="/study/onboarding"
           className={cn(
             'flex items-center justify-between gap-3 rounded-2xl border border-border',
-            'bg-secondary/40 px-4 py-2.5 text-sm text-muted-foreground hover:bg-secondary/60 no-underline'
+            'bg-secondary/40 px-4 py-2.5 text-sm text-muted-brand hover:bg-secondary/60 no-underline'
           )}
         >
           <span>
             <strong className="text-foreground">Tip:</strong>{' '}
             Set your department to see only your courses.
           </span>
-          <ArrowRight className="h-4 w-4 shrink-0 text-muted-foreground" />
+          <ArrowRight className="h-4 w-4 shrink-0 text-muted-brand" />
         </Link>
       )}
 
       <Card className="rounded-3xl border bg-background/85 p-3">
         <div className="flex items-center gap-2 rounded-2xl border border-border bg-background px-3 py-2">
-          <Search className="h-4 w-4 shrink-0 text-muted-foreground" />
+          <Search className="h-4 w-4 shrink-0 text-muted-brand" />
           <input
             value={q}
             onChange={(e) => setQ(e.target.value)}
             placeholder="Search materials..."
-            className="min-w-0 flex-1 bg-transparent text-sm text-foreground outline-none placeholder:text-muted-foreground"
+            className="min-w-0 flex-1 bg-transparent text-sm text-foreground outline-none placeholder:text-muted-brand"
           />
           {q ? (
             <button
@@ -1397,7 +1397,7 @@ export default function MaterialsClient() {
               onClick={clearAll}
               className={cn(
                 "inline-flex shrink-0 items-center gap-1.5 rounded-full border border-border bg-background px-3 py-1.5 text-xs font-semibold",
-                "text-muted-foreground hover:bg-secondary/50 hover:text-foreground",
+                "text-muted-brand hover:bg-secondary/50 hover:text-foreground",
                 "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
               )}
             >
@@ -1424,9 +1424,9 @@ export default function MaterialsClient() {
                   featured: featuredOnly ? "1" : null,
                   mine: mineParam || null,
                 }))}
-                className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-[#5B4FD9]/30 bg-[#EEEDFE] px-3 py-1.5 text-xs font-medium text-[#3A2EB8] transition hover:bg-[#5B4FD9]/15 focus-visible:outline-none"
+                className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-primary/30 bg-primary-light px-3 py-1.5 text-xs font-medium text-primary-text transition hover:bg-primary/10 focus-visible:outline-none"
               >
-                {courseParam} <span className="text-[#5B4FD9]">x</span>
+                {courseParam} <span className="text-primary">x</span>
               </button>
             ) : null}
 
@@ -1449,9 +1449,9 @@ export default function MaterialsClient() {
                   featured: featuredOnly ? "1" : null,
                   mine: mineParam || null,
                 }))}
-                className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-[#5B4FD9]/30 bg-[#EEEDFE] px-3 py-1.5 text-xs font-medium text-[#3A2EB8] transition hover:bg-[#5B4FD9]/15 focus-visible:outline-none"
+                className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-primary/30 bg-primary-light px-3 py-1.5 text-xs font-medium text-primary-text transition hover:bg-primary/10 focus-visible:outline-none"
               >
-                {activeTypeLabel} <span className="text-[#5B4FD9]">x</span>
+                {activeTypeLabel} <span className="text-primary">x</span>
               </button>
             ) : null}
 
@@ -1459,14 +1459,14 @@ export default function MaterialsClient() {
               <button
                 type="button"
                 onClick={openFilters}
-                className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-border bg-background px-3 py-1.5 text-xs font-semibold text-muted-foreground hover:bg-secondary/50 hover:text-foreground"
+                className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-border bg-background px-3 py-1.5 text-xs font-semibold text-muted-brand hover:bg-secondary/50 hover:text-foreground"
               >
                 Advanced filters
               </button>
             ) : null}
           </div>
         ) : (
-          <p className="mt-3 text-xs text-muted-foreground">
+          <p className="mt-3 text-xs text-muted-brand">
             Tip: Try <span className="font-semibold">GST101</span> or &quot;past question&quot;.
           </p>
         )}
@@ -1497,7 +1497,7 @@ export default function MaterialsClient() {
                   featured: featuredOnly ? "1" : null,
                   mine: mineParam || null,
                 }))}
-                className="text-xs font-bold text-[#5B35D5] hover:underline dark:text-indigo-300"
+                className="text-xs font-bold text-primary hover:underline dark:text-indigo-300"
               >
                 Clear
               </button>
@@ -1543,13 +1543,13 @@ export default function MaterialsClient() {
                         "flex shrink-0 rounded-2xl border px-3 py-2 text-left transition",
                         "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
                         active
-                          ? "border-[#5B35D5]/25 bg-[#EEEDFE] text-[#3B24A8]"
-                          : "border-border bg-card text-foreground hover:border-[#AFA9EC] hover:bg-[#EEEDFE] dark:hover:border-[#5B35D5]/40 dark:hover:bg-[#5B35D5]/10"
+                          ? "border-primary/25 bg-primary-light text-primary-text"
+                          : "border-border bg-card text-foreground hover:border-primary/30 hover:bg-primary-light dark:hover:border-primary/40 dark:hover:bg-primary/10"
                       )}
                     >
                       <div className="max-w-36">
                         <p className="truncate text-[12px] font-extrabold">{course.code}</p>
-                        <p className="mt-1 truncate text-[10px] text-muted-foreground">
+                        <p className="mt-1 truncate text-[10px] text-muted-brand">
                           {typeof course.count === "number"
                             ? `${course.count} material${course.count === 1 ? "" : "s"}`
                             : course.title || "Course materials"}
@@ -1566,7 +1566,7 @@ export default function MaterialsClient() {
         <div className="hidden space-y-3">
           <div className="flex items-center justify-between gap-3">
             <p className="text-sm font-extrabold text-foreground">My courses</p>
-            <span className="text-xs font-bold text-[#5B35D5] dark:text-indigo-300">All →</span>
+            <span className="text-xs font-bold text-primary dark:text-indigo-300">All →</span>
           </div>
           <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-hide">
             {Array.from({ length: 3 }).map((_, index) => (
@@ -1588,7 +1588,7 @@ export default function MaterialsClient() {
             <p className="text-sm font-extrabold text-foreground">My courses</p>
             <Link
               href="/study/library"
-              className="text-xs font-bold text-[#5B35D5] hover:underline dark:text-indigo-300"
+              className="text-xs font-bold text-primary hover:underline dark:text-indigo-300"
             >
               All →
             </Link>
@@ -1602,12 +1602,12 @@ export default function MaterialsClient() {
                 className={cn(
                   "flex shrink-0 rounded-2xl border px-3 py-2 text-left no-underline transition",
                   "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
-                  "border-border bg-card hover:border-[#AFA9EC] hover:bg-[#EEEDFE] dark:hover:border-[#5B35D5]/40 dark:hover:bg-[#5B35D5]/10"
+                  "border-border bg-card hover:border-primary/30 hover:bg-primary-light dark:hover:border-primary/40 dark:hover:bg-primary/10"
                 )}
               >
                 <div>
                   <p className="text-[12px] font-extrabold text-foreground">{course.course_code}</p>
-                  <p className="mt-1 text-[10px] text-muted-foreground">
+                  <p className="mt-1 text-[10px] text-muted-brand">
                     {course.materialCount} material{course.materialCount === 1 ? "" : "s"}
                   </p>
                 </div>
@@ -1621,12 +1621,12 @@ export default function MaterialsClient() {
       <div className="hidden">
         <Card className="rounded-3xl border bg-background/85 backdrop-blur">
           <div className="flex items-center gap-2 rounded-2xl border border-border bg-background px-3 py-2">
-            <Search className="h-4 w-4 text-muted-foreground" />
+            <Search className="h-4 w-4 text-muted-brand" />
             <input
               value={q}
               onChange={(e) => setQ(e.target.value)}
               placeholder="Search materials…"
-              className="min-w-0 flex-1 bg-transparent text-sm text-foreground outline-none placeholder:text-muted-foreground"
+              className="min-w-0 flex-1 bg-transparent text-sm text-foreground outline-none placeholder:text-muted-brand"
             />
             {q ? (
               <button type="button" onClick={() => setQ("")}
@@ -1658,8 +1658,8 @@ export default function MaterialsClient() {
                 "inline-flex shrink-0 items-center gap-1.5 rounded-xl border px-3 py-2 text-sm font-semibold transition",
                 "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
                 sortParam === "downloads_desc"
-                  ? "border-[#5B35D5]/25 bg-[#EEEDFE] text-[#3B24A8]"
-                  : "border-border bg-background text-muted-foreground hover:bg-secondary/50 hover:text-foreground"
+                  ? "border-primary/25 bg-primary-light text-primary-text"
+                  : "border-border bg-background text-muted-brand hover:bg-secondary/50 hover:text-foreground"
               )}>
               {sortParam === "downloads_desc" ? <TrendingUp className="h-3.5 w-3.5" /> : <Clock className="h-3.5 w-3.5" />}
               {sortParam === "downloads_desc" ? "Popular" : "Newest"}
@@ -1674,7 +1674,7 @@ export default function MaterialsClient() {
                 onClick={clearAll}
                 className={cn(
                   "shrink-0 inline-flex items-center gap-1.5 rounded-full border border-border bg-background px-3 py-1.5 text-xs font-semibold",
-                  "text-muted-foreground hover:bg-secondary/50 hover:text-foreground",
+                  "text-muted-brand hover:bg-secondary/50 hover:text-foreground",
                   "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
                 )}
               >
@@ -1692,8 +1692,8 @@ export default function MaterialsClient() {
                     verified: verifiedOnly ? "1" : null, featured: featuredOnly ? "1" : null,
                     mine: mineParam || null,
                   }))}
-                  className="shrink-0 inline-flex items-center gap-1.5 rounded-full border border-[#5B4FD9]/30 bg-[#EEEDFE] px-3 py-1.5 text-xs font-medium text-[#3A2EB8] transition hover:bg-[#5B4FD9]/15 focus-visible:outline-none">
-                  {deptParam || scopeDept || "Department"} <span className="text-[#5B4FD9]">×</span>
+                  className="shrink-0 inline-flex items-center gap-1.5 rounded-full border border-primary/30 bg-primary-light px-3 py-1.5 text-xs font-medium text-primary-text transition hover:bg-primary/10 focus-visible:outline-none">
+                  {deptParam || scopeDept || "Department"} <span className="text-primary">×</span>
                 </button>
               ) : null}
 
@@ -1706,8 +1706,8 @@ export default function MaterialsClient() {
                     sort: sortParam !== "newest" ? sortParam : null,
                     verified: verifiedOnly ? "1" : null, featured: featuredOnly ? "1" : null,
                   }))}
-                  className="shrink-0 inline-flex items-center gap-1.5 rounded-full border border-[#5B4FD9]/30 bg-[#EEEDFE] px-3 py-1.5 text-xs font-medium text-[#3A2EB8] transition hover:bg-[#5B4FD9]/15 focus-visible:outline-none">
-                  {activeTypeLabel} <span className="text-[#5B4FD9]">×</span>
+                  className="shrink-0 inline-flex items-center gap-1.5 rounded-full border border-primary/30 bg-primary-light px-3 py-1.5 text-xs font-medium text-primary-text transition hover:bg-primary/10 focus-visible:outline-none">
+                  {activeTypeLabel} <span className="text-primary">×</span>
                 </button>
               ) : null}
 
@@ -1720,8 +1720,8 @@ export default function MaterialsClient() {
                     sort: sortParam !== "newest" ? sortParam : null,
                     verified: verifiedOnly ? "1" : null, featured: featuredOnly ? "1" : null,
                   }))}
-                  className="shrink-0 inline-flex items-center gap-1.5 rounded-full border border-[#5B4FD9]/30 bg-[#EEEDFE] px-3 py-1.5 text-xs font-medium text-[#3A2EB8] transition hover:bg-[#5B4FD9]/15 focus-visible:outline-none">
-                  {levelParam}L <span className="text-[#5B4FD9]">×</span>
+                  className="shrink-0 inline-flex items-center gap-1.5 rounded-full border border-primary/30 bg-primary-light px-3 py-1.5 text-xs font-medium text-primary-text transition hover:bg-primary/10 focus-visible:outline-none">
+                  {levelParam}L <span className="text-primary">×</span>
                 </button>
               ) : null}
 
@@ -1736,13 +1736,13 @@ export default function MaterialsClient() {
                     sort: sortParam !== "newest" ? sortParam : null,
                     verified: verifiedOnly ? "1" : null, featured: featuredOnly ? "1" : null,
                   }))}
-                  className="shrink-0 inline-flex items-center gap-1.5 rounded-full border border-[#5B4FD9]/30 bg-[#EEEDFE] px-3 py-1.5 text-xs font-medium text-[#3A2EB8] transition hover:bg-[#5B4FD9]/15 focus-visible:outline-none">
-                  {courseParam} <span className="text-[#5B4FD9]">×</span>
+                  className="shrink-0 inline-flex items-center gap-1.5 rounded-full border border-primary/30 bg-primary-light px-3 py-1.5 text-xs font-medium text-primary-text transition hover:bg-primary/10 focus-visible:outline-none">
+                  {courseParam} <span className="text-primary">×</span>
                 </button>
               ) : null}
             </div>
           ) : (
-            <p className="mt-3 text-xs text-muted-foreground">
+            <p className="mt-3 text-xs text-muted-brand">
               Tip: Try <span className="font-semibold">GST101</span> or &quot;past question&quot;.
             </p>
           )}
@@ -1776,15 +1776,15 @@ export default function MaterialsClient() {
                 "inline-flex shrink-0 items-center gap-2 rounded-full border px-3 py-2 text-sm font-semibold transition",
                 "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
                 active
-                  ? "border-[#5B35D5]/25 bg-[#EEEDFE] text-[#3B24A8]"
-                  : "border-border/60 bg-background text-muted-foreground hover:bg-secondary/50 hover:text-foreground"
+                  ? "border-primary/25 bg-primary-light text-primary-text"
+                  : "border-border/60 bg-background text-muted-brand hover:bg-secondary/50 hover:text-foreground"
               )}
             >{label}</button>
           );
         })}
         <button type="button" onClick={openFilters}
           className={cn(
-            "inline-flex shrink-0 items-center gap-2 rounded-full border border-border/60 bg-background px-3 py-2 text-sm font-semibold text-muted-foreground transition",
+            "inline-flex shrink-0 items-center gap-2 rounded-full border border-border/60 bg-background px-3 py-2 text-sm font-semibold text-muted-brand transition",
             "hover:bg-secondary/50 hover:text-foreground",
             "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
           )}>More</button>
@@ -1794,10 +1794,10 @@ export default function MaterialsClient() {
       {loadError ? (
         <div className="rounded-3xl border border-border bg-background p-4">
           <p className="text-sm font-semibold text-foreground">Couldn’t load materials</p>
-          <p className="mt-1 text-sm text-muted-foreground">{loadError}</p>
+          <p className="mt-1 text-sm text-muted-brand">{loadError}</p>
           {schemaHint ? (
             <div className="mt-3 rounded-2xl border border-border bg-muted/40 p-3">
-              <p className="text-xs text-muted-foreground">{schemaHint}</p>
+              <p className="text-xs text-muted-brand">{schemaHint}</p>
             </div>
           ) : null}
         </div>
@@ -1901,7 +1901,7 @@ export default function MaterialsClient() {
               <ArrowRight className="h-4 w-4" />
             </button>
           ) : (
-            <p className="text-sm font-semibold text-muted-foreground">You’ve reached the end.</p>
+            <p className="text-sm font-semibold text-muted-brand">You’ve reached the end.</p>
           )}
         </div>
       ) : null}
@@ -2061,7 +2061,7 @@ export default function MaterialsClient() {
         </div>
 
         <div className="mt-3 rounded-2xl border border-border bg-muted/40 p-3">
-          <p className="text-xs text-muted-foreground">
+          <p className="text-xs text-muted-brand">
             Filters apply when you tap <span className="font-semibold">Apply</span>. Search updates automatically.
           </p>
         </div>
@@ -2100,9 +2100,9 @@ export default function MaterialsClient() {
         href="/study/materials/upload"
         className={cn(
           "fixed bottom-24 right-4 z-40 flex h-14 w-14 items-center justify-center rounded-full no-underline",
-          "bg-[#5B35D5] text-white shadow-lg",
-          "hover:bg-[#4526B8]",
-          "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#5B35D5] focus-visible:ring-offset-2",
+          "bg-primary text-white shadow-lg",
+          "hover:opacity-90",
+          "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2",
           "md:bottom-8 md:right-8"
         )}
         aria-label="Upload a material"
