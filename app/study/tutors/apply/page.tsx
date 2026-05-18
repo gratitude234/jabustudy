@@ -41,7 +41,7 @@ function Field({
         {label}
         {required && <span className="ml-0.5 text-rose-500">*</span>}
       </p>
-      {hint ? <p className="text-xs text-muted-foreground">{hint}</p> : null}
+      {hint ? <p className="text-xs text-muted-brand">{hint}</p> : null}
       {children}
     </div>
   );
@@ -50,7 +50,7 @@ function Field({
 function SummaryRow({ label, value }: { label: string; value: string }) {
   return (
     <div className="flex items-start justify-between gap-3 rounded-2xl border border-border bg-background px-3 py-2">
-      <span className="text-xs font-semibold text-muted-foreground">{label}</span>
+      <span className="text-xs font-semibold text-muted-brand">{label}</span>
       <span className="text-right text-xs font-extrabold text-foreground">{value || "—"}</span>
     </div>
   );
@@ -276,10 +276,10 @@ export default function TutorApplyPage() {
       return (
         <Card className="rounded-3xl">
           <div className="flex items-start gap-3 rounded-2xl border border-border bg-secondary/30 p-4">
-            <Info className="mt-0.5 h-5 w-5 shrink-0 text-muted-foreground" />
+            <Info className="mt-0.5 h-5 w-5 shrink-0 text-muted-brand" />
             <div className="min-w-0">
               <p className="font-semibold text-foreground">You're already listed</p>
-              <p className="mt-1 text-sm text-muted-foreground">
+              <p className="mt-1 text-sm text-muted-brand">
                 Your tutor profile is active. You can update your details below and resubmit.
               </p>
               <div className="mt-3">
@@ -350,7 +350,7 @@ export default function TutorApplyPage() {
           </div>
           <div className="min-w-0">
             <p className="text-sm font-extrabold text-foreground">How it works</p>
-            <ul className="mt-2 space-y-1 text-sm text-muted-foreground">
+            <ul className="mt-2 space-y-1 text-sm text-muted-brand">
               <li>→ Fill in your name, contact details, and the courses you teach.</li>
               <li>→ Your profile goes live immediately — students can WhatsApp or call you.</li>
               <li>→ An admin will review and add a <span className="font-semibold text-foreground">Verified</span> badge to trusted tutors.</li>
@@ -372,7 +372,7 @@ export default function TutorApplyPage() {
               <p className="text-base font-extrabold tracking-tight text-foreground">
                 {existingStatus === "active" ? "Update your profile" : "Your tutor profile"}
               </p>
-              <p className="mt-1 text-sm text-muted-foreground">
+              <p className="mt-1 text-sm text-muted-brand">
                 All contact info is displayed publicly in the directory.
               </p>
             </div>
@@ -387,7 +387,7 @@ export default function TutorApplyPage() {
                 placeholder="e.g. Chidi Okonkwo"
                 className={cn(
                   "w-full rounded-2xl border border-border bg-background px-3 py-2 text-sm text-foreground",
-                  "placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+                  "placeholder:text-muted-brand focus:outline-none focus:ring-2 focus:ring-ring"
                 )}
               />
             </Field>
@@ -402,7 +402,7 @@ export default function TutorApplyPage() {
                   type="tel"
                   className={cn(
                     "w-full rounded-2xl border border-border bg-background px-3 py-2 text-sm text-foreground",
-                    "placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+                    "placeholder:text-muted-brand focus:outline-none focus:ring-2 focus:ring-ring"
                   )}
                 />
               </Field>
@@ -415,7 +415,7 @@ export default function TutorApplyPage() {
                   type="tel"
                   className={cn(
                     "w-full rounded-2xl border border-border bg-background px-3 py-2 text-sm text-foreground",
-                    "placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+                    "placeholder:text-muted-brand focus:outline-none focus:ring-2 focus:ring-ring"
                   )}
                 />
               </Field>
@@ -430,7 +430,7 @@ export default function TutorApplyPage() {
                   placeholder="e.g. Science & Technology"
                   className={cn(
                     "w-full rounded-2xl border border-border bg-background px-3 py-2 text-sm text-foreground",
-                    "placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+                    "placeholder:text-muted-brand focus:outline-none focus:ring-2 focus:ring-ring"
                   )}
                 />
               </Field>
@@ -442,7 +442,7 @@ export default function TutorApplyPage() {
                   placeholder="e.g. Computer Science"
                   className={cn(
                     "w-full rounded-2xl border border-border bg-background px-3 py-2 text-sm text-foreground",
-                    "placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+                    "placeholder:text-muted-brand focus:outline-none focus:ring-2 focus:ring-ring"
                   )}
                 />
               </Field>
@@ -461,7 +461,7 @@ export default function TutorApplyPage() {
                       "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
                       level === l
                         ? "border-border bg-secondary text-foreground"
-                        : "border-border/60 bg-background text-muted-foreground hover:bg-secondary/50 hover:text-foreground"
+                        : "border-border/60 bg-background text-muted-brand hover:bg-secondary/50 hover:text-foreground"
                     )}
                   >
                     {l}L
@@ -482,7 +482,7 @@ export default function TutorApplyPage() {
                 placeholder="e.g. CSC301, MTH201, GST101"
                 className={cn(
                   "w-full rounded-2xl border border-border bg-background px-3 py-2 text-sm text-foreground",
-                  "placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+                  "placeholder:text-muted-brand focus:outline-none focus:ring-2 focus:ring-ring"
                 )}
               />
               {coursesArray.length > 0 ? (
@@ -523,7 +523,7 @@ export default function TutorApplyPage() {
                 placeholder="e.g. Final year CSC student with 2 years tutoring experience. Available weekday evenings."
                 className={cn(
                   "w-full resize-none rounded-2xl border border-border bg-background px-3 py-2 text-sm text-foreground",
-                  "placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+                  "placeholder:text-muted-brand focus:outline-none focus:ring-2 focus:ring-ring"
                 )}
               />
             </Field>
@@ -564,7 +564,7 @@ export default function TutorApplyPage() {
         {/* ── Summary sidebar ── */}
         <Card className="rounded-3xl md:col-span-2">
           <p className="text-sm font-extrabold text-foreground">Preview</p>
-          <p className="mt-1 text-sm text-muted-foreground">
+          <p className="mt-1 text-sm text-muted-brand">
             This is how your profile will appear in the directory.
           </p>
 
@@ -581,12 +581,12 @@ export default function TutorApplyPage() {
 
           {bio.trim() ? (
             <div className="mt-3 rounded-2xl border border-border bg-background p-3">
-              <p className="text-xs font-semibold text-muted-foreground">Bio</p>
+              <p className="text-xs font-semibold text-muted-brand">Bio</p>
               <p className="mt-1 text-sm text-foreground line-clamp-4">{bio}</p>
             </div>
           ) : null}
 
-          <div className="mt-4 rounded-2xl border border-border bg-secondary/30 p-3 text-xs text-muted-foreground">
+          <div className="mt-4 rounded-2xl border border-border bg-secondary/30 p-3 text-xs text-muted-brand">
             <p className="font-semibold text-foreground">Verification</p>
             <p className="mt-1">
               Your profile is listed immediately. A <span className="font-semibold">Verified</span> badge

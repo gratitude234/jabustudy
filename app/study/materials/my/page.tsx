@@ -215,7 +215,7 @@ export default function MyUploadsPage() {
         right={
           <Link
             href="/study/materials/upload"
-            className="inline-flex items-center gap-2 rounded-2xl border border-border bg-[#5B35D5] px-3 py-2 text-sm font-semibold text-white no-underline shadow-sm transition hover:bg-[#4526B8]"
+            className="inline-flex items-center gap-2 rounded-2xl border border-border bg-primary px-3 py-2 text-sm font-semibold text-white no-underline shadow-sm transition hover:opacity-90"
           >
             <ShieldCheck className="h-4 w-4" />
             Upload another
@@ -226,14 +226,14 @@ export default function MyUploadsPage() {
       <div className="flex items-center justify-between gap-3">
         <Link
           href="/study/library"
-          className="inline-flex items-center gap-2 text-sm text-muted-foreground no-underline transition hover:text-foreground"
+          className="inline-flex items-center gap-2 text-sm text-muted-brand no-underline transition hover:text-foreground"
         >
           <ArrowLeft className="h-4 w-4" />
           Back to materials
         </Link>
 
         {!isRep && (
-          <div className="hidden items-center gap-2 text-xs text-muted-foreground md:flex">
+          <div className="hidden items-center gap-2 text-xs text-muted-brand md:flex">
             <span className="rounded-full bg-secondary px-2 py-1">Total: {stats.totalUploads}</span>
             <span className="rounded-full bg-emerald-50 px-2 py-1 text-emerald-700 dark:bg-emerald-950/20 dark:text-emerald-400">
               Approved: {stats.approvedCount}
@@ -256,7 +256,7 @@ export default function MyUploadsPage() {
 
       {loading ? (
         <Card className="rounded-3xl p-6">
-          <div className="flex items-center gap-2 text-sm text-muted-foreground">
+          <div className="flex items-center gap-2 text-sm text-muted-brand">
             <Loader2 className="h-4 w-4 animate-spin" />
             Loading your uploads…
           </div>
@@ -270,7 +270,7 @@ export default function MyUploadsPage() {
             action={
               <Link
                 href="/study/materials/upload"
-                className="inline-flex items-center justify-center rounded-2xl bg-[#5B35D5] px-4 py-2 text-sm font-semibold text-white no-underline transition hover:bg-[#4526B8]"
+                className="inline-flex items-center justify-center rounded-2xl bg-primary px-4 py-2 text-sm font-semibold text-white no-underline transition hover:opacity-90"
               >
                 Upload a material
               </Link>
@@ -283,14 +283,14 @@ export default function MyUploadsPage() {
             <div className="overflow-hidden rounded-3xl border border-border bg-card shadow-sm">
               <div className="border-b border-border px-5 py-4">
                 <div className="flex items-center gap-2">
-                  <span className="grid h-8 w-8 place-items-center rounded-xl bg-[#EEEDFE] dark:bg-[#5B35D5]/10">
-                    <ShieldCheck className="h-4 w-4 text-[#5B35D5]" />
+                  <span className="grid h-8 w-8 place-items-center rounded-xl bg-primary-light dark:bg-primary/10">
+                    <ShieldCheck className="h-4 w-4 text-primary" />
                   </span>
                   <div>
                     <p className="text-sm font-extrabold text-foreground">
                       Your impact as a rep
                     </p>
-                    <p className="text-xs text-muted-foreground">
+                    <p className="text-xs text-muted-brand">
                       {roleLabel} · {scopeLabel}
                     </p>
                   </div>
@@ -306,7 +306,7 @@ export default function MyUploadsPage() {
                     <p className="text-xl font-extrabold tabular-nums text-foreground">
                       {value.toLocaleString()}
                     </p>
-                    <p className="mt-0.5 text-[10px] text-muted-foreground">
+                    <p className="mt-0.5 text-[10px] text-muted-brand">
                       {label}
                     </p>
                   </div>
@@ -329,7 +329,7 @@ export default function MyUploadsPage() {
               ].map(({ label, value }) => (
                 <div key={label} className="rounded-2xl border border-border bg-card p-3 text-center shadow-sm">
                   <p className="text-xl font-extrabold text-foreground">{value}</p>
-                  <p className="mt-0.5 text-[11px] text-muted-foreground">{label}</p>
+                  <p className="mt-0.5 text-[11px] text-muted-brand">{label}</p>
                 </div>
               ))}
             </div>
@@ -338,7 +338,7 @@ export default function MyUploadsPage() {
           <div className="overflow-hidden rounded-3xl border border-border bg-card shadow-sm">
             <div className="border-b border-border px-5 py-4">
               <p className="text-sm font-extrabold text-foreground">Your materials</p>
-              <p className="mt-0.5 text-xs text-muted-foreground">
+              <p className="mt-0.5 text-xs text-muted-brand">
                 Review status, downloads, and any rejection notes.
               </p>
             </div>
@@ -362,20 +362,20 @@ export default function MyUploadsPage() {
                           <p className="truncate text-sm font-semibold text-foreground">
                             {it.title ?? "Untitled material"}
                           </p>
-                          <span className="inline-flex items-center rounded-full bg-[#EEEDFE] px-2 py-0.5 text-[10px] font-semibold text-[#3C3489] dark:bg-[#5B35D5]/10 dark:text-indigo-200">
+                          <span className="inline-flex items-center rounded-full bg-primary-light px-2 py-0.5 text-[10px] font-semibold text-primary-text dark:bg-primary/10 dark:text-indigo-200">
                             {courseCode}
                           </span>
                           <StatusPill approved={it.approved} note={it.description} />
                         </div>
-                        <p className="mt-1 text-xs text-muted-foreground">
+                        <p className="mt-1 text-xs text-muted-brand">
                           {courseMeta.join(" · ")}
                         </p>
-                        <div className="mt-2 flex flex-wrap items-center gap-3 text-[11px] text-muted-foreground">
+                        <div className="mt-2 flex flex-wrap items-center gap-3 text-[11px] text-muted-brand">
                           <span>{(it.downloads ?? 0).toLocaleString()} downloads</span>
                           <span>Uploaded {formatDate(it.created_at)}</span>
                         </div>
                       </div>
-                      <span className="inline-flex shrink-0 items-center gap-1 text-xs font-semibold text-[#5B35D5] dark:text-indigo-300">
+                      <span className="inline-flex shrink-0 items-center gap-1 text-xs font-semibold text-primary dark:text-indigo-300">
                         Open
                         <ExternalLink className="h-3.5 w-3.5" />
                       </span>

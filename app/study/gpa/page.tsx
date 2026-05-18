@@ -234,7 +234,7 @@ function SemesterChart({
   if (!hasAnyData) {
     return (
       <div className="flex h-32 items-center justify-center rounded-2xl border border-dashed border-border">
-        <p className="text-sm text-muted-foreground">Chart will appear once you add course data.</p>
+        <p className="text-sm text-muted-brand">Chart will appear once you add course data.</p>
       </div>
     );
   }
@@ -461,7 +461,7 @@ function GradeDistribution({
         {entries.map(([g, count]) => (
           <div key={g} className="flex items-center gap-1.5">
             <span className={cn("h-2.5 w-2.5 rounded-full", colors[g] ?? "bg-muted")} />
-            <span className="text-xs text-muted-foreground">
+            <span className="text-xs text-muted-brand">
               <span className="font-semibold text-foreground">{g}</span> × {count}
               <span className="ml-1 opacity-60">({Math.round((count / total) * 100)}%)</span>
             </span>
@@ -658,7 +658,7 @@ function ImportModal({
       <div className="relative z-10 mx-auto mt-auto w-full max-w-2xl rounded-t-3xl border-t border-border bg-card shadow-2xl md:my-auto md:rounded-3xl md:border">
         <div className="flex items-center justify-between gap-3 border-b border-border px-5 py-4">
           <div className="flex items-center gap-3">
-            <Table2 className="h-5 w-5 text-muted-foreground" />
+            <Table2 className="h-5 w-5 text-muted-brand" />
             <p className="text-base font-semibold text-foreground">CSV Import Preview</p>
           </div>
           <button type="button" onClick={onClose} className="grid h-9 w-9 place-items-center rounded-2xl border border-border bg-background hover:bg-secondary/50" aria-label="Close">
@@ -692,22 +692,22 @@ function ImportModal({
 
               {semesterNames.length > 0 && (
                 <div className="space-y-2">
-                  <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Semesters to import</p>
+                  <p className="text-xs font-semibold text-muted-brand uppercase tracking-wide">Semesters to import</p>
                   {semesterNames.map((name) => {
                     const semRows = validRows.filter((r) => r.semester === name);
                     return (
                       <div key={name} className="rounded-2xl border border-border bg-background p-3">
                         <p className="text-sm font-semibold text-foreground">{name}</p>
-                        <p className="mt-1 text-xs text-muted-foreground">{semRows.length} course{semRows.length !== 1 ? "s" : ""}</p>
+                        <p className="mt-1 text-xs text-muted-brand">{semRows.length} course{semRows.length !== 1 ? "s" : ""}</p>
                         <div className="mt-2 space-y-1">
                           {semRows.slice(0, 5).map((r, i) => (
-                            <div key={i} className="flex items-center gap-2 text-xs text-muted-foreground">
+                            <div key={i} className="flex items-center gap-2 text-xs text-muted-brand">
                               <span className="w-20 truncate font-mono">{r.course || "—"}</span>
                               <span>{r.units}u</span>
                               <span className="rounded-full border border-border bg-secondary px-1.5 py-0.5 font-semibold text-foreground">{r.grade}</span>
                             </div>
                           ))}
-                          {semRows.length > 5 && <p className="text-xs text-muted-foreground">…and {semRows.length - 5} more</p>}
+                          {semRows.length > 5 && <p className="text-xs text-muted-brand">…and {semRows.length - 5} more</p>}
                         </div>
                       </div>
                     );
@@ -732,12 +732,12 @@ function ImportModal({
 
               {validRows.length > 0 && (
                 <div className="space-y-2">
-                  <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Import mode</p>
+                  <p className="text-xs font-semibold text-muted-brand uppercase tracking-wide">Import mode</p>
                   <div className="grid gap-2 sm:grid-cols-2">
                     {(["merge", "replace"] as const).map((m) => (
                       <button key={m} type="button" onClick={() => setMode(m)}
                         className={cn("rounded-2xl border p-3 text-left text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-                          mode === m ? "border-foreground bg-secondary font-semibold text-foreground" : "border-border bg-background text-muted-foreground hover:bg-secondary/50"
+                          mode === m ? "border-foreground bg-secondary font-semibold text-foreground" : "border-border bg-background text-muted-brand hover:bg-secondary/50"
                         )}>
                         <p className="font-semibold">{m === "merge" ? "Merge" : "Replace all"}</p>
                         <p className="mt-0.5 text-xs opacity-80">{m === "merge" ? "Add imported semesters alongside your existing ones." : "Delete all existing semesters and replace with the import."}</p>
@@ -753,7 +753,7 @@ function ImportModal({
         <div className="flex items-center justify-end gap-2 border-t border-border px-5 py-4">
           <button type="button" onClick={onClose} className="rounded-2xl border border-border bg-background px-4 py-2.5 text-sm font-semibold text-foreground hover:bg-secondary/50">Cancel</button>
           {result.ok && validRows.length > 0 && (
-            <button type="button" onClick={doImport} className="rounded-2xl border border-[#5B35D5]/20 bg-[#EEEDFE] px-4 py-2.5 text-sm font-semibold text-[#3B24A8] hover:bg-[#5B35D5]/10">
+            <button type="button" onClick={doImport} className="rounded-2xl border border-primary/20 bg-primary-light px-4 py-2.5 text-sm font-semibold text-primary-text hover:bg-primary/10">
               Import {validRows.length} row{validRows.length !== 1 ? "s" : ""}
             </button>
           )}
@@ -1163,8 +1163,8 @@ export default function GpaPage() {
       {isAuthed === false && (
         <div className="flex items-center justify-between gap-3 rounded-2xl border border-border bg-secondary/40 px-4 py-3">
           <div className="flex items-center gap-2">
-            <AlertCircle className="h-4 w-4 shrink-0 text-muted-foreground" />
-            <p className="text-sm text-muted-foreground">Sign in to sync your GPA data across devices.</p>
+            <AlertCircle className="h-4 w-4 shrink-0 text-muted-brand" />
+            <p className="text-sm text-muted-brand">Sign in to sync your GPA data across devices.</p>
           </div>
           <Link href="/login?next=/study/gpa"
             className="shrink-0 rounded-2xl border border-border bg-background px-3 py-1.5 text-xs font-semibold text-foreground no-underline hover:bg-secondary/50">
@@ -1174,7 +1174,7 @@ export default function GpaPage() {
       )}
 
       {/* ── Hero CGPA card ─────────────────────────────────────────────────── */}
-      <div className="overflow-hidden rounded-3xl bg-[#5B35D5]">
+      <div className="overflow-hidden rounded-3xl bg-primary">
         {/* Top section */}
         <div className="p-5 pb-4">
           {/* Scale selector row */}
@@ -1435,7 +1435,7 @@ export default function GpaPage() {
         <SectionCard>
           <div className="flex items-center justify-between gap-3">
             <div className="flex items-center gap-2">
-              <TrendingUp className="h-5 w-5 text-muted-foreground" />
+              <TrendingUp className="h-5 w-5 text-muted-brand" />
               <p className="text-base font-semibold text-foreground">Semester trend</p>
             </div>
           </div>
@@ -1452,9 +1452,9 @@ export default function GpaPage() {
           {Object.keys(totals.gradeCount).length > 0 && (
             <div className="space-y-2 border-t border-border pt-4">
               <div className="flex items-center gap-2">
-                <BarChart2 className="h-4 w-4 text-muted-foreground" />
+                <BarChart2 className="h-4 w-4 text-muted-brand" />
                 <p className="text-sm font-semibold text-foreground">Grade distribution</p>
-                <span className="text-xs text-muted-foreground">({totals.validRows} courses)</span>
+                <span className="text-xs text-muted-brand">({totals.validRows} courses)</span>
               </div>
               <GradeDistribution gradeCount={totals.gradeCount} scale={scale} />
             </div>
@@ -1467,7 +1467,7 @@ export default function GpaPage() {
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
             <p className="text-base font-semibold text-foreground">Semesters</p>
-            <p className="mt-1 text-sm text-muted-foreground">
+            <p className="mt-1 text-sm text-muted-brand">
               Add courses and grades. Press <kbd className="rounded border border-border px-1 py-0.5 text-[10px] font-mono">Enter</kbd> to advance between fields.
             </p>
           </div>
@@ -1503,7 +1503,7 @@ export default function GpaPage() {
             <button
               type="button"
               onClick={addSemester}
-              className="inline-flex items-center gap-2 rounded-2xl border border-[#5B35D5]/20 bg-[#EEEDFE] px-3 py-2 text-sm font-semibold text-[#3B24A8] hover:bg-[#5B35D5]/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#5B35D5] focus-visible:ring-offset-2"
+              className="inline-flex items-center gap-2 rounded-2xl border border-primary/20 bg-primary-light px-3 py-2 text-sm font-semibold text-primary-text hover:bg-primary/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
             >
               <Plus className="h-4 w-4" />
               Add semester
@@ -1559,7 +1559,7 @@ export default function GpaPage() {
                         aria-label={`Semester ${idx + 1} name`}
                         onClick={(e) => e.stopPropagation()}
                       />
-                      <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-sm text-muted-foreground">
+                      <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-sm text-muted-brand">
                         <span>GPA: <span className="font-semibold text-foreground">{st.unitsTotal > 0 ? format2(st.gpa) : "—"}</span></span>
                         {whatIfMode && wiSt.gpa !== st.gpa && wiSt.unitsTotal > 0 && (
                           <span className="rounded-full border border-amber-300 bg-amber-50 px-1.5 py-0.5 text-[11px] font-semibold text-amber-900">
@@ -1606,20 +1606,20 @@ export default function GpaPage() {
                           <div className="flex flex-col gap-2 sm:flex-row">
                             {/* Course code */}
                             <label className="flex-1 rounded-2xl border bg-card px-3 py-2">
-                              <span className="block text-[11px] font-semibold text-muted-foreground">Course</span>
+                              <span className="block text-[11px] font-semibold text-muted-brand">Course</span>
                               <input
                                 value={c.code}
                                 onChange={(e) => updateCourse(s.id, c.id, { code: e.target.value })}
                                 onKeyDown={(e) => handleCourseKeyDown(e, s.id, c.id, "code")}
                                 placeholder="e.g. GST101"
                                 data-course-field={`${s.id}-${c.id}-code`}
-                                className="mt-1 w-full bg-transparent text-sm text-foreground outline-none placeholder:text-muted-foreground"
+                                className="mt-1 w-full bg-transparent text-sm text-foreground outline-none placeholder:text-muted-brand"
                               />
                             </label>
 
                             {/* Units */}
                             <label className="w-full sm:w-24 rounded-2xl border bg-card px-3 py-2">
-                              <span className="block text-[11px] font-semibold text-muted-foreground">Units *</span>
+                              <span className="block text-[11px] font-semibold text-muted-brand">Units *</span>
                               <input
                                 value={c.units}
                                 onChange={(e) => updateCourse(s.id, c.id, { units: e.target.value })}
@@ -1628,7 +1628,7 @@ export default function GpaPage() {
                                 inputMode="numeric"
                                 data-course-field={`${s.id}-${c.id}-units`}
                                 className={cn(
-                                  "mt-1 w-full bg-transparent text-sm outline-none placeholder:text-muted-foreground",
+                                  "mt-1 w-full bg-transparent text-sm outline-none placeholder:text-muted-brand",
                                   invalid ? "text-red-600" : "text-foreground"
                                 )}
                               />
@@ -1637,7 +1637,7 @@ export default function GpaPage() {
 
                             {/* Grade */}
                             <label className="w-full sm:w-32 rounded-2xl border bg-card px-3 py-2">
-                              <span className="block text-[11px] font-semibold text-muted-foreground">Grade *</span>
+                              <span className="block text-[11px] font-semibold text-muted-brand">Grade *</span>
                               <select
                                 value={c.grade}
                                 onChange={(e) => updateCourse(s.id, c.id, { grade: e.target.value })}
@@ -1676,7 +1676,7 @@ export default function GpaPage() {
 
                           {/* Row footer */}
                           <div className="mt-2 flex items-center justify-between gap-2">
-                            <div className="flex flex-wrap gap-3 text-xs text-muted-foreground">
+                            <div className="flex flex-wrap gap-3 text-xs text-muted-brand">
                               <span>
                                 Points:{" "}
                                 <span className="font-semibold text-foreground">
@@ -1706,7 +1706,7 @@ export default function GpaPage() {
                       <button
                         type="button"
                         onClick={() => addCourse(s.id)}
-                        className="inline-flex flex-1 items-center justify-center gap-2 rounded-2xl border-2 border-dashed border-border px-4 py-3 text-sm font-semibold text-muted-foreground transition-colors hover:border-[#5B35D5]/40 hover:bg-[#EEEDFE] hover:text-[#3B24A8] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#5B35D5] focus-visible:ring-offset-2"
+                        className="inline-flex flex-1 items-center justify-center gap-2 rounded-2xl border-2 border-dashed border-border px-4 py-3 text-sm font-semibold text-muted-brand transition-colors hover:border-primary/40 hover:bg-primary-light hover:text-primary-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
                       >
                         <Plus className="h-4 w-4" />
                         Add course row
@@ -1720,7 +1720,7 @@ export default function GpaPage() {
                             <span className="text-sm font-semibold text-amber-700">/ {format2(wiSt.gpa)} what-if</span>
                           )}
                         </div>
-                        <p className="mt-1 text-xs text-muted-foreground">Units: {st.unitsTotal} • Valid: {st.validRows}</p>
+                        <p className="mt-1 text-xs text-muted-brand">Units: {st.unitsTotal} • Valid: {st.validRows}</p>
                       </div>
                     </div>
                   </div>
@@ -1736,7 +1736,7 @@ export default function GpaPage() {
         <div className="flex items-start justify-between gap-3">
           <div>
             <p className="text-base font-semibold text-foreground">Target GPA tool</p>
-            <p className="mt-1 text-sm text-muted-foreground">
+            <p className="mt-1 text-sm text-muted-brand">
               Enter your current CGPA and units to estimate the GPA you need next semester.
             </p>
           </div>
@@ -1753,15 +1753,15 @@ export default function GpaPage() {
             { label: "Next semester units", value: nextUnits, set: setNextUnits, placeholder: "e.g. 24", mode: "numeric", hint: null },
           ].map(({ label, value, set, placeholder, mode, hint }) => (
             <label key={label} className="rounded-2xl border bg-card p-3">
-              <span className="text-xs font-semibold text-muted-foreground">{label}</span>
+              <span className="text-xs font-semibold text-muted-brand">{label}</span>
               <input
                 value={value}
                 onChange={(e) => set(e.target.value)}
                 placeholder={placeholder}
                 inputMode={mode as React.HTMLAttributes<HTMLInputElement>["inputMode"]}
-                className="mt-1 w-full bg-transparent text-sm text-foreground outline-none placeholder:text-muted-foreground"
+                className="mt-1 w-full bg-transparent text-sm text-foreground outline-none placeholder:text-muted-brand"
               />
-              {hint && <p className="mt-1 text-[11px] text-muted-foreground">{hint}</p>}
+              {hint && <p className="mt-1 text-[11px] text-muted-brand">{hint}</p>}
             </label>
           ))}
         </div>
@@ -1782,7 +1782,7 @@ export default function GpaPage() {
               {requiredStatus.text}
             </p>
           ) : (
-            <p className="mt-2 text-sm text-muted-foreground">Fill all fields with valid numbers to see the required GPA.</p>
+            <p className="mt-2 text-sm text-muted-brand">Fill all fields with valid numbers to see the required GPA.</p>
           )}
         </div>
 
@@ -1791,8 +1791,8 @@ export default function GpaPage() {
             href={`/study/ai-plan?currentCgpa=${encodeURIComponent(currentCgpa)}&targetCgpa=${encodeURIComponent(targetCgpa)}`}
             className={cn(
               "mt-3 flex items-center justify-between gap-3 rounded-2xl px-4 py-3.5 no-underline transition",
-              "bg-[#5B35D5] hover:bg-[#4526B8]",
-              "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#5B35D5] focus-visible:ring-offset-2"
+              "bg-primary hover:opacity-90",
+              "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
             )}
           >
             <div className="min-w-0">
@@ -1825,12 +1825,12 @@ export default function GpaPage() {
               className={cn(
                 "inline-flex flex-none items-center gap-2 rounded-2xl border px-4 py-3 text-sm font-semibold",
                 syncStatus === "syncing"
-                  ? "border-[#5B35D5]/20 bg-[#EEEDFE] text-[#3B24A8]"
+                  ? "border-primary/20 bg-primary-light text-primary-text"
                   : syncStatus === "synced"
                   ? "border-teal-200 bg-teal-50 text-teal-800 dark:border-teal-700/40 dark:bg-teal-950/20 dark:text-teal-300"
                   : syncStatus === "offline"
-                  ? "border-border bg-background text-muted-foreground"
-                  : "border-border bg-background text-muted-foreground"
+                  ? "border-border bg-background text-muted-brand"
+                  : "border-border bg-background text-muted-brand"
               )}
               role="status"
               aria-live="polite"

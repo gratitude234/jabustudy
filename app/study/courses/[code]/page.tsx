@@ -140,12 +140,12 @@ function isAiSupported(filePath: string | null) {
 }
 
 const TYPE_META: Record<string, { label: string; color: string; bg: string }> = {
-  past_question: { label: "Past Q",  color: "text-[#3B24A8]", bg: "bg-[#EEEDFE]" },
+  past_question: { label: "Past Q",  color: "text-primary-text", bg: "bg-primary-light" },
   note:          { label: "Note",    color: "text-[#3B6D11]", bg: "bg-[#EAF3DE]" },
   handout:       { label: "Handout", color: "text-[#3B6D11]", bg: "bg-[#EAF3DE]" },
   slides:        { label: "Slides",  color: "text-[#0C447C]", bg: "bg-[#E6F1FB]" },
   timetable:     { label: "Timetable", color: "text-[#633806]", bg: "bg-[#FAEEDA]" },
-  other:         { label: "File",    color: "text-muted-foreground", bg: "bg-secondary" },
+  other:         { label: "File",    color: "text-muted-brand", bg: "bg-secondary" },
 };
 
 function typeMeta(t: string | null) {
@@ -175,15 +175,15 @@ function MaterialCard({ m, courseCode }: { m: Material; courseCode: string }) {
       </div>
       <div className="min-w-0 flex-1">
         <p className="truncate text-sm font-semibold text-foreground">{title}</p>
-        <p className="mt-0.5 text-xs text-muted-foreground">
+        <p className="mt-0.5 text-xs text-muted-brand">
           {[meta.label, m.level ? `${m.level}L` : null, m.semester ? `${m.semester} sem` : null]
             .filter(Boolean).join(" Â· ")}
         </p>
       </div>
       {typeof m.downloads === "number" && m.downloads > 0 && (
-        <p className="shrink-0 text-xs text-muted-foreground">â†“{m.downloads}</p>
+        <p className="shrink-0 text-xs text-muted-brand">â†“{m.downloads}</p>
       )}
-      <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" />
+      <ChevronRight className="h-4 w-4 shrink-0 text-muted-brand" />
     </Link>
   );
 }
@@ -202,9 +202,9 @@ function PracticeSetCard({ s }: { s: PracticeSet }) {
     >
       <div className={cn(
         "mt-0.5 grid h-9 w-9 shrink-0 place-items-center rounded-xl",
-        isAiCourse || isOfficialAi ? "bg-[#5B35D5]" : "bg-[#EEEDFE]"
+        isAiCourse || isOfficialAi ? "bg-primary" : "bg-primary-light"
       )}>
-        <Sparkles className={cn("h-4 w-4", isAiCourse || isOfficialAi ? "text-white" : "text-[#5B35D5]")} />
+        <Sparkles className={cn("h-4 w-4", isAiCourse || isOfficialAi ? "text-white" : "text-primary")} />
       </div>
       <div className="min-w-0 flex-1">
         <p className="truncate text-sm font-semibold text-foreground">
@@ -212,18 +212,18 @@ function PracticeSetCard({ s }: { s: PracticeSet }) {
         </p>
         <div className="mt-0.5 flex flex-wrap items-center gap-x-1.5 gap-y-0.5">
           {isOfficialAi && (
-            <span className="text-xs font-extrabold text-[#5B35D5]">Official AI-built</span>
+            <span className="text-xs font-extrabold text-primary">Official AI-built</span>
           )}
           {typeof s.questions_count === "number" && (
-            <span className="text-xs text-muted-foreground">{s.questions_count} questions</span>
+            <span className="text-xs text-muted-brand">{s.questions_count} questions</span>
           )}
           {typeof s.time_limit_minutes === "number" && (
-            <span className="text-xs text-muted-foreground">Â· {s.time_limit_minutes} min</span>
+            <span className="text-xs text-muted-brand">Â· {s.time_limit_minutes} min</span>
           )}
-          {s.level && <span className="text-xs text-muted-foreground">Â· {s.level}L</span>}
+          {s.level && <span className="text-xs text-muted-brand">Â· {s.level}L</span>}
         </div>
         {isAiCourse && sources.length > 0 && (
-          <p className="mt-1 text-[11px] text-[#5B35D5]/70 leading-snug">
+          <p className="mt-1 text-[11px] text-primary/70 leading-snug">
             From:{" "}
             {sources
               .map((src) => src.title ?? "material")
@@ -233,7 +233,7 @@ function PracticeSetCard({ s }: { s: PracticeSet }) {
           </p>
         )}
       </div>
-      <ChevronRight className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
+      <ChevronRight className="mt-0.5 h-4 w-4 shrink-0 text-muted-brand" />
     </Link>
   );
 }
@@ -241,7 +241,7 @@ function PracticeSetCard({ s }: { s: PracticeSet }) {
 function SectionHeader({ title, action }: { title: string; action?: React.ReactNode }) {
   return (
     <div className="flex items-center justify-between gap-2 mb-2">
-      <p className="text-xs font-extrabold uppercase tracking-wider text-muted-foreground">{title}</p>
+      <p className="text-xs font-extrabold uppercase tracking-wider text-muted-brand">{title}</p>
       {action}
     </div>
   );
@@ -279,19 +279,19 @@ function BankBuilderCard({
   const hasBank = Boolean(bank?.run.id);
 
   return (
-    <div className="rounded-3xl border border-[#5B35D5]/20 bg-[#5B35D5]/5 p-4 shadow-sm">
+    <div className="rounded-3xl border border-primary/20 bg-primary/5 p-4 shadow-sm">
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <div className="flex items-center gap-2">
-            <ShieldCheck className="h-4 w-4 text-[#5B35D5]" />
-            <p className="text-sm font-extrabold text-[#3B24A8]">Official question bank</p>
+            <ShieldCheck className="h-4 w-4 text-primary" />
+            <p className="text-sm font-extrabold text-primary-text">Official question bank</p>
           </div>
-          <p className="mt-1 text-xs leading-snug text-[#534AB7]">
+          <p className="mt-1 text-xs leading-snug text-primary/70">
             Build the rep-reviewed practice set that appears on the Practice page.
           </p>
         </div>
         {hasBank && (
-          <span className="shrink-0 rounded-full border border-[#5B35D5]/20 bg-background px-2.5 py-1 text-[11px] font-extrabold text-[#3B24A8]">
+          <span className="shrink-0 rounded-full border border-primary/20 bg-background px-2.5 py-1 text-[11px] font-extrabold text-primary-text">
             {bank?.questionsCount ?? 0} Q
           </span>
         )}
@@ -320,7 +320,7 @@ function BankBuilderCard({
                   }
                   className={cn(
                     "flex w-full items-center gap-3 rounded-2xl border bg-background px-3 py-2.5 text-left transition",
-                    checked ? "border-[#5B35D5]/30" : "border-border"
+                    checked ? "border-primary/30" : "border-border"
                   )}
                 >
                   <div className={cn("grid h-8 w-8 shrink-0 place-items-center rounded-xl", meta.bg, meta.color)}>
@@ -328,12 +328,12 @@ function BankBuilderCard({
                   </div>
                   <div className="min-w-0 flex-1">
                     <p className="truncate text-sm font-semibold text-foreground">{m.title ?? "Untitled material"}</p>
-                    <p className="text-[11px] text-muted-foreground">{meta.label}</p>
+                    <p className="text-[11px] text-muted-brand">{meta.label}</p>
                   </div>
                   <span
                     className={cn(
                       "grid h-5 w-5 shrink-0 place-items-center rounded-full border",
-                      checked ? "border-[#5B35D5] bg-[#5B35D5] text-white" : "border-border"
+                      checked ? "border-primary bg-primary text-white" : "border-border"
                     )}
                   >
                     {checked ? <CheckCircle2 className="h-3.5 w-3.5" /> : null}
@@ -346,7 +346,7 @@ function BankBuilderCard({
             type="button"
             onClick={onStart}
             disabled={busy || selectedIds.length === 0}
-            className="inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-[#5B35D5] px-4 py-3 text-sm font-extrabold text-white transition hover:bg-[#4526B8] disabled:opacity-60"
+            className="inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-primary px-4 py-3 text-sm font-extrabold text-white transition hover:opacity-90 disabled:opacity-60"
           >
             {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
             {busy ? "Starting bank..." : "Start official bank"}
@@ -365,7 +365,7 @@ function BankBuilderCard({
                   <div className="flex items-start justify-between gap-2">
                     <div className="min-w-0">
                       <p className="truncate text-sm font-semibold text-foreground">{bankMaterialTitle(row)}</p>
-                      <p className="mt-0.5 text-[11px] font-semibold text-muted-foreground">
+                      <p className="mt-0.5 text-[11px] font-semibold text-muted-brand">
                         {row.status === "covered"
                           ? "Covered"
                           : row.status === "failed"
@@ -375,12 +375,12 @@ function BankBuilderCard({
                               : `${totalGenerated}/${totalTarget || "?"} topic questions`}
                       </p>
                     </div>
-                    <span className="shrink-0 text-[11px] font-extrabold text-[#5B35D5]">{row.status === "covered" ? "Done" : `${pct}%`}</span>
+                    <span className="shrink-0 text-[11px] font-extrabold text-primary">{row.status === "covered" ? "Done" : `${pct}%`}</span>
                   </div>
                   {topics.length > 0 && (
                     <div className="mt-2 flex flex-wrap gap-1.5">
                       {topics.slice(0, 4).map((topic) => (
-                        <span key={topic.title} className="rounded-full border border-[#5B35D5]/15 bg-[#5B35D5]/5 px-2 py-0.5 text-[10px] font-semibold text-[#534AB7]">
+                        <span key={topic.title} className="rounded-full border border-primary/15 bg-primary/5 px-2 py-0.5 text-[10px] font-semibold text-primary/70">
                           {topic.title}: {topic.generated ?? 0}/{topic.target ?? 0}
                         </span>
                       ))}
@@ -401,7 +401,7 @@ function BankBuilderCard({
               type="button"
               onClick={onGenerate}
               disabled={busy || ready}
-              className="inline-flex items-center justify-center gap-2 rounded-2xl bg-[#5B35D5] px-3 py-2.5 text-xs font-extrabold text-white transition hover:bg-[#4526B8] disabled:opacity-60"
+              className="inline-flex items-center justify-center gap-2 rounded-2xl bg-primary px-3 py-2.5 text-xs font-extrabold text-white transition hover:opacity-90 disabled:opacity-60"
             >
               {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5" />}
               Next batch
@@ -697,7 +697,7 @@ export default function CourseHubPage() {
   if (loading) {
     return (
       <div className="space-y-3 pb-28">
-        <div className="h-48 animate-pulse rounded-3xl bg-[#5B35D5]/20" />
+        <div className="h-48 animate-pulse rounded-3xl bg-primary/20" />
         <div className="h-24 animate-pulse rounded-3xl bg-secondary/60" />
         <div className="h-32 animate-pulse rounded-3xl bg-secondary/60" />
       </div>
@@ -709,7 +709,7 @@ export default function CourseHubPage() {
 
       {/* â”€â”€ Hero â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
       <div className="overflow-hidden rounded-3xl border border-border bg-card shadow-sm">
-        <div className="bg-[#5B35D5] px-5 pt-5 pb-5">
+        <div className="bg-primary px-5 pt-5 pb-5">
           <div className="mb-4 flex items-center justify-between">
             <button
               type="button"
@@ -726,7 +726,7 @@ export default function CourseHubPage() {
             </Link>
           </div>
 
-          <h1 className="text-3xl font-extrabold tracking-tight text-white leading-none">{code}</h1>
+          <h1 className="font-[family-name:var(--font-bricolage)] text-3xl font-extrabold tracking-tight text-white leading-none">{code}</h1>
           {course?.course_title && (
             <p className="mt-1.5 text-sm font-semibold text-white/75 leading-snug">{norm(course.course_title)}</p>
           )}
@@ -763,7 +763,7 @@ export default function CourseHubPage() {
         {!error && !course && !loading && (
           <div className="p-5 text-center space-y-2">
             <p className="font-extrabold text-foreground">Course not found</p>
-            <p className="text-sm text-muted-foreground">No course matches "{code}".</p>
+            <p className="text-sm text-muted-brand">No course matches "{code}".</p>
             <Link
               href={`/study/library?q=${encodeURIComponent(code)}`}
               className="inline-flex items-center gap-2 rounded-2xl bg-secondary px-4 py-2 text-sm font-extrabold text-foreground no-underline"
@@ -779,14 +779,14 @@ export default function CourseHubPage() {
           {/* â”€â”€ Primary session CTA â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
           <div className="rounded-3xl border border-border bg-card p-4 shadow-sm space-y-3">
             <div className="flex items-center gap-2">
-              <Zap className="h-4 w-4 text-[#5B35D5]" />
+              <Zap className="h-4 w-4 text-primary" />
               <p className="text-sm font-extrabold text-foreground">Start studying</p>
             </div>
 
             {primaryCta === "practice" && (
               <Link
                 href={topPracticeHref}
-                className="flex w-full items-center justify-between gap-3 rounded-2xl bg-[#5B35D5] px-4 py-3.5 no-underline transition hover:bg-[#4526B8] active:scale-[0.98]"
+                className="flex w-full items-center justify-between gap-3 rounded-2xl bg-primary px-4 py-3.5 no-underline transition hover:opacity-90 active:scale-[0.98]"
               >
                 <div>
                   <p className="text-sm font-extrabold text-white">
@@ -806,20 +806,20 @@ export default function CourseHubPage() {
             {primaryCta === "browse" && (
               <div className="rounded-2xl border border-dashed border-border bg-secondary/20 px-4 py-3 text-center">
                 <p className="text-sm font-semibold text-foreground">Browse materials below</p>
-                <p className="mt-0.5 text-xs text-muted-foreground">No practice sets yet. Use materials to revise.</p>
+                <p className="mt-0.5 text-xs text-muted-brand">No practice sets yet. Use materials to revise.</p>
               </div>
             )}
 
             {primaryCta === "upload" && (
               <Link
                 href={`/study/materials/upload?course_code=${encodeURIComponent(code)}`}
-                className="flex w-full items-center justify-between gap-3 rounded-2xl border-2 border-dashed border-[#5B35D5]/30 bg-[#5B35D5]/5 px-4 py-3.5 no-underline transition hover:bg-[#5B35D5]/10"
+                className="flex w-full items-center justify-between gap-3 rounded-2xl border-2 border-dashed border-primary/30 bg-primary/5 px-4 py-3.5 no-underline transition hover:bg-primary/10"
               >
                 <div>
-                  <p className="text-sm font-extrabold text-[#5B35D5]">Be the first to upload</p>
-                  <p className="mt-0.5 text-xs text-muted-foreground">Add past questions, notes, or slides for {code}.</p>
+                  <p className="text-sm font-extrabold text-primary">Be the first to upload</p>
+                  <p className="mt-0.5 text-xs text-muted-brand">Add past questions, notes, or slides for {code}.</p>
                 </div>
-                <UploadCloud className="h-5 w-5 shrink-0 text-[#5B35D5]" />
+                <UploadCloud className="h-5 w-5 shrink-0 text-primary" />
               </Link>
             )}
 
@@ -829,21 +829,21 @@ export default function CourseHubPage() {
                 href={`/study/practice?course=${encodeURIComponent(code)}`}
                 className="flex flex-col items-center gap-1 rounded-2xl border border-border bg-background px-2 py-2.5 text-center no-underline transition hover:bg-secondary/40"
               >
-                <Sparkles className="h-4 w-4 text-[#5B35D5]" />
+                <Sparkles className="h-4 w-4 text-primary" />
                 <span className="text-[11px] font-semibold text-foreground leading-tight">Practice</span>
               </Link>
               <Link
                 href={`/study/questions/ask?course=${encodeURIComponent(code)}`}
                 className="flex flex-col items-center gap-1 rounded-2xl border border-border bg-background px-2 py-2.5 text-center no-underline transition hover:bg-secondary/40"
               >
-                <MessageCircle className="h-4 w-4 text-[#5B35D5]" />
+                <MessageCircle className="h-4 w-4 text-primary" />
                 <span className="text-[11px] font-semibold text-foreground leading-tight">Ask AI</span>
               </Link>
               <Link
                 href={`/study/materials/upload?course_code=${encodeURIComponent(code)}`}
                 className="flex flex-col items-center gap-1 rounded-2xl border border-border bg-background px-2 py-2.5 text-center no-underline transition hover:bg-secondary/40"
               >
-                <UploadCloud className="h-4 w-4 text-[#5B35D5]" />
+                <UploadCloud className="h-4 w-4 text-primary" />
                 <span className="text-[11px] font-semibold text-foreground leading-tight">Upload</span>
               </Link>
             </div>
@@ -874,8 +874,8 @@ export default function CourseHubPage() {
                   className={cn(
                     "shrink-0 rounded-full border px-3 py-1.5 text-xs font-semibold transition",
                     levelFilter === lv
-                      ? "border-[#5B35D5]/30 bg-[#EEEDFE] text-[#3B24A8]"
-                      : "border-border/60 bg-background text-muted-foreground hover:bg-secondary/50"
+                      ? "border-primary/30 bg-primary-light text-primary-text"
+                      : "border-border/60 bg-background text-muted-brand hover:bg-secondary/50"
                   )}
                 >
                   {lv === "all" ? "All levels" : `${lv}L`}
@@ -893,7 +893,7 @@ export default function CourseHubPage() {
                   pastQuestions.length > 4 ? (
                     <Link
                       href={`/study/library?type=past_question&q=${encodeURIComponent(code)}`}
-                      className="text-xs font-semibold text-[#5B35D5] no-underline"
+                      className="text-xs font-semibold text-primary no-underline"
                     >
                       See all {pastQuestions.length} â†’
                     </Link>
@@ -916,7 +916,7 @@ export default function CourseHubPage() {
                 practiceSets.length > 3 ? (
                   <Link
                     href={`/study/practice?course=${encodeURIComponent(code)}`}
-                    className="text-xs font-semibold text-[#5B35D5] no-underline"
+                    className="text-xs font-semibold text-primary no-underline"
                   >
                     See all â†’
                   </Link>
@@ -931,9 +931,9 @@ export default function CourseHubPage() {
                 ))}
               </div>
             ) : (
-              <div className="rounded-2xl border border-[#5B35D5]/15 bg-[#5B35D5]/5 px-4 py-3">
-                <p className="text-sm font-semibold text-[#3C3489]">No practice sets yet</p>
-                <p className="mt-0.5 text-xs text-[#534AB7]">
+              <div className="rounded-2xl border border-primary/15 bg-primary/5 px-4 py-3">
+                <p className="text-sm font-semibold text-primary-text">No practice sets yet</p>
+                <p className="mt-0.5 text-xs text-primary/70">
                   {firstAiMaterial
                     ? canManageBank
                       ? "Use the official question bank builder above to create the first class practice set."
@@ -972,7 +972,7 @@ export default function CourseHubPage() {
                         const meta = typeMeta(type);
                         return (
                           <div key={type}>
-                            <p className="mb-2 text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+                            <p className="mb-2 text-xs font-semibold text-muted-brand uppercase tracking-wide">
                               {meta.label === "File" ? "Other" : `${meta.label}s`}
                             </p>
                             <div className="space-y-2">
@@ -982,7 +982,7 @@ export default function CourseHubPage() {
                               {list.length > 4 && (
                                 <Link
                                   href={`/study/library?type=${encodeURIComponent(type)}&q=${encodeURIComponent(code)}`}
-                                  className="block text-center text-xs font-semibold text-[#5B35D5] no-underline py-1"
+                                  className="block text-center text-xs font-semibold text-primary no-underline py-1"
                                 >
                                   +{list.length - 4} more
                                 </Link>
@@ -996,7 +996,7 @@ export default function CourseHubPage() {
                         <button
                           type="button"
                           onClick={() => setShowAllMaterials(true)}
-                          className="flex w-full items-center justify-center gap-2 rounded-2xl border border-border bg-background px-4 py-2.5 text-sm font-semibold text-muted-foreground transition hover:bg-secondary/40"
+                          className="flex w-full items-center justify-center gap-2 rounded-2xl border border-border bg-background px-4 py-2.5 text-sm font-semibold text-muted-brand transition hover:bg-secondary/40"
                         >
                           Show all {totalOther} materials <ChevronRight className="h-4 w-4" />
                         </button>
@@ -1012,13 +1012,13 @@ export default function CourseHubPage() {
           {materials.length === 0 && (
             <div className="rounded-3xl border border-dashed border-border bg-card p-6 text-center shadow-sm">
               <div className="mx-auto mb-3 grid h-12 w-12 place-items-center rounded-2xl bg-secondary">
-                <BookOpen className="h-5 w-5 text-muted-foreground" />
+                <BookOpen className="h-5 w-5 text-muted-brand" />
               </div>
               <p className="font-extrabold text-foreground">No materials yet</p>
-              <p className="mt-1 text-sm text-muted-foreground">Be the first to share notes, slides or past questions for {code}.</p>
+              <p className="mt-1 text-sm text-muted-brand">Be the first to share notes, slides or past questions for {code}.</p>
               <Link
                 href={`/study/materials/upload?course_code=${encodeURIComponent(code)}`}
-                className="mt-4 inline-flex items-center gap-2 rounded-2xl bg-[#5B35D5] px-4 py-2.5 text-sm font-extrabold text-white no-underline transition hover:bg-[#4526B8]"
+                className="mt-4 inline-flex items-center gap-2 rounded-2xl bg-primary px-4 py-2.5 text-sm font-extrabold text-white no-underline transition hover:opacity-90"
               >
                 <UploadCloud className="h-4 w-4" /> Upload material
               </Link>
@@ -1029,13 +1029,13 @@ export default function CourseHubPage() {
           <div className="rounded-3xl border border-border bg-card p-4 shadow-sm">
             <div className="flex items-center justify-between gap-2 mb-3">
               <div className="flex items-center gap-2">
-                <MessageCircle className="h-4 w-4 text-[#5B35D5]" />
+                <MessageCircle className="h-4 w-4 text-primary" />
                 <p className="text-sm font-extrabold text-foreground">Q&amp;A</p>
               </div>
               {questions.length > 0 && (
                 <Link
                   href={`/study/questions?course=${encodeURIComponent(code)}`}
-                  className="text-xs font-semibold text-[#5B35D5] no-underline"
+                  className="text-xs font-semibold text-primary no-underline"
                 >
                   See all â†’
                 </Link>
@@ -1055,13 +1055,13 @@ export default function CourseHubPage() {
                     >
                       <div className={cn(
                         "mt-1 h-2 w-2 shrink-0 rounded-full",
-                        solved ? "bg-emerald-500" : unanswered ? "bg-amber-400" : "bg-[#5B35D5]"
+                        solved ? "bg-emerald-500" : unanswered ? "bg-amber-400" : "bg-primary"
                       )} />
                       <div className="min-w-0 flex-1">
                         <p className="text-sm font-semibold text-foreground leading-snug truncate">
                           {norm(String(q.title ?? "Question"))}
                         </p>
-                        <p className="mt-0.5 text-xs text-muted-foreground">
+                        <p className="mt-0.5 text-xs text-muted-brand">
                           {solved ? "Solved" : unanswered ? "Unanswered" : `${q.answers_count} answer${q.answers_count !== 1 ? "s" : ""}`}
                           {q.created_at ? ` Â· ${timeAgoShort(q.created_at)}` : ""}
                         </p>
@@ -1072,12 +1072,12 @@ export default function CourseHubPage() {
                 })}
               </div>
             ) : (
-              <p className="text-sm text-muted-foreground mb-3">No questions yet. Ask the first one.</p>
+              <p className="text-sm text-muted-brand mb-3">No questions yet. Ask the first one.</p>
             )}
 
             <Link
               href={`/study/questions/ask?course=${encodeURIComponent(code)}`}
-              className="flex w-full items-center justify-center gap-2 rounded-2xl border border-dashed border-[#5B35D5]/30 bg-[#5B35D5]/5 px-4 py-2.5 text-sm font-semibold text-[#5B35D5] no-underline transition hover:bg-[#5B35D5]/10"
+              className="flex w-full items-center justify-center gap-2 rounded-2xl border border-dashed border-primary/30 bg-primary/5 px-4 py-2.5 text-sm font-semibold text-primary no-underline transition hover:bg-primary/10"
             >
               <MessageCircle className="h-4 w-4" /> Ask a question about {code}
             </Link>
