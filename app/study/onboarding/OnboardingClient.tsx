@@ -118,9 +118,13 @@ function Banner({
 }
 
 function ProgressPill({ step, total }: { step: number; total: number }) {
+  const pct = Math.round((step / total) * 100);
   return (
-    <div className="inline-flex items-center gap-2 rounded-full border border-border bg-background px-3 py-2 text-xs font-extrabold text-foreground">
-      Step {step} of {total}
+    <div className="space-y-1.5">
+      <p className="text-xs font-bold text-muted-brand">Step {step} of {total}</p>
+      <div className="h-1 w-28 overflow-hidden rounded-full bg-border">
+        <div className="h-full rounded-full bg-primary transition-all" style={{ width: `${pct}%` }} />
+      </div>
     </div>
   );
 }
@@ -728,30 +732,29 @@ export default function OnboardingClient() {
   return (
     <div className="space-y-4 pb-28 md:pb-6">
       {/* Header */}
-      <Card className="rounded-3xl">
-        <div className="flex items-start justify-between gap-3">
-          <div className="min-w-0">
-            <p className="text-lg font-extrabold tracking-tight text-foreground">Set up Jabu Study</p>
-            <p className="mt-1 text-sm text-muted-foreground">
-              Quick setup so we can show the right materials + practice sets for you. You can change this later.
-            </p>
-          </div>
-
-          {step !== 4 && (
-            <div className="flex shrink-0 flex-col items-end gap-2">
-              <ProgressPill step={step} total={totalSteps} />
-              <button
-                type="button"
-                onClick={skip}
-                className="inline-flex items-center gap-2 rounded-2xl border border-border bg-background px-3 py-2 text-xs font-extrabold text-foreground hover:bg-secondary/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-              >
-                Skip
-                <ArrowRight className="h-4 w-4" />
-              </button>
-            </div>
-          )}
+      <div className="flex items-start justify-between gap-3 px-1">
+        <div className="min-w-0">
+          <p className="font-[family-name:var(--font-bricolage)] text-2xl font-extrabold tracking-tight text-foreground">
+            Set up Jabu Study
+          </p>
+          <p className="mt-1.5 text-sm text-muted-brand">
+            Quick setup so we can show the right materials + practice sets for you.
+          </p>
         </div>
-      </Card>
+
+        {step !== 4 && (
+          <div className="flex shrink-0 flex-col items-end gap-3">
+            <ProgressPill step={step} total={totalSteps} />
+            <button
+              type="button"
+              onClick={skip}
+              className="text-xs font-semibold text-muted-brand underline underline-offset-4 hover:text-foreground"
+            >
+              Skip
+            </button>
+          </div>
+        )}
+      </div>
 
       {/* Banner */}
       {banner ? (
@@ -886,8 +889,8 @@ export default function OnboardingClient() {
                 className={cn(
                   "inline-flex items-center justify-center gap-2 rounded-2xl px-4 py-3 text-sm font-extrabold",
                   canContinueStep1
-                    ? "bg-secondary text-foreground hover:opacity-90"
-                    : "border border-border/60 bg-background text-muted-foreground opacity-60"
+                    ? "bg-primary text-white hover:opacity-90 shadow-[0_4px_16px_rgba(91,53,213,0.3)]"
+                    : "border border-border/60 bg-background text-muted-brand opacity-60"
                 )}
               >
                 Continue <ChevronRight className="h-4 w-4" />
@@ -967,8 +970,8 @@ export default function OnboardingClient() {
                 className={cn(
                   "inline-flex items-center justify-center gap-2 rounded-2xl px-4 py-3 text-sm font-extrabold",
                   canContinueStep2
-                    ? "bg-secondary text-foreground hover:opacity-90"
-                    : "border border-border/60 bg-background text-muted-foreground opacity-60"
+                    ? "bg-primary text-white hover:opacity-90 shadow-[0_4px_16px_rgba(91,53,213,0.3)]"
+                    : "border border-border/60 bg-background text-muted-brand opacity-60"
                 )}
               >
                 Continue <ChevronRight className="h-4 w-4" />
@@ -1039,7 +1042,7 @@ export default function OnboardingClient() {
                 disabled={!isValidAll || saving}
                 className={cn(
                   "inline-flex w-full items-center justify-center gap-2 rounded-2xl px-4 py-3 text-sm font-extrabold sm:w-auto",
-                  isValidAll ? "bg-secondary text-foreground hover:opacity-90" : "border border-border/60 bg-background text-muted-foreground opacity-60"
+                  isValidAll ? "bg-primary text-white hover:opacity-90 shadow-[0_4px_16px_rgba(91,53,213,0.3)]" : "border border-border/60 bg-background text-muted-brand opacity-60"
                 )}
               >
                 {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <ArrowRight className="h-4 w-4" />}
@@ -1109,28 +1112,28 @@ export default function OnboardingClient() {
                           router.replace("/study/practice");
                         }
                       }}
-                      className="flex w-full items-center gap-3 rounded-2xl bg-secondary px-5 py-4 hover:opacity-90 transition"
+                      className="flex w-full items-center gap-3 rounded-[18px] bg-primary px-5 py-4 text-white hover:opacity-90 transition shadow-[0_4px_16px_rgba(91,53,213,0.3)]"
                     >
                       <Zap className="h-5 w-5 text-foreground" />
-                      <p className="text-sm font-extrabold text-foreground">Start your first set</p>
+                      <p className="text-sm font-extrabold text-white">Start your first set</p>
                     </button>
                   ) : (step4Data?.materials ?? 0) > 0 ? (
                     <Link
                       href="/study/library"
-                      className="flex w-full items-center gap-3 rounded-2xl bg-secondary px-5 py-4 hover:opacity-90 transition"
+                      className="flex w-full items-center gap-3 rounded-[18px] bg-primary px-5 py-4 text-white hover:opacity-90 transition shadow-[0_4px_16px_rgba(91,53,213,0.3)]"
                     >
-                      <BookOpen className="h-5 w-5 text-foreground" />
-                      <p className="text-sm font-extrabold text-foreground">
+                      <BookOpen className="h-5 w-5 text-white" />
+                      <p className="text-sm font-extrabold text-white">
                         Browse materials ({step4Data!.materials} available)
                       </p>
                     </Link>
                   ) : (
                     <Link
                       href="/study"
-                      className="flex w-full items-center gap-3 rounded-2xl bg-secondary px-5 py-4 hover:opacity-90 transition"
+                      className="flex w-full items-center gap-3 rounded-[18px] bg-primary px-5 py-4 text-white hover:opacity-90 transition shadow-[0_4px_16px_rgba(91,53,213,0.3)]"
                     >
-                      <BookOpen className="h-5 w-5 text-foreground" />
-                      <p className="text-sm font-extrabold text-foreground">Explore Study Hub</p>
+                      <BookOpen className="h-5 w-5 text-white" />
+                      <p className="text-sm font-extrabold text-white">Explore Study Hub</p>
                     </Link>
                   )}
                 </div>

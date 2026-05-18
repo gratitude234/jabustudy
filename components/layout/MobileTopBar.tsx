@@ -70,7 +70,7 @@ export default function MobileTopBar() {
       <div className="mx-auto max-w-6xl px-4 py-3">
         <div className="flex items-center justify-between gap-3">
           <Link href="/study" className="inline-flex items-center gap-2 no-underline focus-visible:outline-none">
-            <span className="h-2 w-2 shrink-0 rounded-full bg-[#5B35D5]" />
+            <span className="h-2 w-2 shrink-0 rounded-full bg-primary" />
             <span className="font-bold text-lg text-foreground">Jabu Study</span>
           </Link>
 
@@ -78,7 +78,7 @@ export default function MobileTopBar() {
             <NotificationBell />
             <Link
               href="/study/materials/upload"
-              className="inline-flex items-center gap-1.5 rounded-full border border-[#5B35D5]/20 bg-[#EEEDFE] px-3 py-1.5 text-sm font-semibold text-[#5B35D5] no-underline hover:bg-[#5B35D5]/10"
+              className="inline-flex items-center gap-1.5 rounded-full border border-primary/20 bg-primary-light px-3 py-1.5 text-sm font-semibold text-primary no-underline hover:bg-primary/10"
             >
               <UploadCloud className="h-4 w-4" />
               Upload

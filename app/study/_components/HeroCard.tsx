@@ -195,11 +195,11 @@ export function HeroCard({
 
   if (!ctaResolved || totalAttempts === null) {
     return (
-      <div className="overflow-hidden rounded-3xl border border-border bg-card shadow-sm">
+      <div className="overflow-hidden rounded-[26px] bg-primary shadow-[0_8px_32px_rgba(91,53,213,0.35)]">
         <div className="p-5 pb-4">
-          <div className="h-6 w-1/2 animate-pulse rounded bg-secondary/70" />
-          <div className="mt-2 h-3 w-2/3 animate-pulse rounded bg-secondary/70" />
-          <div className="mt-4 h-[72px] animate-pulse rounded-2xl bg-secondary/70" />
+          <div className="h-6 w-1/2 animate-pulse rounded bg-white/20" />
+          <div className="mt-2 h-3 w-2/3 animate-pulse rounded bg-white/15" />
+          <div className="mt-4 h-[72px] animate-pulse rounded-[18px] bg-white/15" />
         </div>
       </div>
     );
@@ -210,12 +210,14 @@ export function HeroCard({
   }
 
   return (
-    <div className="overflow-hidden rounded-3xl border border-border bg-card shadow-sm">
+    <div className="overflow-hidden rounded-[26px] bg-primary shadow-[0_8px_32px_rgba(91,53,213,0.35)]">
       <div className="p-5 pb-4">
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0">
-            <p className="text-xl font-extrabold tracking-tight text-foreground">{greeting}</p>
-            <p className="mt-1 text-xs text-muted-foreground">
+            <p className="font-[family-name:var(--font-bricolage)] text-xl font-extrabold tracking-tight text-white">
+              {greeting}
+            </p>
+            <p className="mt-1 text-xs text-white/70">
               Pick up where you left off and keep your streak moving.
             </p>
           </div>
@@ -228,12 +230,13 @@ export function HeroCard({
                 position: 2,
               })
             }
-            className="inline-flex shrink-0 items-center gap-1 rounded-full border border-border bg-background px-2 py-1 shadow-sm no-underline"
+            className="inline-flex shrink-0 items-center gap-1.5 rounded-full bg-white/20 px-3 py-1.5 no-underline"
           >
-            <Flame className={cn("h-3.5 w-3.5", streakLoading ? "text-muted-foreground" : streakColor)} />
-            <span className="text-xs font-extrabold text-foreground">{streakLoading ? "0" : streak}</span>
+            <Flame className={cn("h-3.5 w-3.5", streakLoading ? "text-white/60" : "text-orange-300")} />
+            <span className="text-xs font-extrabold text-white">{streakLoading ? "0" : streak}</span>
           </Link>
         </div>
+
         {dueCount !== null && dueCount > 0 ? (
           <Link
             href="/study/practice?due=1"
@@ -245,21 +248,17 @@ export function HeroCard({
                 position: 1,
               })
             }
-            className={cn(
-              "mt-4 flex items-center justify-between gap-3 rounded-2xl px-4 py-3 no-underline shadow-sm transition",
-              "bg-[#5B35D5] text-white hover:bg-[#4526B8]",
-              "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#5B35D5] focus-visible:ring-offset-2"
-            )}
+            className="mt-4 flex items-center justify-between gap-3 rounded-[18px] bg-white/16 px-4 py-3 no-underline transition hover:bg-white/22 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/50"
           >
             <div className="min-w-0">
-              <p className="text-sm font-extrabold">
+              <p className="text-sm font-extrabold text-white">
                 Review {dueCount} due card{dueCount === 1 ? "" : "s"} · ~{dueMinutes} min
               </p>
               {dueCourses.length > 0 ? (
-                <p className="mt-1 truncate text-xs text-white/70">{dueCourses.join(", ")}</p>
+                <p className="mt-1 truncate text-xs text-white/65">{dueCourses.join(", ")}</p>
               ) : null}
             </div>
-            <ArrowRight className="h-4 w-4 shrink-0 text-white" />
+            <ArrowRight className="h-4 w-4 shrink-0 text-white/80" />
           </Link>
         ) : continueAttempt ? (
           <Link
@@ -272,22 +271,16 @@ export function HeroCard({
                 position: 1,
               })
             }
-            className={cn(
-              "mt-4 flex items-center justify-between gap-3 rounded-2xl border border-border bg-background px-4 py-3 no-underline transition",
-              "hover:bg-secondary/40",
-              "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-            )}
+            className="mt-4 flex items-center justify-between gap-3 rounded-[18px] bg-white/16 px-4 py-3 no-underline transition hover:bg-white/22 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/50"
           >
             <div className="min-w-0">
-              <p className="truncate text-sm font-extrabold text-foreground">
+              <p className="truncate text-sm font-extrabold text-white">
                 Continue {continueAttempt.study_quiz_sets?.title ?? "Practice set"}
                 {totalCount > 0 ? ` · ${answeredCount}/${totalCount}` : ""}
               </p>
-              <p className="mt-1 text-xs text-muted-foreground">
-                Resume your in-progress practice attempt.
-              </p>
+              <p className="mt-1 text-xs text-white/65">Resume your in-progress practice attempt.</p>
             </div>
-            <ArrowRight className="h-4 w-4 shrink-0 text-muted-foreground" />
+            <ArrowRight className="h-4 w-4 shrink-0 text-white/80" />
           </Link>
         ) : (
           <Link
@@ -300,48 +293,28 @@ export function HeroCard({
                 position: 1,
               })
             }
-            className={cn(
-              "mt-4 flex items-center justify-between gap-3 rounded-2xl border border-border bg-background px-4 py-3 no-underline transition",
-              "hover:bg-secondary/40",
-              "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-            )}
+            className="mt-4 flex items-center justify-between gap-3 rounded-[18px] bg-white/16 px-4 py-3 no-underline transition hover:bg-white/22 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/50"
           >
             <div>
-              <p className="text-sm font-extrabold text-foreground">Start practicing</p>
-              <p className="mt-1 text-xs text-muted-foreground">Warm up with a fresh study session.</p>
+              <p className="text-sm font-extrabold text-white">Start practicing</p>
+              <p className="mt-1 text-xs text-white/65">Warm up with a fresh study session.</p>
             </div>
-            <ArrowRight className="h-4 w-4 shrink-0 text-muted-foreground" />
+            <ArrowRight className="h-4 w-4 shrink-0 text-white/80" />
           </Link>
         )}
 
         <div className="mt-3 grid grid-cols-2 gap-2">
           <Link
             href="/study/practice"
-            onClick={() =>
-              trackHomeCta("hero_secondary", {
-                variant: "fresh",
-              })
-            }
-            className={cn(
-              "inline-flex items-center justify-center rounded-2xl border border-border bg-card px-3 py-2 text-xs font-semibold text-foreground no-underline transition",
-              "hover:bg-secondary/20",
-              "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-            )}
+            onClick={() => trackHomeCta("hero_secondary", { variant: "fresh" })}
+            className="inline-flex items-center justify-center rounded-[14px] bg-white/12 px-3 py-2.5 text-xs font-semibold text-white no-underline transition hover:bg-white/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/50"
           >
             Fresh session
           </Link>
           <Link
             href="/study/history"
-            onClick={() =>
-              trackHomeCta("hero_secondary", {
-                variant: "resume",
-              })
-            }
-            className={cn(
-              "inline-flex items-center justify-center rounded-2xl border border-border bg-card px-3 py-2 text-xs font-semibold text-foreground no-underline transition",
-              "hover:bg-secondary/20",
-              "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-            )}
+            onClick={() => trackHomeCta("hero_secondary", { variant: "resume" })}
+            className="inline-flex items-center justify-center rounded-[14px] bg-white/12 px-3 py-2.5 text-xs font-semibold text-white no-underline transition hover:bg-white/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/50"
           >
             Resume
           </Link>

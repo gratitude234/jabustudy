@@ -186,33 +186,28 @@ export default function LoginClient() {
   return (
     <div className="space-y-4">
       {/* Brand header */}
-      <div className="rounded-3xl border bg-white p-4 sm:p-5">
-        <div className="flex items-start gap-3">
-          <div className="grid h-12 w-12 place-items-center rounded-2xl border bg-zinc-50">
-            <ShieldCheck className="h-5 w-5 text-zinc-800" />
-          </div>
-
-          <div className="min-w-0 flex-1">
-            <h1 className="text-lg font-semibold text-zinc-900">Sign in</h1>
-            <p className="mt-1 text-sm text-zinc-600">
-              Secure access to your Jabu Study account.
-            </p>
-          </div>
+      <div className="text-center">
+        <div className="mx-auto mb-3 grid h-[60px] w-[60px] place-items-center rounded-[18px] bg-primary shadow-[0_8px_32px_rgba(91,53,213,0.35)]">
+          <ShieldCheck className="h-6 w-6 text-white" />
         </div>
+        <h1 className="font-[family-name:var(--font-bricolage)] text-2xl font-extrabold text-foreground">
+          Sign in
+        </h1>
+        <p className="mt-1.5 text-sm text-muted-brand">Secure access to your Jabu Study account.</p>
       </div>
 
       <BannerView banner={banner} onClose={() => setBanner(null)} />
 
-      {/* Form */}
-      <div className="rounded-3xl border bg-white p-4 sm:p-5">
+      {/* Form card */}
+      <div className="rounded-[26px] border border-border bg-card p-5 shadow-sm">
         <form onSubmit={signInPassword} className="space-y-4">
           {/* Email */}
-          <div className="space-y-1">
-            <label htmlFor="email" className="text-xs font-medium text-zinc-700">
+          <div className="space-y-1.5">
+            <label htmlFor="email" className="text-xs font-semibold text-muted-brand">
               Email
             </label>
-            <div className="flex items-center gap-2 rounded-2xl border bg-white px-3 py-2.5 focus-within:ring-2 focus-within:ring-black/10">
-              <Mail className="h-4 w-4 text-zinc-500" />
+            <div className="flex items-center gap-2 rounded-[14px] border border-border bg-background px-3 py-2.5 focus-within:border-primary/40 focus-within:ring-2 focus-within:ring-primary/15 transition">
+              <Mail className="h-4 w-4 shrink-0 text-muted-brand" />
               <input
                 id="email"
                 type="email"
@@ -221,24 +216,24 @@ export default function LoginClient() {
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 disabled={loading || resetLoading}
-                className="w-full bg-transparent text-sm outline-none disabled:opacity-70"
-                placeholder="you@example.com"
+                className="w-full bg-transparent text-sm text-foreground outline-none placeholder:text-muted-brand/50 disabled:opacity-70"
+                placeholder="you@jabu.edu.ng"
               />
             </div>
             {!emailValid && email.trim().length > 0 ? (
-              <p className="text-[11px] text-rose-700">Enter a valid email address.</p>
+              <p className="text-[11px] text-rose-600">Enter a valid email address.</p>
             ) : (
-              <p className="text-[11px] text-zinc-500">We’ll never share your email.</p>
+              <p className="text-[11px] text-muted-brand/70">We’ll never share your email.</p>
             )}
           </div>
 
           {/* Password */}
-          <div className="space-y-1">
-            <label htmlFor="password" className="text-xs font-medium text-zinc-700">
+          <div className="space-y-1.5">
+            <label htmlFor="password" className="text-xs font-semibold text-muted-brand">
               Password
             </label>
-            <div className="flex items-center gap-2 rounded-2xl border bg-white px-3 py-2.5 focus-within:ring-2 focus-within:ring-black/10">
-              <KeyRound className="h-4 w-4 text-zinc-500" />
+            <div className="flex items-center gap-2 rounded-[14px] border border-border bg-background px-3 py-2.5 focus-within:border-primary/40 focus-within:ring-2 focus-within:ring-primary/15 transition">
+              <KeyRound className="h-4 w-4 shrink-0 text-muted-brand" />
               <input
                 id="password"
                 type={showPassword ? "text" : "password"}
@@ -247,14 +242,14 @@ export default function LoginClient() {
                 onChange={(e) => setPassword(e.target.value)}
                 disabled={loading || resetLoading}
                 onKeyUp={(e) => setCapsLock((e as any).getModifierState?.("CapsLock") ?? false)}
-                className="w-full bg-transparent text-sm outline-none disabled:opacity-70"
+                className="w-full bg-transparent text-sm text-foreground outline-none placeholder:text-muted-brand/50 disabled:opacity-70"
                 placeholder="Enter your password"
               />
               <button
                 type="button"
                 onClick={() => setShowPassword((s) => !s)}
                 disabled={loading || resetLoading}
-                className="rounded-xl border bg-white p-2 text-zinc-700 hover:bg-zinc-50 disabled:opacity-70"
+                className="rounded-lg p-1.5 text-muted-brand hover:bg-primary-light disabled:opacity-70"
                 aria-label={showPassword ? "Hide password" : "Show password"}
               >
                 {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
@@ -262,15 +257,14 @@ export default function LoginClient() {
             </div>
 
             <div className="flex items-center justify-between">
-              <p className="text-[11px] text-zinc-500">
-                {capsLock ? <span className="text-amber-700">Caps Lock is ON</span> : "Minimum 6 characters."}
+              <p className="text-[11px] text-muted-brand/70">
+                {capsLock ? <span className="text-amber-600">Caps Lock is ON</span> : "Minimum 6 characters."}
               </p>
-
               <button
                 type="button"
                 onClick={forgotPassword}
                 disabled={resetLoading || loading}
-                className="text-[11px] font-medium text-zinc-900 underline underline-offset-4 disabled:opacity-60"
+                className="text-[11px] font-semibold text-primary underline underline-offset-4 disabled:opacity-60"
               >
                 {resetLoading ? "Sending…" : "Forgot password?"}
               </button>
@@ -282,7 +276,7 @@ export default function LoginClient() {
             type="submit"
             disabled={loading || resetLoading}
             className={cx(
-              "inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-black px-4 py-2.5 text-sm font-medium text-white hover:opacity-90",
+              "inline-flex w-full items-center justify-center gap-2 rounded-[14px] bg-primary px-4 py-3 text-sm font-bold text-white shadow-[0_4px_16px_rgba(91,53,213,0.3)] hover:opacity-90 transition",
               (loading || resetLoading) && "opacity-70"
             )}
           >
@@ -291,21 +285,18 @@ export default function LoginClient() {
             {!loading ? <ArrowRight className="h-4 w-4" /> : null}
           </button>
 
-          {/* Footer links */}
-          <div className="pt-1 text-center">
-            <p className="text-xs text-zinc-600">
-              New here?{" "}
-              <Link href="/signup" className="font-semibold text-zinc-900 underline underline-offset-4">
-                Create an account
-              </Link>
-            </p>
-          </div>
+          {/* Footer link */}
+          <p className="pt-1 text-center text-xs text-muted-brand">
+            New here?{" "}
+            <Link href="/signup" className="font-bold text-foreground underline underline-offset-4 no-underline hover:underline">
+              Create an account
+            </Link>
+          </p>
         </form>
       </div>
 
-      {/* Tiny helper footer */}
-      <p className="text-center text-[11px] text-zinc-500">
-        By signing in, you agree to keep your account secure. If you have issues, try another browser or enable cookies.
+      <p className="text-center text-[11px] text-muted-brand/70">
+        By signing in, you agree to keep your account secure.
       </p>
     </div>
   );

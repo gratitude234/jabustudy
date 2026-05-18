@@ -419,7 +419,7 @@ function MiniTabs({ value, onChange }: { value: ViewKey; onChange: (v: ViewKey) 
               "inline-flex shrink-0 items-center gap-2 rounded-2xl border px-3 py-2 text-sm font-semibold transition",
               "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background",
               active
-                ? "border-[#5B35D5]/25 bg-[#EEEDFE] text-[#3B24A8]"
+                ? "border-primary/25 bg-primary-light text-primary-text"
                 : "border-transparent text-muted-foreground hover:bg-secondary/50 hover:text-foreground"
             )}
           >
@@ -461,7 +461,7 @@ function PracticeHeroAction({
     <Card
       className={cn(
         "flex min-h-[190px] flex-col justify-between overflow-hidden rounded-3xl p-4",
-        primary && "border-[#5B35D5]/25 bg-[#EEEDFE]/60 dark:bg-[#5B35D5]/10"
+        primary && "border-primary/25 bg-primary-light/60 dark:bg-primary/10"
       )}
     >
       <div className="space-y-3">
@@ -469,7 +469,7 @@ function PracticeHeroAction({
           <div
             className={cn(
               "grid h-10 w-10 shrink-0 place-items-center rounded-2xl",
-              primary ? "bg-[#5B35D5] text-white" : "bg-secondary text-foreground"
+              primary ? "bg-primary text-white" : "bg-secondary text-foreground"
             )}
           >
             {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : icon}
@@ -502,7 +502,7 @@ function PracticeHeroAction({
           "mt-4 inline-flex w-full items-center justify-center gap-2 rounded-2xl px-4 py-3 text-sm font-bold transition",
           "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background",
           primary
-            ? "bg-[#5B35D5] text-white hover:bg-[#4526B8]"
+            ? "bg-primary text-white hover:opacity-90"
             : "border border-border bg-background text-foreground hover:bg-secondary/50",
           (disabled || loading) && "cursor-not-allowed opacity-60"
         )}
@@ -552,16 +552,16 @@ function PracticeHero({
     : undefined;
 
   return (
-    <section className="space-y-4 rounded-[2rem] border border-border bg-card p-4 shadow-sm md:p-5">
+    <section className="space-y-4 overflow-hidden rounded-[26px] bg-primary p-4 shadow-[0_8px_32px_rgba(91,53,213,0.35)] md:p-5">
       <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
         <div className="min-w-0">
-          <p className="text-xs font-extrabold uppercase tracking-[0.14em] text-[#5B35D5]">
+          <p className="text-xs font-extrabold uppercase tracking-[0.14em] text-white/70">
             Practice command center
           </p>
-          <h1 className="mt-1 text-2xl font-extrabold leading-tight text-foreground md:text-3xl">
+          <h1 className="mt-1 font-[family-name:var(--font-bricolage)] text-2xl font-extrabold leading-tight text-white md:text-3xl">
             What should I practice now?
           </h1>
-          <p className="mt-2 max-w-2xl text-sm leading-6 text-muted-foreground">
+          <p className="mt-2 max-w-2xl text-sm leading-6 text-white/70">
             Start with spaced review, continue an unfinished set, or jump into a timed exam.
           </p>
         </div>
@@ -570,12 +570,12 @@ function PracticeHero({
           onClick={onQuickSession}
           disabled={quickLoading}
           className={cn(
-            "inline-flex w-full items-center justify-center gap-2 rounded-2xl border border-border bg-background px-4 py-3 text-sm font-bold text-foreground transition md:w-auto",
-            "hover:bg-secondary/50 disabled:cursor-not-allowed disabled:opacity-60",
-            "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+            "inline-flex w-full items-center justify-center gap-2 rounded-[14px] bg-white/16 px-4 py-3 text-sm font-bold text-white transition md:w-auto",
+            "hover:bg-white/22 disabled:cursor-not-allowed disabled:opacity-60",
+            "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/40"
           )}
         >
-          {quickLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Zap className="h-4 w-4 text-[#5B35D5]" />}
+          {quickLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Zap className="h-4 w-4 text-white" />}
           Quick session
         </button>
       </div>
@@ -729,7 +729,7 @@ function QuizSetCard({
                 </span>
               )}
               {isOfficialAi && (
-                <span className="inline-flex items-center rounded-full border border-[#5B35D5]/30 bg-[#EEEDFE] px-2 py-0.5 text-[10px] font-extrabold text-[#3B24A8]">
+                <span className="inline-flex items-center rounded-full border border-primary/30 bg-primary-light px-2 py-0.5 text-[10px] font-extrabold text-primary-text">
                   Official AI-built
                 </span>
               )}
@@ -1155,7 +1155,7 @@ function SuggestedTodayWidget() {
   return (
     <div className="rounded-3xl border border-border bg-background p-4">
       <div className="flex items-start gap-3">
-        <div className="grid h-8 w-8 shrink-0 place-items-center rounded-xl bg-[#5B35D5]/[0.07] text-[#5B35D5]">
+        <div className="grid h-8 w-8 shrink-0 place-items-center rounded-xl bg-primary/[0.07] text-primary">
           <Sparkles className="h-4 w-4" />
         </div>
         <div className="min-w-0 flex-1">
@@ -1959,7 +1959,7 @@ function PracticeHomeInner() {
       {!isProfileComplete && (
         <Link
           href="/study/onboarding"
-          className="flex items-center justify-between gap-3 rounded-2xl border border-[#5B35D5]/20 bg-[#EEEDFE] px-4 py-3 text-sm font-semibold text-[#3B24A8] no-underline hover:bg-[#5B35D5]/10 dark:border-[#5B35D5]/30 dark:bg-[#5B35D5]/10 dark:text-indigo-200"
+          className="flex items-center justify-between gap-3 rounded-2xl border border-primary/20 bg-primary-light px-4 py-3 text-sm font-semibold text-primary-text no-underline hover:bg-primary/10 dark:border-primary/30 dark:bg-primary/10 dark:text-indigo-200"
         >
           <span><strong>Tip:</strong> Set your department to personalise your practice sets.</span>
           <ArrowRight className="h-4 w-4 shrink-0 text-muted-foreground" />
@@ -1967,7 +1967,7 @@ function PracticeHomeInner() {
       )}
 
       {isProfileComplete && viewParam === "for_you" && !personalizedOff ? (
-        <div className="flex items-center justify-between gap-3 rounded-2xl border border-[#5B35D5]/20 bg-[#EEEDFE] px-4 py-3 text-sm text-[#3B24A8] dark:border-[#5B35D5]/30 dark:bg-[#5B35D5]/10 dark:text-indigo-200">
+        <div className="flex items-center justify-between gap-3 rounded-2xl border border-primary/20 bg-primary-light px-4 py-3 text-sm text-primary-text dark:border-primary/30 dark:bg-primary/10 dark:text-indigo-200">
           <span>For You is scoped to your courses, level and semester.</span>
           <Link
             href={buildHref(pathname, { view: "all", personalized: "0" })}
@@ -2008,9 +2008,9 @@ function PracticeHomeInner() {
             type="button"
             onClick={() => setCreateOpen(true)}
             className={cn(
-              "inline-flex items-center gap-2 rounded-2xl border border-[#5B35D5]/20 bg-[#EEEDFE] px-3 py-2 text-sm font-semibold text-[#3B24A8]",
-              "hover:bg-[#5B35D5]/10",
-              "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#5B35D5] focus-visible:ring-offset-2"
+              "inline-flex items-center gap-2 rounded-2xl border border-primary/20 bg-primary-light px-3 py-2 text-sm font-semibold text-primary-text",
+              "hover:bg-primary/10",
+              "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
             )}
           >
             <Plus className="h-4 w-4" />
@@ -2522,7 +2522,7 @@ function PracticeHomeInner() {
                       "inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold transition",
                       "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
                       previewMode === "study"
-                        ? "bg-[#EEEDFE] text-[#3B24A8] border border-[#5B35D5]/25 dark:bg-[#5B35D5]/10 dark:text-indigo-200 dark:border-[#5B35D5]/30"
+                        ? "bg-primary-light text-primary-text border border-primary/25 dark:bg-primary/10 dark:text-indigo-200 dark:border-primary/30"
                         : "text-muted-foreground hover:text-foreground"
                     )}
                   >
@@ -2547,7 +2547,7 @@ function PracticeHomeInner() {
               </div>
               <p className="px-1 text-xs text-muted-foreground">
                 {previewMode === "study" ? (
-                  <><span className="font-semibold text-[#3B24A8] dark:text-indigo-300">Study mode:</span>{" "}answer revealed with explanation after each pick. No timer.</>
+                  <><span className="font-semibold text-primary-text dark:text-indigo-300">Study mode:</span>{" "}answer revealed with explanation after each pick. No timer.</>
                 ) : (
                   <><span className="font-semibold">Exam mode:</span>{" "}answers shown after you submit. Timer active if set.</>
                 )}
@@ -2564,7 +2564,7 @@ function PracticeHomeInner() {
                     "hover:opacity-90",
                     "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-card",
                     previewMode === "study"
-                      ? "bg-[#5B35D5] text-white border border-[#4526B8] hover:bg-[#4526B8]"
+                      ? "bg-primary text-white border border-primary hover:opacity-90"
                       : "border border-border bg-secondary text-foreground"
                   )}
                 >

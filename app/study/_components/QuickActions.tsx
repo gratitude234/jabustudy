@@ -82,8 +82,8 @@ export function QuickActions(props: QuickActionsProps = {}) {
                 "border border-border bg-card text-foreground shadow-sm hover:bg-secondary/20"
               )}
             >
-              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#EEEDFE] dark:bg-[#5B35D5]/15">
-                <tile.icon className="h-5 w-5 text-[#5B35D5] dark:text-indigo-200" />
+              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary-light dark:bg-primary/15">
+                <tile.icon className="h-5 w-5 text-primary dark:text-indigo-200" />
               </div>
 
               <div className="space-y-1">
@@ -110,20 +110,20 @@ export function QuickActions(props: QuickActionsProps = {}) {
                 "flex flex-col gap-3 rounded-3xl p-4 no-underline transition active:scale-[0.97]",
                 "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
                 tile.primary
-                  ? "bg-[#5B35D5] text-white hover:bg-[#4526B8]"
+                  ? "bg-primary text-white hover:opacity-90"
                   : "border border-border bg-card text-foreground shadow-sm hover:bg-secondary/20"
               )}
             >
               <div
                 className={cn(
                   "flex h-10 w-10 items-center justify-center rounded-xl",
-                  tile.primary ? "bg-white/20" : "bg-[#EEEDFE] dark:bg-[#5B35D5]/15"
+                  tile.primary ? "bg-white/20" : "bg-primary-light dark:bg-primary/15"
                 )}
               >
                 <tile.icon
                   className={cn(
                     "h-5 w-5",
-                    tile.primary ? "text-white" : "text-[#5B35D5] dark:text-indigo-200"
+                    tile.primary ? "text-white" : "text-primary dark:text-indigo-200"
                   )}
                 />
               </div>
@@ -139,7 +139,7 @@ export function QuickActions(props: QuickActionsProps = {}) {
                 </p>
 
                 {tile.isNew ? (
-                  <span className="w-fit rounded-md bg-[#EEEDFE] px-1.5 py-0.5 text-[9px] font-bold text-[#3B24A8] dark:bg-white/20 dark:text-white">
+                  <span className="w-fit rounded-md bg-primary-light px-1.5 py-0.5 text-[9px] font-bold text-primary-text dark:bg-white/20 dark:text-white">
                     NEW
                   </span>
                 ) : null}

@@ -51,7 +51,7 @@ const EMPTY_COUNTS: Counts = {
 type Tone = "study" | "blue" | "green" | "amber" | "zinc";
 
 const toneClass: Record<Tone, string> = {
-  study: "border-[#5B35D5]/20 bg-[#EEEDFE] text-[#5B35D5]",
+  study: "border-primary/20 bg-primary-light text-primary",
   blue: "border-blue-200 bg-blue-50 text-blue-700",
   green: "border-emerald-200 bg-emerald-50 text-emerald-700",
   amber: "border-amber-200 bg-amber-50 text-amber-700",
@@ -83,8 +83,8 @@ function semesterLabel(value?: string | null) {
 function StatPill({ label, value }: { label: string; value: number | string }) {
   return (
     <div className="min-w-0 rounded-2xl border border-border bg-background px-3 py-2.5 text-center">
-      <div className="text-base font-extrabold tabular-nums text-foreground">{value}</div>
-      <div className="mt-0.5 truncate text-[11px] font-medium text-muted-foreground">{label}</div>
+      <div className="font-[family-name:var(--font-bricolage)] text-base font-extrabold tabular-nums text-foreground">{value}</div>
+      <div className="mt-0.5 truncate text-[11px] font-medium text-muted-brand">{label}</div>
     </div>
   );
 }
@@ -113,7 +113,7 @@ function ActionCard({
         </span>
         <span className="min-w-0">
           <span className="block text-sm font-bold text-foreground">{title}</span>
-          <span className="mt-0.5 block text-xs leading-relaxed text-muted-foreground">{desc}</span>
+          <span className="mt-0.5 block text-xs leading-relaxed text-muted-brand">{desc}</span>
         </span>
       </div>
     </Link>
@@ -145,14 +145,14 @@ function ToolRow({
       </span>
       <span className="min-w-0 flex-1">
         <span className="block truncate text-sm font-bold text-foreground">{title}</span>
-        <span className="mt-0.5 block truncate text-xs text-muted-foreground">{desc}</span>
+        <span className="mt-0.5 block truncate text-xs text-muted-brand">{desc}</span>
       </span>
       {badge ? (
-        <span className="shrink-0 rounded-full border border-[#5B35D5]/20 bg-[#EEEDFE] px-2 py-0.5 text-[10px] font-bold text-[#5B35D5]">
+        <span className="shrink-0 rounded-full border border-primary/20 bg-primary-light px-2 py-0.5 text-[10px] font-bold text-primary">
           {badge}
         </span>
       ) : null}
-      <ArrowRight className="h-4 w-4 shrink-0 text-muted-foreground" />
+      <ArrowRight className="h-4 w-4 shrink-0 text-muted-brand" />
     </Link>
   );
 }
@@ -262,14 +262,14 @@ function StudyMeInner() {
       <Card className="space-y-4">
         <div className="flex items-start justify-between gap-4">
           <div className="flex min-w-0 items-start gap-3">
-            <div className="grid h-14 w-14 shrink-0 place-items-center rounded-2xl bg-[#5B35D5] text-lg font-extrabold text-white">
+            <div className="grid h-[62px] w-[62px] shrink-0 place-items-center rounded-[16px] bg-primary text-lg font-extrabold text-white shadow-[0_4px_16px_rgba(91,53,213,0.3)]">
               {initials(displayName, userEmail)}
             </div>
             <div className="min-w-0">
               <h2 className="truncate text-lg font-extrabold text-foreground">
                 {displayName ?? "Study User"}
               </h2>
-              <p className="mt-0.5 truncate text-sm text-muted-foreground">{profileSummary}</p>
+              <p className="mt-0.5 truncate text-sm text-muted-brand">{profileSummary}</p>
               <div className="mt-2 flex flex-wrap gap-1.5">
                 <Badge tone={isContributor ? "success" : rep.status === "pending" ? "warning" : "neutral"}>
                   {isContributor ? <BadgeCheck className="h-3.5 w-3.5" /> : <UserRound className="h-3.5 w-3.5" />}
@@ -293,13 +293,13 @@ function StudyMeInner() {
         {!hasPrefs ? (
           <Link
             href="/study/onboarding"
-            className="flex items-center justify-between gap-3 rounded-2xl border border-[#5B35D5]/20 bg-[#EEEDFE] px-4 py-3 no-underline"
+            className="flex items-center justify-between gap-3 rounded-2xl border border-primary/20 bg-primary-light px-4 py-3 no-underline"
           >
             <span>
-              <span className="block text-sm font-bold text-[#3B24A8]">Complete your study profile</span>
-              <span className="mt-0.5 block text-xs text-[#5B35D5]">Set department, level and semester for better recommendations.</span>
+              <span className="block text-sm font-bold text-primary-text">Complete your study profile</span>
+              <span className="mt-0.5 block text-xs text-primary">Set department, level and semester for better recommendations.</span>
             </span>
-            <ArrowRight className="h-4 w-4 shrink-0 text-[#5B35D5]" />
+            <ArrowRight className="h-4 w-4 shrink-0 text-primary" />
           </Link>
         ) : null}
       </Card>
@@ -408,15 +408,15 @@ function StudyMeInner() {
 
       <section className="grid gap-3 md:grid-cols-2">
         <Card className="flex items-start gap-3">
-          <div className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-[#EEEDFE] text-[#5B35D5]">
+          <div className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-primary-light text-primary">
             <Brain className="h-5 w-5" />
           </div>
           <div>
             <h2 className="text-sm font-bold text-foreground">AI study plan</h2>
-            <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
+            <p className="mt-1 text-xs leading-relaxed text-muted-brand">
               Generate a weekly plan from your courses and available time.
             </p>
-            <Link href="/study/ai-plan" className="mt-3 inline-flex items-center gap-1 text-xs font-bold text-[#5B35D5] no-underline">
+            <Link href="/study/ai-plan" className="mt-3 inline-flex items-center gap-1 text-xs font-bold text-primary no-underline">
               Open planner <ArrowRight className="h-3.5 w-3.5" />
             </Link>
           </div>
@@ -428,10 +428,10 @@ function StudyMeInner() {
           </div>
           <div>
             <h2 className="text-sm font-bold text-foreground">Focus areas</h2>
-            <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
+            <p className="mt-1 text-xs leading-relaxed text-muted-brand">
               Use practice history to spot weak topics and revise smarter.
             </p>
-            <Link href="/study/practice" className="mt-3 inline-flex items-center gap-1 text-xs font-bold text-[#5B35D5] no-underline">
+            <Link href="/study/practice" className="mt-3 inline-flex items-center gap-1 text-xs font-bold text-primary no-underline">
               Practice now <ArrowRight className="h-3.5 w-3.5" />
             </Link>
           </div>
@@ -439,7 +439,7 @@ function StudyMeInner() {
       </section>
 
       {countsLoading ? (
-        <div className="flex items-center justify-center gap-2 text-xs text-muted-foreground">
+        <div className="flex items-center justify-center gap-2 text-xs text-muted-brand">
           <Loader2 className="h-3.5 w-3.5 animate-spin" />
           Refreshing study stats
         </div>

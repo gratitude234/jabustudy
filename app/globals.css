@@ -48,14 +48,20 @@
   --color-sidebar-ring: var(--sidebar-ring);
   --color-brand-market: var(--color-market);
   --color-brand-study: var(--color-study);
+
+  /* Bold Scholar design tokens */
+  --color-primary-light: var(--primary-light);
+  --color-primary-text: var(--primary-text);
+  --color-muted-brand: var(--muted-brand);
+  --font-heading: var(--font-bricolage);
 }
 
 :root {
   --radius: 0.75rem;
 
-  /* Neutral base */
-  --background: oklch(0.985 0 0); /* slightly off-white */
-  --foreground: oklch(0.145 0 0);
+  /* Neutral base — Bold Scholar palette */
+  --background: #F6F4FF;
+  --foreground: #0F0D1A;
 
   --card: oklch(1 0 0);
   --card-foreground: oklch(0.145 0 0);
@@ -78,9 +84,14 @@
   --color-market: #ff5c00;
   --color-study: #5b35d5;
 
+  /* Bold Scholar extended tokens */
+  --primary-light: #EEEDFE;
+  --primary-text: #3B24A8;
+  --muted-brand: #7363A0;
+
   --destructive: oklch(0.577 0.245 27.325);
 
-  --border: oklch(0.92 0 0);
+  --border: rgba(91, 53, 213, 0.11);
   --input: oklch(0.92 0 0);
   --ring: oklch(0.56 0.22 266); /* Indigo ring */
 

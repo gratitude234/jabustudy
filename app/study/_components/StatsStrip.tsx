@@ -140,31 +140,25 @@ export default function StatsStrip({ userId }: StatsStripProps) {
       }
       className="block no-underline"
     >
-      <div className="flex items-center justify-between gap-4 rounded-3xl border border-border bg-card px-4 py-3 shadow-sm transition hover:bg-secondary/20">
-        <div className="grid flex-1 grid-cols-3 gap-3">
-          <div>
-            <p className={`text-base font-extrabold ${getScoreClass(stats.avgScore)}`}>
-              {stats.avgScore != null ? `${stats.avgScore}%` : "--"}
-            </p>
-            <p className="text-[10px] text-muted-foreground">avg</p>
-          </div>
-          <div>
-            <p className="text-base font-extrabold text-foreground">
-              {stats.rank != null ? `#${stats.rank}` : "--"}
-            </p>
-            <p className="text-[10px] text-muted-foreground">dept rank</p>
-          </div>
-          <div>
-            <p className="text-base font-extrabold text-foreground">
-              {stats.totalSessions}
-            </p>
-            <p className="text-[10px] text-muted-foreground">sessions</p>
-          </div>
+      <div className="grid grid-cols-3 divide-x divide-border rounded-[22px] border border-border bg-card px-2 py-3 shadow-sm transition hover:bg-secondary/20">
+        <div className="px-3 text-center">
+          <p className={`font-[family-name:var(--font-bricolage)] text-lg font-extrabold ${getScoreClass(stats.avgScore)}`}>
+            {stats.avgScore != null ? `${stats.avgScore}%` : "--"}
+          </p>
+          <p className="mt-0.5 text-[10px] text-muted-brand">avg score</p>
         </div>
-
-        <span className="shrink-0 text-xs font-semibold text-[#5B35D5]">
-          Full progress →
-        </span>
+        <div className="px-3 text-center">
+          <p className="font-[family-name:var(--font-bricolage)] text-lg font-extrabold text-foreground">
+            {stats.rank != null ? `#${stats.rank}` : "--"}
+          </p>
+          <p className="mt-0.5 text-[10px] text-muted-brand">dept rank</p>
+        </div>
+        <div className="px-3 text-center">
+          <p className="font-[family-name:var(--font-bricolage)] text-lg font-extrabold text-foreground">
+            {stats.totalSessions}
+          </p>
+          <p className="mt-0.5 text-[10px] text-muted-brand">sessions</p>
+        </div>
       </div>
     </Link>
   );
