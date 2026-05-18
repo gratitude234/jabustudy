@@ -43,6 +43,26 @@ const MIN_EXTRACTED_PDF_CHARS = 120;
 let pdfWorkerConfigured = false;
 type PDFParseConstructor = typeof import("pdf-parse").PDFParse;
 
+async function ensurePdfCanvasPolyfills() {
+  const target = globalThis as typeof globalThis & Record<string, unknown> & {
+    DOMMatrix?: unknown;
+    ImageData?: unknown;
+    Path2D?: unknown;
+  };
+
+  if (target.DOMMatrix && target.ImageData && target.Path2D) return;
+
+  try {
+    const runtimeRequire = new Function("moduleName", "return require(moduleName)") as (moduleName: string) => any;
+    const canvas = runtimeRequire("@napi-rs/canvas");
+    target.DOMMatrix ??= canvas.DOMMatrix;
+    target.ImageData ??= canvas.ImageData;
+    target.Path2D ??= canvas.Path2D;
+  } catch {
+    // pdfjs will surface a clearer runtime warning/error if these are required.
+  }
+}
+
 function shouldExtractPdfText(): boolean {
   const explicitEnable = process.env.ENABLE_PDF_TEXT_EXTRACTION?.trim().toLowerCase();
   if (explicitEnable === "true") return true;
@@ -81,6 +101,7 @@ export function isGeminiInlineSupported(filePath: string): boolean {
 }
 
 async function loadPdfParse(): Promise<PDFParseConstructor> {
+  await ensurePdfCanvasPolyfills();
   const mod = await import("pdf-parse");
   return mod.PDFParse;
 }
