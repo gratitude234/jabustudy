@@ -46,6 +46,7 @@ ${text}`;
     maxTokens: 8000,
     temperature: 0.1,
     timeoutMs: 60_000,
+    modelRole: "fast",
   });
 
   if (!result.ok) {

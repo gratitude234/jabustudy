@@ -1,29 +1,23 @@
 import "server-only";
 
 import { NextResponse } from "next/server";
-import { generateJson, userMessage } from "@/lib/ai";
+import { generateJson, userMessage, type AiContentBlock } from "@/lib/ai";
 import { adminSupabase } from "@/lib/supabase/admin";
 import { extractMaterialContent, truncateText } from "@/lib/extractMaterialContent";
 import { isWithinScope } from "@/lib/studyAdmin/scope";
 import type { StudyModeratorScope } from "@/lib/studyAdmin/requireStudyModerator";
 
-const MODEL = "gemini-2.5-flash-lite";
 const MAX_FILE_BYTES = 10 * 1024 * 1024;
 const QUESTION_BANK_TEXT_CHARS = 24_000;
 const OUTLINE_TIMEOUT_MS = parsePositiveInt(process.env.GEMINI_OUTLINE_TIMEOUT_MS) ?? 60_000;
-const QUESTION_TIMEOUT_MS = parsePositiveInt(process.env.GEMINI_QUESTION_TIMEOUT_MS) ?? 60_000;
+const QUESTION_TIMEOUT_MS =
+  parsePositiveInt(process.env.AI_QUESTION_TIMEOUT_MS) ??
+  parsePositiveInt(process.env.GEMINI_QUESTION_TIMEOUT_MS) ??
+  60_000;
 
 function parsePositiveInt(value: string | undefined) {
   const parsed = Number.parseInt(value ?? "", 10);
   return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
-}
-
-function geminiModelName() {
-  return process.env.GEMINI_MODEL?.trim() || MODEL;
-}
-
-function geminiGenerateUrl() {
-  return `https://generativelanguage.googleapis.com/v1beta/models/${geminiModelName()}:generateContent`;
 }
 
 export type BankTopic = {
@@ -95,7 +89,7 @@ export async function getBankState(runId: string) {
   const { count } = await adminSupabase
     .from("study_quiz_questions")
     .select("id", { count: "exact", head: true })
-    .eq("set_id", (run as any).quiz_set_id);
+    .eq("set_id", (run as { quiz_set_id: string }).quiz_set_id);
 
   return { run, materials: materials ?? [], questionsCount: count ?? 0 };
 }
@@ -122,41 +116,15 @@ export async function fetchMaterialContent(material: { id: string; file_path: st
   return content;
 }
 
-async function callGeminiJson<T>(parts: Array<{ text: string } | { inline_data: { mime_type: string; data: string } }>, maxOutputTokens: number): Promise<T> {
-  const apiKey = process.env.GEMINI_API_KEY;
-  if (!apiKey) throw new Error("AI service not configured.");
-
-  const res = await fetch(`${geminiGenerateUrl()}?key=${apiKey}`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      contents: [{ parts }],
-      generationConfig: {
-        temperature: 0.25,
-        maxOutputTokens,
-        responseMimeType: "application/json",
-      },
-    }),
-    signal: AbortSignal.timeout(60_000),
+async function callAiJson<T>(parts: AiContentBlock[], maxOutputTokens: number, timeoutMs = QUESTION_TIMEOUT_MS): Promise<T> {
+  const result = await generateJson<T>({
+    messages: [userMessage(parts)],
+    temperature: 0.25,
+    maxTokens: maxOutputTokens,
+    timeoutMs,
   });
-
-  if (!res.ok) {
-    const errText = await res.text().catch(() => res.statusText);
-    throw new Error(`AI request failed: ${errText.slice(0, 180)}`);
-  }
-
-  const data = (await res.json()) as {
-    candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }>;
-  };
-  const raw = data.candidates?.[0]?.content?.parts?.[0]?.text ?? "";
-  if (!raw.trim()) throw new Error("AI returned an empty response.");
-
-  const clean = raw
-    .replace(/^```json\s*/i, "")
-    .replace(/^```\s*/i, "")
-    .replace(/```\s*$/i, "")
-    .trim();
-  return JSON.parse(clean) as T;
+  if (!result.ok) throw new Error(result.error);
+  return result.data;
 }
 
 export async function outlineMaterial(args: {
@@ -202,12 +170,12 @@ Return ONLY JSON:
   }
 
   const parts = [
-    { text: `MATERIAL: ${args.materialTitle}` },
-    { inline_data: { mime_type: args.content.mimeType, data: args.content.base64 } },
-    { text: prompt },
-  ];
+    { type: "text", text: `MATERIAL: ${args.materialTitle}` },
+    { type: "inline", mimeType: args.content.mimeType, data: args.content.base64, name: "study material" },
+    { type: "text", text: prompt },
+  ] satisfies AiContentBlock[];
 
-  const parsed = await callGeminiJson<{ topics?: Array<{ title?: string; description?: string }> }>(parts, 1200);
+  const parsed = await callAiJson<{ topics?: Array<{ title?: string; description?: string }> }>(parts, 1200, OUTLINE_TIMEOUT_MS);
   const topics = Array.isArray(parsed.topics) ? parsed.topics : [];
   const normalized: BankTopic[] = topics
     .map((topic) => ({
@@ -287,12 +255,12 @@ Return ONLY JSON:
   }
 
   const parts = [
-    { text: `MATERIAL: ${args.materialTitle}` },
-    { inline_data: { mime_type: args.content.mimeType, data: args.content.base64 } },
-    { text: prompt },
-  ];
+    { type: "text", text: `MATERIAL: ${args.materialTitle}` },
+    { type: "inline", mimeType: args.content.mimeType, data: args.content.base64, name: "study material" },
+    { type: "text", text: prompt },
+  ] satisfies AiContentBlock[];
 
-  const parsed = await callGeminiJson<{ questions?: GeneratedMCQ[] }>(parts, Math.min(4096, args.count * 360));
+  const parsed = await callAiJson<{ questions?: GeneratedMCQ[] }>(parts, Math.min(4096, args.count * 360), QUESTION_TIMEOUT_MS);
   const questions = Array.isArray(parsed.questions) ? parsed.questions : [];
   const optionKeys = ["A", "B", "C", "D"] as const;
 

@@ -58,10 +58,11 @@ type GeneratedQuestion = {
 };
 
 type AiGenerationMeta = {
-  provider: "gemini";
+  provider: "bedrock" | "gemini";
   model: string;
   inputMode: "extracted-text" | "inline-file" | "indexed-chunks" | "coverage-aware";
   reason?: string;
+  fallbackProvider?: "bedrock" | "gemini";
   coverage?: {
     topicsCovered?: number;
     questionKindCounts?: Record<string, number>;
@@ -170,7 +171,7 @@ function formatMaterialType(t: string | null) {
 
 function formatAiProvider(ai: AiGenerationMeta | null) {
   if (!ai) return null;
-  return "Gemini";
+  return ai.provider === "bedrock" ? "Bedrock Claude" : "Gemini";
 }
 
 function formatAiModel(ai: AiGenerationMeta | null) {
@@ -182,7 +183,7 @@ function formatAiReason(ai: AiGenerationMeta | null) {
   const reason = ai?.reason?.trim() ?? "";
   if (!reason) return "";
   if (/pdf text extraction failed|dommatrix/i.test(reason)) {
-    return "Gemini read the PDF directly.";
+    return "The AI provider read the PDF directly.";
   }
   return reason;
 }

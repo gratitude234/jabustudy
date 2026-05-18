@@ -71,6 +71,8 @@ create table if not exists public.study_courses (
   department_id uuid references public.study_departments(id) on delete set null,
   status text not null default 'active',
   created_by uuid references auth.users(id) on delete set null,
+  approved_by uuid references auth.users(id) on delete set null,
+  approved_at timestamptz,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
@@ -126,6 +128,7 @@ create table if not exists public.study_materials (
   uploader_email text,
   downloads int not null default 0,
   up_votes int not null default 0,
+  down_votes int not null default 0,
   featured boolean not null default false,
   verified boolean not null default false,
   ai_summary text,
@@ -369,6 +372,7 @@ create table if not exists public.study_reps (
   faculty_id uuid references public.study_faculties(id) on delete set null,
   department_id uuid references public.study_departments(id) on delete set null,
   levels int[] not null default '{}',
+  active boolean not null default true,
   created_at timestamptz not null default now(),
   unique (user_id, department_id)
 );

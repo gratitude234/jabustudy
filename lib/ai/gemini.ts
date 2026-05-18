@@ -2,9 +2,18 @@ import "server-only";
 
 const DEFAULT_MODEL = "gemini-2.5-flash-lite";
 
+export type AiTextBlock = { type: "text"; text: string };
+export type AiInlineBlock = {
+  type: "inline";
+  mimeType: string;
+  data: string;
+  name?: string;
+};
+export type AiContentBlock = AiTextBlock | AiInlineBlock;
+
 export type AiChatMessage = {
   role: "system" | "user" | "assistant";
-  content: string;
+  content: string | AiContentBlock[];
 };
 
 export type GeminiTextConfig = {
@@ -18,20 +27,39 @@ function getApiKey() {
   return process.env.GEMINI_API_KEY?.trim() ?? "";
 }
 
-function messagesToPrompt(messages: AiChatMessage[]) {
-  return messages
-    .map((message) => `${message.role.toUpperCase()}:\n${message.content}`)
+function contentToText(content: string | AiContentBlock[]) {
+  if (typeof content === "string") return content;
+  return content
+    .map((block) => block.type === "text" ? block.text : `[${block.mimeType} attachment: ${block.name ?? "inline file"}]`)
     .join("\n\n");
 }
 
 function getSystemInstruction(messages: AiChatMessage[]) {
-  const system = messages.find((message) => message.role === "system")?.content?.trim();
+  const systemContent = messages.find((message) => message.role === "system")?.content;
+  const system = systemContent ? contentToText(systemContent).trim() : "";
   return system ? { parts: [{ text: system }] } : undefined;
 }
 
-function getUserPrompt(messages: AiChatMessage[]) {
+function blockToGeminiPart(block: AiContentBlock) {
+  if (block.type === "text") return { text: block.text };
+  return { inline_data: { mime_type: block.mimeType, data: block.data } };
+}
+
+function getGeminiParts(messages: AiChatMessage[]) {
   const nonSystem = messages.filter((message) => message.role !== "system");
-  return nonSystem.length ? messagesToPrompt(nonSystem) : messagesToPrompt(messages);
+  const source = nonSystem.length ? nonSystem : messages;
+  const parts: Array<{ text: string } | { inline_data: { mime_type: string; data: string } }> = [];
+
+  for (const message of source) {
+    parts.push({ text: `${message.role.toUpperCase()}:` });
+    if (typeof message.content === "string") {
+      parts.push({ text: message.content });
+    } else {
+      parts.push(...message.content.map(blockToGeminiPart));
+    }
+  }
+
+  return parts;
 }
 
 function getGenerateUrl(stream = false) {
@@ -42,6 +70,25 @@ function getGenerateUrl(stream = false) {
 
 export function isGeminiConfigured() {
   return Boolean(getApiKey());
+}
+
+function unknownErrorCode(error: unknown) {
+  if (typeof error === "object" && error !== null && "code" in error) {
+    return (error as { code?: unknown }).code;
+  }
+  return undefined;
+}
+
+function unknownErrorName(error: unknown) {
+  return error instanceof Error ? error.name : undefined;
+}
+
+function unknownErrorMessage(error: unknown, fallback: string) {
+  return error instanceof Error ? error.message : fallback;
+}
+
+function unknownErrorCause(error: unknown) {
+  return error instanceof Error ? error.cause : undefined;
 }
 
 export async function geminiText(config: GeminiTextConfig): Promise<string> {
@@ -56,7 +103,7 @@ export async function geminiText(config: GeminiTextConfig): Promise<string> {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         system_instruction: getSystemInstruction(config.messages),
-        contents: [{ parts: [{ text: getUserPrompt(config.messages) }] }],
+        contents: [{ parts: getGeminiParts(config.messages) }],
         generationConfig: {
           temperature: config.temperature ?? 0.4,
           maxOutputTokens: config.maxTokens ?? 600,
@@ -77,14 +124,15 @@ export async function geminiText(config: GeminiTextConfig): Promise<string> {
     const text: string = data?.candidates?.[0]?.content?.parts?.[0]?.text ?? "";
     if (!text.trim()) throw Object.assign(new Error("Gemini returned an empty response."), { code: "empty" });
     return text.trim();
-  } catch (error: any) {
-    if (error?.code) throw error;
-    if (error?.name === "TimeoutError" || error?.name === "AbortError") {
+  } catch (error) {
+    if (unknownErrorCode(error)) throw error;
+    const name = unknownErrorName(error);
+    if (name === "TimeoutError" || name === "AbortError") {
       throw Object.assign(new Error("Gemini request timed out."), { code: "timeout" });
     }
-    throw Object.assign(new Error(error?.message ?? "Network error calling Gemini."), {
+    throw Object.assign(new Error(unknownErrorMessage(error, "Network error calling Gemini.")), {
       code: "network",
-      cause: error?.cause,
+      cause: unknownErrorCause(error),
     });
   }
 }
@@ -102,7 +150,7 @@ export async function geminiStream(config: GeminiTextConfig): Promise<ReadableSt
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         system_instruction: getSystemInstruction(config.messages),
-        contents: [{ parts: [{ text: getUserPrompt(config.messages) }] }],
+        contents: [{ parts: getGeminiParts(config.messages) }],
         generationConfig: {
           temperature: config.temperature ?? 0.4,
           maxOutputTokens: config.maxTokens ?? 600,
@@ -110,13 +158,14 @@ export async function geminiStream(config: GeminiTextConfig): Promise<ReadableSt
       }),
       signal: AbortSignal.timeout(config.timeoutMs ?? 55_000),
     });
-  } catch (error: any) {
-    if (error?.name === "TimeoutError" || error?.name === "AbortError") {
+  } catch (error) {
+    const name = unknownErrorName(error);
+    if (name === "TimeoutError" || name === "AbortError") {
       throw Object.assign(new Error("Gemini stream request timed out."), { code: "timeout" });
     }
-    throw Object.assign(new Error(error?.message ?? "Network error calling Gemini."), {
+    throw Object.assign(new Error(unknownErrorMessage(error, "Network error calling Gemini.")), {
       code: "network",
-      cause: error?.cause,
+      cause: unknownErrorCause(error),
     });
   }
 

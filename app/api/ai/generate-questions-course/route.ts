@@ -13,11 +13,9 @@ export const runtime = "nodejs";
 
 import { NextRequest, NextResponse } from "next/server";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
-import { generateJson, userMessage } from "@/lib/ai";
+import { generateJson, userMessage, type AiContentBlock } from "@/lib/ai";
 import { adminSupabase } from "@/lib/supabase/admin";
 import { extractMaterialContent, truncateText } from "@/lib/extractMaterialContent";
-
-const MODEL = "gemini-2.5-flash-lite";
 
 const DEFAULT_QUESTION_COUNT = 10;
 const MAX_QUESTION_COUNT = 15;
@@ -25,25 +23,35 @@ const MATERIAL_LIMIT = 3;
 const MAX_FILE_BYTES = 10 * 1024 * 1024; // 10 MB per file
 const COURSE_COOLDOWN_MS = 24 * 60 * 60 * 1000; // 24 h
 const QUESTION_GEN_TEXT_CHARS = 24_000;
-const GEMINI_QUESTION_TIMEOUT_MS = parsePositiveInt(process.env.GEMINI_QUESTION_TIMEOUT_MS) ?? 60_000;
+const AI_QUESTION_TIMEOUT_MS =
+  parsePositiveInt(process.env.AI_QUESTION_TIMEOUT_MS) ??
+  parsePositiveInt(process.env.GEMINI_QUESTION_TIMEOUT_MS) ??
+  60_000;
 
 function parsePositiveInt(value: string | undefined) {
   const parsed = Number.parseInt(value ?? "", 10);
   return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
 }
 
-function geminiModelName() {
-  return process.env.GEMINI_MODEL?.trim() || MODEL;
-}
-
-function geminiGenerateUrl() {
-  return `https://generativelanguage.googleapis.com/v1beta/models/${geminiModelName()}:generateContent`;
-}
-
 type SourceMaterial = {
   id: string;
   title: string | null;
   material_type: string | null;
+};
+
+type QuizSetSourceRow = {
+  id: string;
+  source_material_ids?: unknown;
+  created_at?: string | null;
+};
+
+type CandidateMaterial = {
+  id: string;
+  title: string | null;
+  file_path: string | null;
+  file_url?: string | null;
+  material_type: string | null;
+  downloads?: number | null;
 };
 
 function isAiSupported(filePath: string | null): boolean {
@@ -86,7 +94,7 @@ export async function GET(req: NextRequest) {
 
   return NextResponse.json({
     setId: data?.id ?? null,
-    sources: (data as any)?.source_material_ids ?? null,
+    sources: (data as QuizSetSourceRow | null)?.source_material_ids ?? null,
   });
 }
 
@@ -142,7 +150,7 @@ export async function POST(req: NextRequest) {
   if (cached) {
     return NextResponse.json({
       setId: cached.id,
-      sources: (cached as any).source_material_ids ?? [],
+      sources: (cached as QuizSetSourceRow).source_material_ids ?? [],
       cached: true,
     });
   }
@@ -194,7 +202,7 @@ export async function POST(req: NextRequest) {
     content: Awaited<ReturnType<typeof extractMaterialContent>>;
   };
 
-  async function extractOne(mat: (typeof candidates)[number]): Promise<Extracted | null> {
+  async function extractOne(mat: CandidateMaterial): Promise<Extracted | null> {
     try {
       const { data: signed, error: signedErr } = await admin.storage
         .from("study-materials")
@@ -203,7 +211,7 @@ export async function POST(req: NextRequest) {
       if (signedErr) {
         console.warn(`[generate-questions-course] signed URL failed for ${mat.id}:`, signedErr.message);
       }
-      const downloadUrl: string | null = signed?.signedUrl ?? (mat as any).file_url ?? null;
+      const downloadUrl: string | null = signed?.signedUrl ?? mat.file_url ?? null;
 
       if (!downloadUrl) {
         console.warn(`[generate-questions-course] no download URL for material ${mat.id}`);
@@ -260,23 +268,19 @@ export async function POST(req: NextRequest) {
 
   const sources: SourceMaterial[] = extracted.map((e) => e.source);
 
-  // ── Build Gemini parts ────────────────────────────────────────────────────
-  type GeminiPart =
-    | { inline_data: { mime_type: string; data: string } }
-    | { text: string };
-
-  const parts: GeminiPart[] = [];
+  // ── Build AI content parts ────────────────────────────────────────────────
+  const parts: AiContentBlock[] = [];
 
   for (let i = 0; i < extracted.length; i++) {
     const { source, content } = extracted[i];
     const label = `MATERIAL ${i + 1} — ${source.title ?? source.id} (${source.material_type ?? "file"})`;
 
     if (content.kind === "inline") {
-      parts.push({ text: label });
-      parts.push({ inline_data: { mime_type: content.mimeType, data: content.base64 } });
+      parts.push({ type: "text", text: label });
+      parts.push({ type: "inline", mimeType: content.mimeType, data: content.base64, name: `material ${i + 1}` });
     } else if (content.kind === "text") {
       const truncated = truncateText(content.text, QUESTION_GEN_TEXT_CHARS);
-      parts.push({ text: `${label}\n\n${truncated}` });
+      parts.push({ type: "text", text: `${label}\n\n${truncated}` });
     }
   }
 
@@ -301,102 +305,35 @@ Return ONLY a valid JSON object — no markdown, no backticks, no preamble, no e
   ]
 }`;
 
-  parts.push({ text: systemPrompt });
+  parts.push({ type: "text", text: systemPrompt });
 
   let rawText: string | null = null;
   let aiMeta: {
-    provider: "gemini";
+    provider: "bedrock" | "gemini";
     model: string;
     inputMode: "extracted-text" | "inline-file";
+    fallbackProvider?: "bedrock" | "gemini";
     reason?: string;
   } | null = null;
-  if (extracted.every((item) => item.content.kind === "text")) {
-    const textPrompt = parts
-      .map((part) => ("text" in part ? part.text : ""))
-      .filter(Boolean)
-      .join("\n\n");
-    const result = await generateJson<{ questions: unknown[] }>({
-      messages: [userMessage(textPrompt)],
-      temperature: 0.25,
-      maxTokens: Math.min(4096, questionCount * 320),
-      timeoutMs: GEMINI_QUESTION_TIMEOUT_MS,
-    });
-    if (!result.ok) {
-      return NextResponse.json({ error: "Failed to generate questions." }, { status: 500 });
-    }
-    rawText = JSON.stringify(result.data);
-    aiMeta = {
-      provider: result.provider,
-      model: geminiModelName(),
-      inputMode: "extracted-text",
-    };
+  const result = await generateJson<{ questions: unknown[] }>({
+    messages: [userMessage(parts)],
+    temperature: 0.25,
+    maxTokens: Math.min(4096, questionCount * 320),
+    timeoutMs: AI_QUESTION_TIMEOUT_MS,
+  });
+  if (!result.ok) {
+    return NextResponse.json({ error: "Failed to generate questions." }, { status: 500 });
   }
-
-  if (!rawText) {
-  const apiKey = process.env.GEMINI_API_KEY;
-  if (!apiKey) return NextResponse.json({ error: "AI service not configured." }, { status: 500 });
-
-  // ── Call Gemini (with hard Promise.race timeout) ──────────────────────────
-  try {
-    const GEMINI_TIMEOUT_MS = 60_000;
-
-    const controller = new AbortController();
-    const hardTimeout = setTimeout(() => controller.abort(), GEMINI_TIMEOUT_MS);
-
-    const geminiPromise = fetch(`${geminiGenerateUrl()}?key=${apiKey}`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        contents: [{ parts }],
-        generationConfig: {
-          temperature: 0.25,
-          maxOutputTokens: Math.min(4096, questionCount * 320),
-          responseMimeType: "application/json",
-        },
-      }),
-      signal: controller.signal,
-    });
-
-    const timeoutPromise = new Promise<never>((_, reject) =>
-      setTimeout(() => reject(new Error("Gemini timeout")), GEMINI_TIMEOUT_MS + 2000)
-    );
-
-    let geminiRes: Response;
-    try {
-      geminiRes = await Promise.race([geminiPromise, timeoutPromise]);
-    } finally {
-      clearTimeout(hardTimeout);
-    }
-
-    if (!geminiRes.ok) {
-      const errText = await geminiRes.text().catch(() => geminiRes.statusText);
-      console.error("[generate-questions-course] Gemini error:", errText);
-      return NextResponse.json({ error: "Failed to generate questions." }, { status: 500 });
-    }
-
-    const geminiData = (await geminiRes.json()) as {
-      candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }>;
-    };
-    rawText = geminiData.candidates?.[0]?.content?.parts?.[0]?.text ?? "";
-    aiMeta = { provider: "gemini", model: geminiModelName(), inputMode: "inline-file" };
-    if (!rawText.trim()) {
-      return NextResponse.json({ error: "Failed to generate questions." }, { status: 500 });
-    }
-  } catch (e: unknown) {
-    console.error("[generate-questions-course] Gemini timeout:", e instanceof Error ? e.message : e);
-    return NextResponse.json(
-      { error: "AI generation timed out. Please try again." },
-      { status: 500 }
-    );
-  }
-
-  // ── Parse questions ────────────────────────────────────────────────────────
-  }
-
+  rawText = JSON.stringify(result.data);
+  aiMeta = {
+    provider: result.provider,
+    model: result.model,
+    fallbackProvider: result.fallbackProvider,
+    inputMode: extracted.every((item) => item.content.kind === "text") ? "extracted-text" : "inline-file",
+  };
   if (!rawText) {
     return NextResponse.json({ error: "Failed to generate questions." }, { status: 500 });
   }
-
   type MCQ = {
     question: string;
     options: { A: string; B: string; C: string; D: string };
@@ -420,7 +357,7 @@ Return ONLY a valid JSON object — no markdown, no backticks, no preamble, no e
       e instanceof Error ? e.message : e,
       rawText.slice(0, 300)
     );
-    // Gemini sometimes returns a refusal in plain text instead of JSON
+    // Some providers return a refusal in plain text instead of JSON.
     const isRefusal = /i (am|'m) sorry|cannot fulfill|i cannot|not able to/i.test(rawText);
     return NextResponse.json(
       {
@@ -444,7 +381,7 @@ Return ONLY a valid JSON object — no markdown, no backticks, no preamble, no e
       visibility: "public",
       questions_count: questions.length,
       source_material_ids: sources,
-    } as any)
+    } satisfies Record<string, unknown>)
     .select("id")
     .single();
 

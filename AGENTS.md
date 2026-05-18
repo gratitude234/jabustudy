@@ -22,6 +22,15 @@ NEXT_PUBLIC_SUPABASE_URL=
 NEXT_PUBLIC_SUPABASE_ANON_KEY=
 SUPABASE_SERVICE_ROLE_KEY=
 GEMINI_API_KEY=              # AI Study Plan / summarize features
+AI_PROVIDER=bedrock          # Question generation primary provider: bedrock or gemini
+AI_FALLBACK_PROVIDER=gemini  # Temporary question-generation fallback provider
+AWS_REGION=us-east-1         # Bedrock runtime region
+AWS_BEARER_TOKEN_BEDROCK=    # Bedrock API key; alternative to IAM access key pair
+AWS_ACCESS_KEY_ID=           # Optional IAM access key alternative
+AWS_SECRET_ACCESS_KEY=
+BEDROCK_MODEL_GENERATION=anthropic.claude-sonnet-4-6
+BEDROCK_MODEL_FAST=anthropic.claude-haiku-4-5-20251001-v1:0
+AI_QUESTION_TIMEOUT_MS=60000
 VAPID_PUBLIC_KEY=            # Web Push (generate with: npx web-push generate-vapid-keys)
 VAPID_PRIVATE_KEY=
 NEXT_PUBLIC_VAPID_PUBLIC_KEY= # same value as VAPID_PUBLIC_KEY
@@ -92,9 +101,9 @@ Rep uploads go through a separate admin upload path (`/api/study-admin/upload/*`
 
 ### AI Integration
 
-`lib/gemini.ts` wraps Gemini 2.5 Flash-Lite via direct REST calls (no SDK). **Server-only** — never import in client components. Exports `gemini(prompt)` and `geminiJson<T>(prompt)`.
+`lib/ai/index.ts` is the provider-aware server-only AI wrapper. Question generation uses Bedrock Claude by default (`AI_PROVIDER=bedrock`) with Gemini as a temporary fallback (`AI_FALLBACK_PROVIDER=gemini`). `lib/ai/bedrock.ts` wraps Amazon Bedrock Converse/ConverseStream; `lib/ai/gemini.ts` remains for fallback and non-migrated AI routes. **Never import AI wrappers in client components.**
 
-AI routes under `app/api/ai/`: `summarize` (material summary), `qa-answer` (Q&A auto-answer), `study-plan` (personalised plan), `explain` (concept explanation), `parse-mcq` (bulk MCQ import).
+AI routes under `app/api/ai/`: `generate-questions`, `generate-questions-course`, and rep question-bank generation use Bedrock Claude Sonnet 4.6 by default; `parse-mcq` uses the fast model role (Claude Haiku 4.5 by default). Other AI routes still use their existing Gemini paths until migrated.
 
 ### Notifications
 

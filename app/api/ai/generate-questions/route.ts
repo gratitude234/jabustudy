@@ -1,6 +1,6 @@
 // app/api/ai/generate-questions/route.ts
 // POST /api/ai/generate-questions
-// Generates MCQ practice questions from a study material using Gemini.
+// Generates MCQ practice questions from a study material using the configured AI provider.
 // Supports: PDF, JPG/PNG/WEBP images, DOCX, PPTX.
 
 export const maxDuration = 180;
@@ -8,7 +8,7 @@ export const runtime = "nodejs";
 
 import { NextRequest, NextResponse } from "next/server";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
-import { generateJson, userMessage } from "@/lib/ai";
+import { generateJson, userMessage, type AiContentBlock } from "@/lib/ai";
 import { adminSupabase } from "@/lib/supabase/admin";
 import {
   extractMaterialContent,
@@ -16,21 +16,16 @@ import {
 } from "@/lib/extractMaterialContent";
 import { generateCoverageAwareQuestions } from "@/lib/studyQuestionGeneration";
 
-const MODEL = "gemini-2.5-flash-lite";
 const QUESTION_GEN_TEXT_CHARS = 24_000;
-const GEMINI_QUESTION_TIMEOUT_MS = parsePositiveInt(process.env.GEMINI_QUESTION_TIMEOUT_MS) ?? 60_000;
+const AI_QUESTION_TIMEOUT_MS =
+  parsePositiveInt(process.env.AI_QUESTION_TIMEOUT_MS) ??
+  parsePositiveInt(process.env.GEMINI_QUESTION_TIMEOUT_MS) ??
+  60_000;
+const MAX_QUESTION_COUNT = 20;
 
 function parsePositiveInt(value: string | undefined) {
   const parsed = Number.parseInt(value ?? "", 10);
   return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
-}
-
-function geminiModelName() {
-  return process.env.GEMINI_MODEL?.trim() || MODEL;
-}
-
-function geminiGenerateUrl() {
-  return `https://generativelanguage.googleapis.com/v1beta/models/${geminiModelName()}:generateContent`;
 }
 
 type StudyMaterialRow = {
@@ -150,109 +145,6 @@ function normalizeGeneratedQuestions(questions: unknown[], chunksById?: Map<stri
   });
 }
 
-async function loadIndexedChunks(materialId: string): Promise<MaterialChunk[]> {
-  try {
-    const { data, error } = await adminSupabase
-      .from("study_material_chunks")
-      .select("id, page_number, chunk_index, text")
-      .eq("material_id", materialId)
-      .order("chunk_index", { ascending: true })
-      .limit(80);
-
-    if (error) {
-      console.warn("[generate-questions] could not load material chunks:", error.message);
-      return [];
-    }
-
-    return (data ?? []).filter((chunk: any) => typeof chunk?.text === "string" && chunk.text.trim().length > 0) as MaterialChunk[];
-  } catch (error) {
-    console.warn("[generate-questions] chunk load failed:", error instanceof Error ? error.message : error);
-    return [];
-  }
-}
-
-function chunkPromptBlocks(chunks: MaterialChunk[]): MaterialChunk[] {
-  const selected: MaterialChunk[] = [];
-  let total = 0;
-
-  for (const chunk of chunks) {
-    const nextTotal = total + chunk.text.length;
-    if (selected.length > 0 && nextTotal > QUESTION_GEN_TEXT_CHARS) break;
-    selected.push(chunk);
-    total = nextTotal;
-  }
-
-  return selected;
-}
-
-function buildChunkDocument(chunks: MaterialChunk[]): string {
-  return chunks
-    .map((chunk) => {
-      const page = typeof chunk.page_number === "number" ? ` page:${chunk.page_number}` : "";
-      return `[chunk:${chunk.id}${page}]\n${chunk.text}`;
-    })
-    .join("\n\n");
-}
-
-function buildQuestionPrompt(params: {
-  count: number;
-  difficultyInstruction: string;
-  focusInstruction: string;
-  coveredInstruction: string;
-  chunkMode?: boolean;
-}) {
-  const chunkInstruction = params.chunkMode
-    ? `For each question, studyRef MUST reference one of the provided chunk IDs:
-- chunkId: copy the exact id from [chunk:...].
-- page: use the page number from the chunk marker when present.
-- topic: the concept or section to review.
-- instruction: a short student-facing reading instruction.
-- quote: a short relevant excerpt copied from the referenced chunk.`
-    : `For each question, include studyRef to guide the student back to the source before answering:
-- topic: the concept or section to review.
-- instruction: a short student-facing reading instruction.
-- quote: a short relevant excerpt from the document, if available.
-- page: page number only if you can identify it confidently; otherwise omit it.`;
-
-  const studyRefShape = params.chunkMode
-    ? `"studyRef": {
-        "chunkId": "uuid",
-        "topic": "string",
-        "instruction": "string",
-        "quote": "string",
-        "page": 1
-      }`
-    : `"studyRef": {
-        "topic": "string",
-        "instruction": "string",
-        "quote": "string",
-        "page": 1
-      }`;
-
-  return `You are an exam question generator for Nigerian university students.
-Generate exactly ${params.count} multiple choice questions strictly from the provided document content.
-Do not add any knowledge from outside the document.
-${params.difficultyInstruction}${params.focusInstruction ? `\n${params.focusInstruction}` : ""}${params.coveredInstruction}
-Each question must have 4 options (A, B, C, D) with exactly one correct answer.
-Include a short explanation (1-2 sentences) for each correct answer, citing the part of the document it came from.
-Include a hint (1 sentence) that nudges the student toward the right concept without naming the correct option or giving away the answer directly.
-${chunkInstruction}
-
-Return ONLY a valid JSON object with no markdown, no backticks, no preamble:
-{
-  "questions": [
-    {
-      "question": "string",
-      "options": { "A": "string", "B": "string", "C": "string", "D": "string" },
-      "answer": "A" | "B" | "C" | "D",
-      "explanation": "string",
-      "hint": "string",
-      ${studyRefShape}
-    }
-  ]
-}`;
-}
-
 export async function POST(req: NextRequest) {
   try {
     return await handleGenerateQuestionsRequest(req);
@@ -278,6 +170,7 @@ async function handleGenerateQuestionsRequest(req: NextRequest) {
 
   const { materialId, count = 10, difficulty = "mixed", focus, coveredQuestions = [] } = body;
   if (!materialId) return NextResponse.json({ error: "Missing materialId" }, { status: 400 });
+  const questionCount = Math.max(1, Math.min(MAX_QUESTION_COUNT, Math.floor(Number(count) || 10)));
 
   // ── Fetch material ─────────────────────────────────────────────────────────
   const admin = adminSupabase;
@@ -309,7 +202,7 @@ async function handleGenerateQuestionsRequest(req: NextRequest) {
     const coverageResult = await generateCoverageAwareQuestions({
       materialId,
       materialTitle: material.title ?? "Untitled material",
-      count,
+      count: questionCount,
       difficulty,
       focus,
       coveredQuestions,
@@ -329,8 +222,9 @@ async function handleGenerateQuestionsRequest(req: NextRequest) {
       return NextResponse.json({
         questions: coverageResult.questions,
         ai: {
-          provider: "gemini",
-          model: geminiModelName(),
+          provider: coverageResult.ai?.provider ?? "bedrock",
+          model: coverageResult.ai?.model ?? process.env.BEDROCK_MODEL_GENERATION?.trim() ?? "anthropic.claude-sonnet-4-6",
+          fallbackProvider: coverageResult.ai?.fallbackProvider,
           inputMode: "coverage-aware",
           reason: `Coverage-aware generation covered ${coverageResult.topicsCovered} topic(s)${kindSummary ? `: ${kindSummary}` : ""}.`,
           coverage: {
@@ -383,9 +277,9 @@ async function handleGenerateQuestionsRequest(req: NextRequest) {
     return NextResponse.json({ error: content.message }, { status: 422 });
   }
 
-  // ── Build Gemini request ───────────────────────────────────────────────────
+  // ── Build AI request ───────────────────────────────────────────────────────
   const systemPrompt = `You are an exam question generator for Nigerian university students.
-Generate exactly ${count} multiple choice questions strictly from the provided document content.
+Generate exactly ${questionCount} multiple choice questions strictly from the provided document content.
 Do not add any knowledge from outside the document.
 ${difficultyInstruction}${focusInstruction ? `\n${focusInstruction}` : ""}${coveredInstruction}
 Each question must have 4 options (A, B, C, D) with exactly one correct answer.
@@ -421,8 +315,8 @@ Return ONLY a valid JSON object with no markdown, no backticks, no preamble:
     const result = await generateJson<{ questions: unknown[] }>({
       messages: [userMessage(`DOCUMENT CONTENT:\n\n${truncated}\n\n${systemPrompt}`)],
       temperature: 0.3,
-      maxTokens: Math.min(6000, count * 380),
-      timeoutMs: GEMINI_QUESTION_TIMEOUT_MS,
+      maxTokens: Math.min(6000, questionCount * 380),
+      timeoutMs: AI_QUESTION_TIMEOUT_MS,
     });
 
     if (!result.ok) {
@@ -439,90 +333,59 @@ Return ONLY a valid JSON object with no markdown, no backticks, no preamble:
       questions,
       ai: {
         provider: result.provider,
-        model: geminiModelName(),
+        model: result.model,
+        fallbackProvider: result.fallbackProvider,
         inputMode: "extracted-text",
       },
     });
   }
 
   // Build parts array depending on content kind
-  type GeminiPart =
-    | { inline_data: { mime_type: string; data: string } }
-    | { text: string };
+  type InlinePart = AiContentBlock;
 
-  let parts: GeminiPart[];
+  let parts: InlinePart[];
   if (content.kind === "inline") {
     parts = [
-      { inline_data: { mime_type: content.mimeType, data: content.base64 } },
-      { text: systemPrompt },
+      { type: "inline", mimeType: content.mimeType, data: content.base64, name: "study material" },
+      { type: "text", text: systemPrompt },
     ];
   } else {
     return NextResponse.json({ error: "Unexpected content kind." }, { status: 500 });
   }
 
-  const geminiBody = {
-    contents: [{ parts }],
-    generationConfig: {
-      temperature: 0.3,
-      maxOutputTokens: Math.min(6000, count * 380),
-    },
-  };
+  const result = await generateJson<{ questions: unknown[] }>({
+    messages: [userMessage(parts)],
+    temperature: 0.3,
+    maxTokens: Math.min(6000, questionCount * 380),
+    timeoutMs: AI_QUESTION_TIMEOUT_MS,
+  });
 
-  // ── Call Gemini ────────────────────────────────────────────────────────────
-  let rawText: string;
-  try {
-    const apiKey = process.env.GEMINI_API_KEY;
-    if (!apiKey) return NextResponse.json({ error: "AI service not configured." }, { status: 500 });
-
-    const geminiRes = await fetch(`${geminiGenerateUrl()}?key=${apiKey}`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(geminiBody),
-      signal: AbortSignal.timeout(60_000),
-    });
-
-    if (!geminiRes.ok) {
-      const errText = await geminiRes.text().catch(() => geminiRes.statusText);
-      console.error("[generate-questions] Gemini error:", errText);
-      return NextResponse.json({ error: "Failed to generate questions." }, { status: 500 });
-    }
-
-    const geminiData = await geminiRes.json() as {
-      candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }>;
-    };
-    rawText = geminiData.candidates?.[0]?.content?.parts?.[0]?.text ?? "";
-    if (!rawText.trim()) return NextResponse.json({ error: "Failed to generate questions." }, { status: 500 });
-  } catch (e: unknown) {
-    console.error("[generate-questions] Gemini fetch error:", e instanceof Error ? e.message : e);
+  if (!result.ok) {
     return NextResponse.json({ error: "Failed to generate questions." }, { status: 500 });
   }
 
+  // ── Call configured AI provider ────────────────────────────────────────────
   // ── Parse response ─────────────────────────────────────────────────────────
   try {
-    const clean = rawText
-      .replace(/^```json\s*/i, "")
-      .replace(/^```\s*/i, "")
-      .replace(/```\s*$/i, "")
-      .trim();
-    const parsed = JSON.parse(clean) as { questions: unknown[] };
-    if (!Array.isArray(parsed.questions) || parsed.questions.length === 0) {
+    if (!Array.isArray(result.data.questions) || result.data.questions.length === 0) {
       return NextResponse.json({ error: "Failed to generate questions." }, { status: 500 });
     }
-    const questions = normalizeGeneratedQuestions(parsed.questions);
+    const questions = normalizeGeneratedQuestions(result.data.questions);
     if (questions.length === 0) {
       return NextResponse.json({ error: "Failed to generate questions." }, { status: 500 });
     }
     return NextResponse.json({
       questions,
       ai: {
-        provider: "gemini",
-        model: geminiModelName(),
+        provider: result.provider,
+        model: result.model,
+        fallbackProvider: result.fallbackProvider,
         inputMode: "inline-file",
-        reason: content.reason ?? "Inline files are handled by Gemini.",
+        reason: content.reason ?? "Inline files are handled by the configured AI provider.",
       },
     });
   } catch (e: unknown) {
-    console.error("[generate-questions] JSON parse error:", e instanceof Error ? e.message : e, rawText.slice(0, 200));
+    console.error("[generate-questions] JSON normalize error:", e instanceof Error ? e.message : e);
     return NextResponse.json({ error: "Failed to generate questions." }, { status: 500 });
   }
 }

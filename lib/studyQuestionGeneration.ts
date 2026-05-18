@@ -5,7 +5,10 @@ import { adminSupabase } from "@/lib/supabase/admin";
 
 const OUTLINE_CHUNK_LIMIT = 140;
 const OUTLINE_TEXT_BUDGET = 58_000;
-const QUESTION_TIMEOUT_MS = parsePositiveInt(process.env.GEMINI_QUESTION_TIMEOUT_MS) ?? 45_000;
+const QUESTION_TIMEOUT_MS =
+  parsePositiveInt(process.env.AI_QUESTION_TIMEOUT_MS) ??
+  parsePositiveInt(process.env.GEMINI_QUESTION_TIMEOUT_MS) ??
+  45_000;
 const OUTLINE_TIMEOUT_MS = parsePositiveInt(process.env.GEMINI_OUTLINE_TIMEOUT_MS) ?? 45_000;
 
 type Difficulty = "easy" | "mixed" | "hard";
@@ -63,6 +66,11 @@ export type CoverageGenerationResult = {
   cognitiveLevelCounts: Record<string, number>;
   chunksLoaded: number;
   chunksCatalogued: number;
+  ai?: {
+    provider: "bedrock" | "gemini";
+    model: string;
+    fallbackProvider?: "bedrock" | "gemini";
+  };
 };
 
 type GeneratedShape = {
@@ -190,7 +198,7 @@ async function loadExistingQuestionMemory(materialId: string) {
   }
 
   return (data ?? [])
-    .map((row: any) => ({
+    .map((row: { prompt?: unknown; question_fingerprint?: unknown; source_topic?: unknown }) => ({
       prompt: String(row.prompt ?? "").trim(),
       fingerprint: typeof row.question_fingerprint === "string" ? row.question_fingerprint : "",
       sourceTopic: typeof row.source_topic === "string" ? row.source_topic : "",
@@ -203,7 +211,7 @@ async function buildSourceOutline(args: {
   count: number;
   focus?: string;
   chunks: MaterialChunk[];
-}): Promise<{ topics: OutlineTopic[]; cataloguedChunks: MaterialChunk[] }> {
+}): Promise<{ topics: OutlineTopic[]; cataloguedChunks: MaterialChunk[]; ai?: CoverageGenerationResult["ai"] }> {
   const cataloguedChunks = selectCatalogChunks(args.chunks);
   const chunksById = new Map(args.chunks.map((chunk) => [chunk.id, chunk]));
   const prompt = `You are creating an exam coverage outline from a study material.
@@ -254,7 +262,11 @@ Return ONLY JSON:
     .filter((topic) => topic.title && topic.chunkIds.length > 0)
     .slice(0, 12);
 
-  return { topics: topics.length ? topics : fallbackOutline(cataloguedChunks, args.count), cataloguedChunks };
+  return {
+    topics: topics.length ? topics : fallbackOutline(cataloguedChunks, args.count),
+    cataloguedChunks,
+    ai: { provider: result.provider, model: result.model, fallbackProvider: result.fallbackProvider },
+  };
 }
 
 function fallbackOutline(chunks: MaterialChunk[], count: number): OutlineTopic[] {
@@ -380,7 +392,10 @@ Return ONLY JSON:
   });
 
   if (!result.ok) return null;
-  return result.data.question ?? null;
+  return {
+    question: result.data.question ?? null,
+    ai: { provider: result.provider, model: result.model, fallbackProvider: result.fallbackProvider },
+  };
 }
 
 function normalizeGeneratedQuestion(raw: GeneratedShape, plan: PlannedQuestion, chunk: MaterialChunk): CoverageGeneratedQuestion | null {
@@ -393,7 +408,7 @@ function normalizeGeneratedQuestion(raw: GeneratedShape, plan: PlannedQuestion, 
     C: raw.options?.C?.trim() ?? "",
     D: raw.options?.D?.trim() ?? "",
   };
-  if (!question || !optionKeys.includes(answer as any)) return null;
+  if (answer !== "A" && answer !== "B" && answer !== "C" && answer !== "D") return null;
   if (optionKeys.some((key) => !options[key])) return null;
 
   const quote = raw.studyRef?.quote?.trim();
@@ -468,7 +483,7 @@ export async function generateCoverageAwareQuestions(args: {
   if (chunks.length === 0) return null;
 
   const chunksById = new Map(chunks.map((chunk) => [chunk.id, chunk]));
-  const [{ topics, cataloguedChunks }, existingMemory] = await Promise.all([
+  const [{ topics, cataloguedChunks, ai: outlineAi }, existingMemory] = await Promise.all([
     buildSourceOutline({
       materialTitle: args.materialTitle,
       count: args.count,
@@ -493,6 +508,7 @@ export async function generateCoverageAwareQuestions(args: {
   ].filter(Boolean);
   const usedFingerprints = new Set(existingMemory.map((row) => row.fingerprint).filter(Boolean));
   const failures: Record<string, number> = {};
+  let ai = outlineAi;
 
   for (const planned of plan) {
     if (accepted.length >= args.count) break;
@@ -501,12 +517,14 @@ export async function generateCoverageAwareQuestions(args: {
 
     let acceptedThisPlan = false;
     for (let attempt = 0; attempt < 2 && !acceptedThisPlan; attempt++) {
-      const raw = await generatePlannedQuestion({
+      const generated = await generatePlannedQuestion({
         materialTitle: args.materialTitle,
         plan: planned,
         chunk,
         avoidPrompts: [...usedPrompts, ...accepted.map((question) => question.question)],
       });
+      const raw = generated?.question ?? null;
+      if (generated?.ai) ai = generated.ai;
       if (!raw) {
         failures.ai_empty = (failures.ai_empty ?? 0) + 1;
         continue;
@@ -542,6 +560,7 @@ export async function generateCoverageAwareQuestions(args: {
     cognitiveLevelCounts: countBy(accepted.map((question) => question.cognitiveLevel ?? "unknown")),
     chunksLoaded: chunks.length,
     chunksCatalogued: cataloguedChunks.length,
+    ai,
   };
 }
 
