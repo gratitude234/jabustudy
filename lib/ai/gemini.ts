@@ -28,6 +28,7 @@ export type GeminiTextConfig = {
   model?: string;
   modelRole?: AiModelRole;
   thinkingBudget?: number;
+  responseMimeType?: "application/json";
 };
 
 function getApiKey() {
@@ -95,13 +96,20 @@ function geminiThinkingBudget(modelRole: AiModelRole = "generation", explicitBud
 }
 
 function generationConfig(config: GeminiTextConfig) {
-  return {
+  const base: {
+    temperature: number;
+    maxOutputTokens: number;
+    thinkingConfig: { thinkingBudget: number };
+    responseMimeType?: "application/json";
+  } = {
     temperature: config.temperature ?? 0.4,
     maxOutputTokens: config.maxTokens ?? 600,
     thinkingConfig: {
       thinkingBudget: geminiThinkingBudget(config.modelRole, config.thinkingBudget),
     },
   };
+  if (config.responseMimeType) base.responseMimeType = config.responseMimeType;
+  return base;
 }
 
 function getGenerateUrl(config: GeminiTextConfig, stream = false) {

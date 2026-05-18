@@ -29,6 +29,7 @@ export type AiRequestConfig = {
   model?: string;
   modelRole?: AiModelRole;
   thinkingBudget?: number;
+  responseMimeType?: "application/json";
 };
 
 export type AiTextResult =
@@ -230,7 +231,8 @@ export async function generateText(config: AiRequestConfig): Promise<AiTextResul
 }
 
 export async function generateJson<T>(config: AiRequestConfig): Promise<AiJsonResult<T>> {
-  const result = await withProviderFallback("generateJson", config, (provider) => callTextProvider(provider, config));
+  const jsonConfig: AiRequestConfig = { ...config, responseMimeType: "application/json" };
+  const result = await withProviderFallback("generateJson", jsonConfig, (provider) => callTextProvider(provider, jsonConfig));
   if ("error" in result) {
     return { ok: false, error: result.error, provider: result.provider, model: result.model };
   }
