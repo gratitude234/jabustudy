@@ -112,6 +112,7 @@ Be direct and academic. No greetings. No filler phrases like "Great question!". 
     temperature: 0.3,
     maxTokens: 400,
     timeoutMs: 45_000,
+    modelRole: "fast",
   });
 
   if (!result.ok) {

@@ -108,6 +108,7 @@ Keep tasks short (under 10 words each). Keep theme and weeklyGoal under 12 words
     temperature: 0.5,
     maxTokens: tokenBudget,
     timeoutMs: 55_000,
+    modelRole: "fast",
   });
 
   if (!result.ok) return jsonErr(result.error, 502);

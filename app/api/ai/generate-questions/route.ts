@@ -222,8 +222,8 @@ async function handleGenerateQuestionsRequest(req: NextRequest) {
       return NextResponse.json({
         questions: coverageResult.questions,
         ai: {
-          provider: coverageResult.ai?.provider ?? "bedrock",
-          model: coverageResult.ai?.model ?? process.env.BEDROCK_MODEL_GENERATION?.trim() ?? "anthropic.claude-sonnet-4-6",
+          provider: coverageResult.ai?.provider ?? "gemini",
+          model: coverageResult.ai?.model ?? process.env.GEMINI_MODEL_GENERATION?.trim() ?? process.env.GEMINI_MODEL?.trim() ?? "gemini-2.5-flash",
           fallbackProvider: coverageResult.ai?.fallbackProvider,
           fallbackReason: coverageResult.ai?.fallbackReason,
           inputMode: "coverage-aware",
@@ -318,6 +318,7 @@ Return ONLY a valid JSON object with no markdown, no backticks, no preamble:
       temperature: 0.3,
       maxTokens: Math.min(6000, questionCount * 380),
       timeoutMs: AI_QUESTION_TIMEOUT_MS,
+      modelRole: "generation",
     });
 
     if (!result.ok) {
@@ -363,6 +364,7 @@ Return ONLY a valid JSON object with no markdown, no backticks, no preamble:
     temperature: 0.3,
     maxTokens: Math.min(6000, questionCount * 380),
     timeoutMs: AI_QUESTION_TIMEOUT_MS,
+    modelRole: "document",
   });
 
   if (!result.ok) {

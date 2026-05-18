@@ -1,6 +1,10 @@
 import "server-only";
 
-const DEFAULT_MODEL = "gemini-2.5-flash-lite";
+const DEFAULT_GENERATION_MODEL = "gemini-2.5-flash";
+const DEFAULT_DOCUMENT_MODEL = "gemini-2.5-flash";
+const DEFAULT_FAST_MODEL = "gemini-2.5-flash-lite";
+
+export type AiModelRole = "generation" | "fast" | "document";
 
 export type AiTextBlock = { type: "text"; text: string };
 export type AiInlineBlock = {
@@ -21,6 +25,9 @@ export type GeminiTextConfig = {
   temperature?: number;
   maxTokens?: number;
   timeoutMs?: number;
+  model?: string;
+  modelRole?: AiModelRole;
+  thinkingBudget?: number;
 };
 
 function getApiKey() {
@@ -62,8 +69,43 @@ function getGeminiParts(messages: AiChatMessage[]) {
   return parts;
 }
 
-function getGenerateUrl(stream = false) {
-  const model = process.env.GEMINI_MODEL?.trim() || DEFAULT_MODEL;
+export function geminiModelName(modelRole: AiModelRole = "generation", explicitModel?: string) {
+  if (explicitModel?.trim()) return explicitModel.trim();
+  if (modelRole === "fast") {
+    return process.env.GEMINI_MODEL_FAST?.trim() ||
+      process.env.GEMINI_MODEL?.trim() ||
+      DEFAULT_FAST_MODEL;
+  }
+  if (modelRole === "document") {
+    return process.env.GEMINI_MODEL_DOCUMENT?.trim() ||
+      process.env.GEMINI_MODEL_GENERATION?.trim() ||
+      process.env.GEMINI_MODEL?.trim() ||
+      DEFAULT_DOCUMENT_MODEL;
+  }
+  return process.env.GEMINI_MODEL_GENERATION?.trim() ||
+    process.env.GEMINI_MODEL?.trim() ||
+    DEFAULT_GENERATION_MODEL;
+}
+
+function geminiThinkingBudget(modelRole: AiModelRole = "generation", explicitBudget?: number) {
+  if (typeof explicitBudget === "number" && Number.isFinite(explicitBudget)) {
+    return Math.max(0, Math.floor(explicitBudget));
+  }
+  return modelRole === "fast" ? 0 : 1024;
+}
+
+function generationConfig(config: GeminiTextConfig) {
+  return {
+    temperature: config.temperature ?? 0.4,
+    maxOutputTokens: config.maxTokens ?? 600,
+    thinkingConfig: {
+      thinkingBudget: geminiThinkingBudget(config.modelRole, config.thinkingBudget),
+    },
+  };
+}
+
+function getGenerateUrl(config: GeminiTextConfig, stream = false) {
+  const model = geminiModelName(config.modelRole, config.model);
   const method = stream ? "streamGenerateContent?alt=sse" : "generateContent";
   return `https://generativelanguage.googleapis.com/v1beta/models/${model}:${method}`;
 }
@@ -98,16 +140,13 @@ export async function geminiText(config: GeminiTextConfig): Promise<string> {
   }
 
   try {
-    const res = await fetch(`${getGenerateUrl(false)}?key=${apiKey}`, {
+    const res = await fetch(`${getGenerateUrl(config, false)}?key=${apiKey}`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         system_instruction: getSystemInstruction(config.messages),
         contents: [{ parts: getGeminiParts(config.messages) }],
-        generationConfig: {
-          temperature: config.temperature ?? 0.4,
-          maxOutputTokens: config.maxTokens ?? 600,
-        },
+        generationConfig: generationConfig(config),
       }),
       signal: AbortSignal.timeout(config.timeoutMs ?? 30_000),
     });
@@ -145,16 +184,13 @@ export async function geminiStream(config: GeminiTextConfig): Promise<ReadableSt
 
   let res: Response;
   try {
-    res = await fetch(`${getGenerateUrl(true)}&key=${apiKey}`, {
+    res = await fetch(`${getGenerateUrl(config, true)}&key=${apiKey}`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         system_instruction: getSystemInstruction(config.messages),
         contents: [{ parts: getGeminiParts(config.messages) }],
-        generationConfig: {
-          temperature: config.temperature ?? 0.4,
-          maxOutputTokens: config.maxTokens ?? 600,
-        },
+        generationConfig: generationConfig(config),
       }),
       signal: AbortSignal.timeout(config.timeoutMs ?? 55_000),
     });

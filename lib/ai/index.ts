@@ -3,6 +3,8 @@ import "server-only";
 import {
   type AiContentBlock,
   type AiChatMessage,
+  type AiModelRole,
+  geminiModelName,
   geminiStream,
   geminiText,
   isGeminiConfigured,
@@ -14,7 +16,7 @@ import {
   isBedrockConfigured,
 } from "./bedrock";
 
-export type { AiChatMessage, AiContentBlock } from "./gemini";
+export type { AiChatMessage, AiContentBlock, AiModelRole } from "./gemini";
 
 export type AiProvider = "bedrock" | "gemini";
 
@@ -25,7 +27,8 @@ export type AiRequestConfig = {
   timeoutMs?: number;
   provider?: AiProvider;
   model?: string;
-  modelRole?: "generation" | "fast";
+  modelRole?: AiModelRole;
+  thinkingBudget?: number;
 };
 
 export type AiTextResult =
@@ -73,7 +76,7 @@ function configured(provider: AiProvider) {
 
 function modelFor(provider: AiProvider, config: AiRequestConfig) {
   if (provider === "bedrock") return bedrockModelName(config.modelRole, config.model);
-  return process.env.GEMINI_MODEL?.trim() || "gemini-2.5-flash-lite";
+  return geminiModelName(config.modelRole, config.model);
 }
 
 function normalizeProvider(value: string | undefined): AiProvider | null {
@@ -82,7 +85,7 @@ function normalizeProvider(value: string | undefined): AiProvider | null {
 }
 
 function primaryProvider(config: AiRequestConfig): AiProvider {
-  return config.provider ?? normalizeProvider(process.env.AI_PROVIDER) ?? "bedrock";
+  return config.provider ?? normalizeProvider(process.env.AI_PROVIDER) ?? "gemini";
 }
 
 function fallbackProvider(primary: AiProvider): AiProvider | null {

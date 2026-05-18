@@ -241,6 +241,7 @@ Return ONLY JSON:
     temperature: 0.2,
     maxTokens: 2400,
     timeoutMs: OUTLINE_TIMEOUT_MS,
+    modelRole: "generation",
   });
 
   if (!result.ok) {
@@ -395,6 +396,7 @@ Return ONLY JSON:
     temperature: 0.25,
     maxTokens: 1150,
     timeoutMs: QUESTION_TIMEOUT_MS,
+    modelRole: "generation",
   });
 
   if (!result.ok) return null;

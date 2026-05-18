@@ -80,6 +80,7 @@ Note at the end in one line: "— AI-generated answer. Verify with your lecturer
     temperature: 0.5,
     maxTokens: 500,
     timeoutMs: 45_000,
+    modelRole: "generation",
   });
 
   if (!result.ok) {

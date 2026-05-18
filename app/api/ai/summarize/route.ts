@@ -103,6 +103,7 @@ Respond ONLY with valid JSON — no markdown, no backticks, no explanation outsi
     temperature: 0.4,
     maxTokens: 500,
     timeoutMs: 45_000,
+    modelRole: "fast",
   });
 
   if (!result.ok) {

@@ -13,15 +13,16 @@ import {
   getMimeType,
   truncateText,
 } from "@/lib/extractMaterialContent";
+import { geminiModelName } from "@/lib/ai/gemini";
 
 const FILE_UPLOAD_URL = "https://generativelanguage.googleapis.com/upload/v1beta/files";
 
-function geminiModelName() {
-  return process.env.GEMINI_MODEL?.trim() || "gemini-2.5-flash-lite";
+function geminiMaterialChatModelName() {
+  return geminiModelName("document");
 }
 
 function geminiStreamUrl() {
-  return `https://generativelanguage.googleapis.com/v1beta/models/${geminiModelName()}:streamGenerateContent?alt=sse`;
+  return `https://generativelanguage.googleapis.com/v1beta/models/${geminiMaterialChatModelName()}:streamGenerateContent?alt=sse`;
 }
 
 type HistoryEntry = { role: "user" | "model"; text: string };
@@ -265,7 +266,11 @@ For lists, put each item on its own line with a dash prefix (e.g. "- item").`;
   const geminiBody = {
     system_instruction: { parts: [{ text: systemInstruction }] },
     contents,
-    generationConfig: { temperature: 0.3, maxOutputTokens: 1024 },
+    generationConfig: {
+      temperature: 0.3,
+      maxOutputTokens: 1024,
+      thinkingConfig: { thinkingBudget: 1024 },
+    },
   };
 
   let geminiRes: Response;

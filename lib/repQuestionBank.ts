@@ -122,6 +122,7 @@ async function callAiJson<T>(parts: AiContentBlock[], maxOutputTokens: number, t
     temperature: 0.25,
     maxTokens: maxOutputTokens,
     timeoutMs,
+    modelRole: "document",
   });
   if (!result.ok) throw new Error(result.error);
   return result.data;
@@ -151,6 +152,7 @@ Return ONLY JSON:
       temperature: 0.25,
       maxTokens: 1200,
       timeoutMs: OUTLINE_TIMEOUT_MS,
+      modelRole: "generation",
     });
     if (!result.ok) throw new Error(result.error);
 
@@ -240,6 +242,7 @@ Return ONLY JSON:
       temperature: 0.25,
       maxTokens: Math.min(4096, args.count * 360),
       timeoutMs: QUESTION_TIMEOUT_MS,
+      modelRole: "generation",
     });
     if (!result.ok) throw new Error(result.error);
 

@@ -9,7 +9,7 @@ import {
   type ContentBlock,
   type ConversationRole,
 } from "@aws-sdk/client-bedrock-runtime";
-import type { AiChatMessage, AiContentBlock } from "./gemini";
+import type { AiChatMessage, AiContentBlock, AiModelRole } from "./gemini";
 
 const DEFAULT_GENERATION_MODEL = "anthropic.claude-sonnet-4-6";
 const DEFAULT_FAST_MODEL = "anthropic.claude-haiku-4-5-20251001-v1:0";
@@ -20,7 +20,7 @@ export type BedrockTextConfig = {
   maxTokens?: number;
   timeoutMs?: number;
   model?: string;
-  modelRole?: "generation" | "fast";
+  modelRole?: AiModelRole;
 };
 
 let client: BedrockRuntimeClient | null = null;
@@ -51,7 +51,7 @@ function getClient() {
   return client;
 }
 
-export function bedrockModelName(modelRole: "generation" | "fast" = "generation", explicitModel?: string) {
+export function bedrockModelName(modelRole: AiModelRole = "generation", explicitModel?: string) {
   if (explicitModel?.trim()) return normalizeModelId(explicitModel.trim());
   if (modelRole === "fast") {
     return normalizeModelId(process.env.BEDROCK_MODEL_FAST?.trim() || DEFAULT_FAST_MODEL);

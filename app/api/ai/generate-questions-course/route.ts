@@ -321,6 +321,7 @@ Return ONLY a valid JSON object — no markdown, no backticks, no preamble, no e
     temperature: 0.25,
     maxTokens: Math.min(4096, questionCount * 320),
     timeoutMs: AI_QUESTION_TIMEOUT_MS,
+    modelRole: "document",
   });
   if (!result.ok) {
     return NextResponse.json({
