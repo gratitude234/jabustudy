@@ -4,6 +4,7 @@ import {
   type AiContentBlock,
   type AiChatMessage,
   type AiModelRole,
+  geminiFallbackModelName,
   geminiModelName,
   geminiStream,
   geminiText,
@@ -33,7 +34,16 @@ export type AiRequestConfig = {
 };
 
 export type AiTextResult =
-  | { ok: true; text: string; provider: AiProvider; model: string; fallbackProvider?: AiProvider; fallbackReason?: string }
+  | {
+      ok: true;
+      text: string;
+      provider: AiProvider;
+      model: string;
+      fallbackProvider?: AiProvider;
+      fallbackReason?: string;
+      modelFallbackFrom?: string;
+      modelFallbackReason?: string;
+    }
   | { ok: false; error: string; provider?: AiProvider; model?: string };
 
 export type AiJsonResult<T> =
@@ -45,6 +55,8 @@ export type AiJsonResult<T> =
       rawText: string;
       fallbackProvider?: AiProvider;
       fallbackReason?: string;
+      modelFallbackFrom?: string;
+      modelFallbackReason?: string;
       repairedJson?: boolean;
       repairProvider?: AiProvider;
       repairModel?: string;
@@ -54,7 +66,16 @@ export type AiJsonResult<T> =
   | { ok: false; error: string; provider?: AiProvider; model?: string; rawText?: string };
 
 export type AiStreamResult =
-  | { ok: true; stream: ReadableStream<Uint8Array>; provider: AiProvider; model: string; fallbackProvider?: AiProvider; fallbackReason?: string }
+  | {
+      ok: true;
+      stream: ReadableStream<Uint8Array>;
+      provider: AiProvider;
+      model: string;
+      fallbackProvider?: AiProvider;
+      fallbackReason?: string;
+      modelFallbackFrom?: string;
+      modelFallbackReason?: string;
+    }
   | { ok: false; error: string; provider?: AiProvider; model?: string };
 
 function errorCode(error: unknown) {
@@ -75,13 +96,24 @@ function errorMessage(error: unknown) {
   return `${error.message}${causeCode}${causeMessage}`;
 }
 
+function errorStatus(error: unknown) {
+  if (typeof error !== "object" || error === null || !("status" in error)) return undefined;
+  const status = (error as { status?: unknown }).status;
+  return typeof status === "number" ? status : undefined;
+}
+
 function logAiFailure(provider: AiProvider, operation: string, error: unknown) {
   console.warn(`[ai] ${provider} ${operation} failed (${errorCode(error)}): ${errorMessage(error).slice(0, 500)}`);
 }
 
+function sleep(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 function isTransientAiError(error: unknown) {
   const code = errorCode(error);
-  return code === "network" || code === "timeout" || code === "server";
+  const status = errorStatus(error);
+  return code === "network" || code === "timeout" || code === "server" || status === 429 || status === 503;
 }
 
 function configured(provider: AiProvider) {
@@ -129,19 +161,84 @@ function logAiFallback(params: {
 
 async function callTextProvider(provider: AiProvider, config: AiRequestConfig) {
   if (provider === "bedrock") return bedrockText(config);
-  return { text: await geminiText(config), model: modelFor("gemini", config) };
+  return geminiTextWithModelFallback(config);
 }
 
 async function callStreamProvider(provider: AiProvider, config: AiRequestConfig) {
   if (provider === "bedrock") return bedrockStream(config);
-  return { stream: await geminiStream(config), model: modelFor("gemini", config) };
+  return geminiStreamWithModelFallback(config);
+}
+
+async function geminiTextWithModelFallback(config: AiRequestConfig) {
+  const primaryModel = geminiModelName(config.modelRole, config.model);
+  try {
+    return { text: await geminiText(config), model: primaryModel };
+  } catch (error) {
+    if (!isTransientAiError(error)) throw error;
+    await sleep(1200);
+    try {
+      return { text: await geminiText(config), model: primaryModel };
+    } catch (retryError) {
+      if (!isTransientAiError(retryError)) throw retryError;
+      const fallbackModel = geminiFallbackModelName(config.modelRole, primaryModel);
+      if (!fallbackModel) throw retryError;
+      console.warn("[ai] gemini model fallback activated", {
+        operation: "text",
+        fromModel: primaryModel,
+        toModel: fallbackModel,
+        reason: errorMessage(retryError).slice(0, 500),
+      });
+      return {
+        text: await geminiText({ ...config, model: fallbackModel }),
+        model: fallbackModel,
+        modelFallbackFrom: primaryModel,
+        modelFallbackReason: errorMessage(retryError),
+      };
+    }
+  }
+}
+
+async function geminiStreamWithModelFallback(config: AiRequestConfig) {
+  const primaryModel = geminiModelName(config.modelRole, config.model);
+  try {
+    return { stream: await geminiStream(config), model: primaryModel };
+  } catch (error) {
+    if (!isTransientAiError(error)) throw error;
+    await sleep(1200);
+    try {
+      return { stream: await geminiStream(config), model: primaryModel };
+    } catch (retryError) {
+      if (!isTransientAiError(retryError)) throw retryError;
+      const fallbackModel = geminiFallbackModelName(config.modelRole, primaryModel);
+      if (!fallbackModel) throw retryError;
+      console.warn("[ai] gemini model fallback activated", {
+        operation: "stream",
+        fromModel: primaryModel,
+        toModel: fallbackModel,
+        reason: errorMessage(retryError).slice(0, 500),
+      });
+      return {
+        stream: await geminiStream({ ...config, model: fallbackModel }),
+        model: fallbackModel,
+        modelFallbackFrom: primaryModel,
+        modelFallbackReason: errorMessage(retryError),
+      };
+    }
+  }
 }
 
 async function withProviderFallback<T>(
   operation: string,
   config: AiRequestConfig,
-  call: (provider: AiProvider) => Promise<T & { model: string }>
-): Promise<(T & { provider: AiProvider; model: string; fallbackProvider?: AiProvider; fallbackReason?: string }) | { error: string; provider?: AiProvider; model?: string }> {
+  call: (provider: AiProvider) => Promise<T & { model: string; modelFallbackFrom?: string; modelFallbackReason?: string }>
+): Promise<(T & {
+  provider: AiProvider;
+  model: string;
+  fallbackProvider?: AiProvider;
+  fallbackReason?: string;
+  modelFallbackFrom?: string;
+  modelFallbackReason?: string;
+}) | { error: string; provider?: AiProvider; model?: string }> {
   const primary = primaryProvider(config);
   const fallback = fallbackProvider(primary);
   const candidates = [primary, fallback].filter(Boolean) as AiProvider[];
@@ -167,7 +264,8 @@ async function withProviderFallback<T>(
     }
     sawConfiguredProvider = true;
 
-    for (let attempt = 0; attempt < 2; attempt++) {
+    const attempts = provider === "gemini" ? 1 : 2;
+    for (let attempt = 0; attempt < attempts; attempt++) {
       try {
         const result = await call(provider);
         const usedFallback = provider !== primary;
@@ -260,7 +358,16 @@ export async function generateText(config: AiRequestConfig): Promise<AiTextResul
   if ("error" in result) {
     return { ok: false, error: result.error, provider: result.provider, model: result.model };
   }
-  return { ok: true, text: result.text, provider: result.provider, model: result.model, fallbackProvider: result.fallbackProvider, fallbackReason: result.fallbackReason };
+  return {
+    ok: true,
+    text: result.text,
+    provider: result.provider,
+    model: result.model,
+    fallbackProvider: result.fallbackProvider,
+    fallbackReason: result.fallbackReason,
+    modelFallbackFrom: result.modelFallbackFrom,
+    modelFallbackReason: result.modelFallbackReason,
+  };
 }
 
 export async function generateJson<T>(config: AiRequestConfig): Promise<AiJsonResult<T>> {
@@ -277,6 +384,8 @@ export async function generateJson<T>(config: AiRequestConfig): Promise<AiJsonRe
       model: result.model,
       fallbackProvider: result.fallbackProvider,
       fallbackReason: result.fallbackReason,
+      modelFallbackFrom: result.modelFallbackFrom,
+      modelFallbackReason: result.modelFallbackReason,
       rawText: result.text,
     };
   } catch (error) {
@@ -300,6 +409,8 @@ export async function generateJson<T>(config: AiRequestConfig): Promise<AiJsonRe
           model: result.model,
           fallbackProvider: repaired.fallbackProvider,
           fallbackReason: repaired.fallbackReason,
+          modelFallbackFrom: result.modelFallbackFrom,
+          modelFallbackReason: result.modelFallbackReason,
           rawText: repaired.text,
           repairedJson: true,
           repairProvider: repaired.provider,
@@ -327,7 +438,16 @@ export async function streamText(config: AiRequestConfig): Promise<AiStreamResul
   if ("error" in result) {
     return { ok: false, error: result.error, provider: result.provider, model: result.model };
   }
-  return { ok: true, stream: result.stream, provider: result.provider, model: result.model, fallbackProvider: result.fallbackProvider, fallbackReason: result.fallbackReason };
+  return {
+    ok: true,
+    stream: result.stream,
+    provider: result.provider,
+    model: result.model,
+    fallbackProvider: result.fallbackProvider,
+    fallbackReason: result.fallbackReason,
+    modelFallbackFrom: result.modelFallbackFrom,
+    modelFallbackReason: result.modelFallbackReason,
+  };
 }
 
 export function userMessage(content: string | AiContentBlock[]): AiChatMessage {
