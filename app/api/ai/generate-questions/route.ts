@@ -225,6 +225,7 @@ async function handleGenerateQuestionsRequest(req: NextRequest) {
           provider: coverageResult.ai?.provider ?? "bedrock",
           model: coverageResult.ai?.model ?? process.env.BEDROCK_MODEL_GENERATION?.trim() ?? "anthropic.claude-sonnet-4-6",
           fallbackProvider: coverageResult.ai?.fallbackProvider,
+          fallbackReason: coverageResult.ai?.fallbackReason,
           inputMode: "coverage-aware",
           reason: `Coverage-aware generation covered ${coverageResult.topicsCovered} topic(s)${kindSummary ? `: ${kindSummary}` : ""}.`,
           coverage: {
@@ -320,7 +321,10 @@ Return ONLY a valid JSON object with no markdown, no backticks, no preamble:
     });
 
     if (!result.ok) {
-      return NextResponse.json({ error: "Failed to generate questions." }, { status: 500 });
+      return NextResponse.json({
+        error: "Failed to generate questions.",
+        ai: { provider: result.provider, model: result.model, error: result.error },
+      }, { status: 500 });
     }
     if (!Array.isArray(result.data.questions) || result.data.questions.length === 0) {
       return NextResponse.json({ error: "Failed to generate questions." }, { status: 500 });
@@ -335,6 +339,7 @@ Return ONLY a valid JSON object with no markdown, no backticks, no preamble:
         provider: result.provider,
         model: result.model,
         fallbackProvider: result.fallbackProvider,
+        fallbackReason: result.fallbackReason,
         inputMode: "extracted-text",
       },
     });
@@ -361,7 +366,10 @@ Return ONLY a valid JSON object with no markdown, no backticks, no preamble:
   });
 
   if (!result.ok) {
-    return NextResponse.json({ error: "Failed to generate questions." }, { status: 500 });
+    return NextResponse.json({
+      error: "Failed to generate questions.",
+      ai: { provider: result.provider, model: result.model, error: result.error },
+    }, { status: 500 });
   }
 
   // ── Call configured AI provider ────────────────────────────────────────────
@@ -380,6 +388,7 @@ Return ONLY a valid JSON object with no markdown, no backticks, no preamble:
         provider: result.provider,
         model: result.model,
         fallbackProvider: result.fallbackProvider,
+        fallbackReason: result.fallbackReason,
         inputMode: "inline-file",
         reason: content.reason ?? "Inline files are handled by the configured AI provider.",
       },

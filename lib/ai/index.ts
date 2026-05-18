@@ -29,15 +29,15 @@ export type AiRequestConfig = {
 };
 
 export type AiTextResult =
-  | { ok: true; text: string; provider: AiProvider; model: string; fallbackProvider?: AiProvider }
+  | { ok: true; text: string; provider: AiProvider; model: string; fallbackProvider?: AiProvider; fallbackReason?: string }
   | { ok: false; error: string; provider?: AiProvider; model?: string };
 
 export type AiJsonResult<T> =
-  | { ok: true; data: T; provider: AiProvider; model: string; rawText: string; fallbackProvider?: AiProvider }
+  | { ok: true; data: T; provider: AiProvider; model: string; rawText: string; fallbackProvider?: AiProvider; fallbackReason?: string }
   | { ok: false; error: string; provider?: AiProvider; model?: string; rawText?: string };
 
 export type AiStreamResult =
-  | { ok: true; stream: ReadableStream<Uint8Array>; provider: AiProvider; model: string; fallbackProvider?: AiProvider }
+  | { ok: true; stream: ReadableStream<Uint8Array>; provider: AiProvider; model: string; fallbackProvider?: AiProvider; fallbackReason?: string }
   | { ok: false; error: string; provider?: AiProvider; model?: string };
 
 function errorCode(error: unknown) {
@@ -50,13 +50,16 @@ function errorCode(error: unknown) {
 function errorMessage(error: unknown) {
   if (!(error instanceof Error)) return "Unknown AI provider error.";
   const cause = (error as Error & { cause?: { code?: unknown; message?: unknown } }).cause;
-  const causeCode = cause?.code ? ` (${cause.code})` : "";
+  const causeName = typeof cause === "object" && cause && "name" in cause
+    ? (cause as { name?: unknown }).name
+    : undefined;
+  const causeCode = cause?.code ? ` (${cause.code})` : causeName ? ` (${causeName})` : "";
   const causeMessage = cause?.message ? `: ${cause.message}` : "";
   return `${error.message}${causeCode}${causeMessage}`;
 }
 
 function logAiFailure(provider: AiProvider, operation: string, error: unknown) {
-  console.warn(`[ai] ${provider} ${operation} failed (${errorCode(error)}): ${errorMessage(error).slice(0, 240)}`);
+  console.warn(`[ai] ${provider} ${operation} failed (${errorCode(error)}): ${errorMessage(error).slice(0, 500)}`);
 }
 
 function isTransientAiError(error: unknown) {
@@ -89,6 +92,17 @@ function fallbackProvider(primary: AiProvider): AiProvider | null {
   return null;
 }
 
+function logAiFallback(params: {
+  operation: string;
+  fromProvider: AiProvider;
+  toProvider: AiProvider;
+  fromModel: string;
+  toModel: string;
+  reason: string;
+}) {
+  console.warn("[ai] fallback activated", params);
+}
+
 async function callTextProvider(provider: AiProvider, config: AiRequestConfig) {
   if (provider === "bedrock") return bedrockText(config);
   return { text: await geminiText(config), model: modelFor("gemini", config) };
@@ -103,18 +117,28 @@ async function withProviderFallback<T>(
   operation: string,
   config: AiRequestConfig,
   call: (provider: AiProvider) => Promise<T & { model: string }>
-): Promise<(T & { provider: AiProvider; model: string; fallbackProvider?: AiProvider }) | { error: string; provider?: AiProvider; model?: string }> {
+): Promise<(T & { provider: AiProvider; model: string; fallbackProvider?: AiProvider; fallbackReason?: string }) | { error: string; provider?: AiProvider; model?: string }> {
   const primary = primaryProvider(config);
   const fallback = fallbackProvider(primary);
   const candidates = [primary, fallback].filter(Boolean) as AiProvider[];
   let lastError: unknown = null;
   let lastProvider: AiProvider | undefined;
   let sawConfiguredProvider = false;
+  let primaryFailureReason: string | undefined;
 
   for (const provider of candidates) {
     lastProvider = provider;
     if (!configured(provider)) {
       lastError = Object.assign(new Error(`${provider} is not configured.`), { code: "not_configured" });
+      if (provider === primary) {
+        primaryFailureReason = "AI primary provider is not configured.";
+        console.warn("[ai] primary provider skipped", {
+          operation,
+          provider,
+          model: modelFor(provider, config),
+          reason: primaryFailureReason,
+        });
+      }
       continue;
     }
     sawConfiguredProvider = true;
@@ -122,13 +146,35 @@ async function withProviderFallback<T>(
     for (let attempt = 0; attempt < 2; attempt++) {
       try {
         const result = await call(provider);
+        const usedFallback = provider !== primary;
+        if (usedFallback) {
+          const reason = primaryFailureReason ?? "Primary provider failed before fallback.";
+          logAiFallback({
+            operation,
+            fromProvider: primary,
+            toProvider: provider,
+            fromModel: modelFor(primary, config),
+            toModel: result.model,
+            reason,
+          });
+        } else {
+          console.info("[ai] provider success", {
+            operation,
+            provider,
+            model: result.model,
+          });
+        }
         return {
           ...result,
           provider,
-          fallbackProvider: provider !== primary ? provider : undefined,
+          fallbackProvider: usedFallback ? provider : undefined,
+          fallbackReason: usedFallback ? primaryFailureReason : undefined,
         };
       } catch (error) {
         lastError = error;
+        if (provider === primary) {
+          primaryFailureReason = errorMessage(error);
+        }
         logAiFailure(provider, operation, error);
         if (attempt === 0 && isTransientAiError(error)) continue;
         break;
@@ -177,7 +223,7 @@ export async function generateText(config: AiRequestConfig): Promise<AiTextResul
   if ("error" in result) {
     return { ok: false, error: result.error, provider: result.provider, model: result.model };
   }
-  return { ok: true, text: result.text, provider: result.provider, model: result.model, fallbackProvider: result.fallbackProvider };
+  return { ok: true, text: result.text, provider: result.provider, model: result.model, fallbackProvider: result.fallbackProvider, fallbackReason: result.fallbackReason };
 }
 
 export async function generateJson<T>(config: AiRequestConfig): Promise<AiJsonResult<T>> {
@@ -192,6 +238,7 @@ export async function generateJson<T>(config: AiRequestConfig): Promise<AiJsonRe
       provider: result.provider,
       model: result.model,
       fallbackProvider: result.fallbackProvider,
+      fallbackReason: result.fallbackReason,
       rawText: result.text,
     };
   } catch (error) {
@@ -211,7 +258,7 @@ export async function streamText(config: AiRequestConfig): Promise<AiStreamResul
   if ("error" in result) {
     return { ok: false, error: result.error, provider: result.provider, model: result.model };
   }
-  return { ok: true, stream: result.stream, provider: result.provider, model: result.model, fallbackProvider: result.fallbackProvider };
+  return { ok: true, stream: result.stream, provider: result.provider, model: result.model, fallbackProvider: result.fallbackProvider, fallbackReason: result.fallbackReason };
 }
 
 export function userMessage(content: string | AiContentBlock[]): AiChatMessage {

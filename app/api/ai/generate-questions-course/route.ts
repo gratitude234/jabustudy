@@ -313,6 +313,7 @@ Return ONLY a valid JSON object — no markdown, no backticks, no preamble, no e
     model: string;
     inputMode: "extracted-text" | "inline-file";
     fallbackProvider?: "bedrock" | "gemini";
+    fallbackReason?: string;
     reason?: string;
   } | null = null;
   const result = await generateJson<{ questions: unknown[] }>({
@@ -322,13 +323,17 @@ Return ONLY a valid JSON object — no markdown, no backticks, no preamble, no e
     timeoutMs: AI_QUESTION_TIMEOUT_MS,
   });
   if (!result.ok) {
-    return NextResponse.json({ error: "Failed to generate questions." }, { status: 500 });
+    return NextResponse.json({
+      error: "Failed to generate questions.",
+      ai: { provider: result.provider, model: result.model, error: result.error },
+    }, { status: 500 });
   }
   rawText = JSON.stringify(result.data);
   aiMeta = {
     provider: result.provider,
     model: result.model,
     fallbackProvider: result.fallbackProvider,
+    fallbackReason: result.fallbackReason,
     inputMode: extracted.every((item) => item.content.kind === "text") ? "extracted-text" : "inline-file",
   };
   if (!rawText) {

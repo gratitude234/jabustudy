@@ -70,6 +70,7 @@ export type CoverageGenerationResult = {
     provider: "bedrock" | "gemini";
     model: string;
     fallbackProvider?: "bedrock" | "gemini";
+    fallbackReason?: string;
   };
 };
 
@@ -265,7 +266,12 @@ Return ONLY JSON:
   return {
     topics: topics.length ? topics : fallbackOutline(cataloguedChunks, args.count),
     cataloguedChunks,
-    ai: { provider: result.provider, model: result.model, fallbackProvider: result.fallbackProvider },
+    ai: {
+      provider: result.provider,
+      model: result.model,
+      fallbackProvider: result.fallbackProvider,
+      fallbackReason: result.fallbackReason,
+    },
   };
 }
 
@@ -394,7 +400,12 @@ Return ONLY JSON:
   if (!result.ok) return null;
   return {
     question: result.data.question ?? null,
-    ai: { provider: result.provider, model: result.model, fallbackProvider: result.fallbackProvider },
+    ai: {
+      provider: result.provider,
+      model: result.model,
+      fallbackProvider: result.fallbackProvider,
+      fallbackReason: result.fallbackReason,
+    },
   };
 }
 

@@ -63,6 +63,8 @@ type AiGenerationMeta = {
   inputMode: "extracted-text" | "inline-file" | "indexed-chunks" | "coverage-aware";
   reason?: string;
   fallbackProvider?: "bedrock" | "gemini";
+  fallbackReason?: string;
+  error?: string;
   coverage?: {
     topicsCovered?: number;
     questionKindCounts?: Record<string, number>;
@@ -847,7 +849,12 @@ export default function MaterialDetailClient({
       });
       const data = await readGenerateQuestionsResponse(res);
       if (!res.ok) {
-          throw new Error(data.error ?? "Failed to generate questions.");
+        console.warn("[study-ai] question generation failed", {
+          provider: data.ai?.provider ?? "unknown",
+          model: data.ai?.model ?? "unknown",
+          error: data.ai?.error ?? data.error ?? null,
+        });
+        throw new Error(data.error ?? "Failed to generate questions.");
       }
       if (!Array.isArray(data.questions)) {
         throw new Error("Failed to generate questions.");
@@ -857,6 +864,8 @@ export default function MaterialDetailClient({
         model: data.ai?.model ?? "unknown",
         inputMode: data.ai?.inputMode ?? "unknown",
         reason: data.ai?.reason ?? null,
+        fallbackProvider: data.ai?.fallbackProvider ?? null,
+        fallbackReason: data.ai?.fallbackReason ?? null,
         count: data.questions.length,
       });
       setGeneratedQuestions(data.questions);
@@ -888,6 +897,11 @@ export default function MaterialDetailClient({
       });
       const data = await readGenerateQuestionsResponse(res);
       if (!res.ok) {
+        console.warn("[study-ai] generate more failed", {
+          provider: data.ai?.provider ?? "unknown",
+          model: data.ai?.model ?? "unknown",
+          error: data.ai?.error ?? data.error ?? null,
+        });
         throw new Error(data.error ?? "Failed to generate questions.");
       }
       if (!Array.isArray(data.questions)) {
@@ -898,6 +912,8 @@ export default function MaterialDetailClient({
         model: data.ai?.model ?? "unknown",
         inputMode: data.ai?.inputMode ?? "unknown",
         reason: data.ai?.reason ?? null,
+        fallbackProvider: data.ai?.fallbackProvider ?? null,
+        fallbackReason: data.ai?.fallbackReason ?? null,
         count: data.questions.length,
       });
       setGeneratedQuestions(data.questions);
@@ -1340,6 +1356,14 @@ export default function MaterialDetailClient({
                       title={`${generationAi.provider} · ${generationAi.model} · ${generationAi.inputMode}`}
                     >
                       {formatAiProvider(generationAi)} · {formatAiModel(generationAi)}
+                    </p>
+                  )}
+                  {generationAi?.fallbackReason && (quizState === "quiz" || quizState === "results") && (
+                    <p
+                      className="mt-0.5 max-w-[300px] line-clamp-2 text-[10px] font-medium leading-snug text-amber-700"
+                      title={generationAi.fallbackReason}
+                    >
+                      Fallback: {generationAi.fallbackReason}
                     </p>
                   )}
                   {generationAi && formatAiReason(generationAi) && (quizState === "quiz" || quizState === "results") && (
