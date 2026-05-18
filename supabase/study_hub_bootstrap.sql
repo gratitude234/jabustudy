@@ -226,6 +226,7 @@ create table if not exists public.study_quiz_sets (
   published boolean not null default false,
   source text,
   source_material_id uuid references public.study_materials(id) on delete set null,
+  visibility text not null default 'public' check (visibility in ('public', 'private', 'pending_review')),
   intro_pick boolean not null default false,
   srs_enabled boolean not null default true,
   created_by uuid references auth.users(id) on delete set null,

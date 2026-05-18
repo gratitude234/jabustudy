@@ -657,6 +657,7 @@ export default function MaterialDetailClient({
   const [generatedQuestions, setGeneratedQuestions] = useState<GeneratedQuestion[] | null>(null);
   const [savingQs, setSavingQs] = useState(false);
   const [savedSetId, setSavedSetId] = useState<string | null>(null);
+  const [saveQsError, setSaveQsError] = useState<string | null>(null);
   const [generatingMore, setGeneratingMore] = useState(false);
   const [generateMoreError, setGenerateMoreError] = useState<string | null>(null);
   const [hintShown, setHintShown] = useState<Record<number, boolean>>({});
@@ -836,6 +837,7 @@ export default function MaterialDetailClient({
     setGenQsError(null);
     setGenerationAi(null);
     setSavedSetId(null);
+    setSaveQsError(null);
     syncedQuizMissesRef.current = null;
     try {
       const res = await fetch("/api/ai/generate-questions", {
@@ -923,6 +925,7 @@ export default function MaterialDetailClient({
       setRetryPool(null);
       setHintShown({});
       setSavedSetId(null);
+      setSaveQsError(null);
       syncedQuizMissesRef.current = null;
       setQuizState("quiz");
     } catch (e: unknown) {
@@ -935,15 +938,18 @@ export default function MaterialDetailClient({
   async function handleSaveQuestions() {
     if (!generatedQuestions) return;
     setSavingQs(true);
+    setSaveQsError(null);
     try {
       const res = await fetch("/api/ai/save-generated-questions", {
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ materialId: m.id, questions: generatedQuestions }),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error);
+      if (!res.ok) throw new Error(data.error ?? "Failed to save questions.");
       setSavedSetId(data.setId);
       syncedQuizMissesRef.current = null;
+    } catch (e: unknown) {
+      setSaveQsError(e instanceof Error ? e.message : "Failed to save questions.");
     } finally { setSavingQs(false); }
   }
 
@@ -1636,6 +1642,9 @@ export default function MaterialDetailClient({
                 <div className="absolute inset-x-0 bottom-0 space-y-2 border-t border-border bg-card px-4 py-4 pb-[max(1rem,env(safe-area-inset-bottom))]">
                   {generateMoreError && (
                     <p className="text-center text-xs font-semibold text-rose-600">{generateMoreError}</p>
+                  )}
+                  {saveQsError && (
+                    <p className="text-center text-xs font-semibold text-rose-600">{saveQsError}</p>
                   )}
                   {/* Generate more */}
                   <button type="button"

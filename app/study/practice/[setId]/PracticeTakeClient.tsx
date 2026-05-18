@@ -411,6 +411,7 @@ export default function PracticeTakeClient() {
   // Question navigator drawer
   const [navOpen, setNavOpen] = useState(false);
   const [studyHintOpen, setStudyHintOpen] = useState<Record<string, boolean>>({});
+  const [draining, setDraining] = useState(false);
 
   // Milestone toast — fires once when finalization completes
   const [milestone, setMilestone] = useState<Milestone | null>(null);
@@ -594,6 +595,7 @@ export default function PracticeTakeClient() {
   }
 
   function goNext() {
+    setDraining(false);
     setIdx((v) => Math.min(questions.length - 1, v + 1));
   }
 
@@ -649,6 +651,21 @@ export default function PracticeTakeClient() {
     return () => window.removeEventListener("keydown", onKey);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [opts, current, revealed, submitted, navOpen, isLast, questions.length, choose, setIdx]);
+
+  useEffect(() => {
+    if (!isRevealed || submitted || isLast) {
+      setDraining(false);
+      return;
+    }
+    const startDrain = setTimeout(() => setDraining(true), 16);
+    const advance = setTimeout(() => setIdx((v) => Math.min(questions.length - 1, v + 1)), 1500);
+    return () => {
+      clearTimeout(startDrain);
+      clearTimeout(advance);
+    };
+  // idx in deps ensures the bar resets on every new question
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isRevealed, idx, submitted, isLast, questions.length]);
 
   if (dueFetching || (isDueParam && !engineReady)) {
     return (
@@ -1330,6 +1347,7 @@ if (err || !meta) {
                       show && "cursor-default",
                       isGreen && "border-emerald-500/35 bg-emerald-500/10",
                       isRed && "border-rose-500/35 bg-rose-500/10",
+                      show && !isGreen && !isRed && "opacity-50",
                       !show && checked && "border-foreground bg-secondary",
                       !show && !checked && "border-border bg-background hover:bg-secondary/50"
                     )}
@@ -1347,7 +1365,13 @@ if (err || !meta) {
                         )}
                         aria-hidden="true"
                       >
-                        {String.fromCharCode(65 + i)}
+                        {isGreen ? (
+                          <CheckCircle2 className="h-3.5 w-3.5" />
+                        ) : isRed ? (
+                          <XCircle className="h-3.5 w-3.5" />
+                        ) : (
+                          String.fromCharCode(65 + i)
+                        )}
                       </span>
 
                       <div className="min-w-0 flex-1">
@@ -1372,6 +1396,16 @@ if (err || !meta) {
                 );
               })}
             </div>
+
+            {/* Auto-advance bar — drains over 1.5s then moves to next question */}
+            {isRevealed && !submitted && !isLast && (
+              <div className="mt-3 h-0.5 w-full overflow-hidden rounded-full bg-primary-light">
+                <div
+                  className="h-full bg-primary transition-[width] duration-[1500ms] ease-linear"
+                  style={{ width: draining ? "0%" : "100%" }}
+                />
+              </div>
+            )}
 
             {current?.id ? (
               <div className="mt-3 flex justify-end">

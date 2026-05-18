@@ -54,6 +54,10 @@ type InsertedQuestionRow = {
   position: number | null;
 };
 
+type SourceChunkIdRow = {
+  id: string;
+};
+
 function cleanString(value: unknown): string | undefined {
   return typeof value === "string" && value.trim().length > 0 ? value.trim() : undefined;
 }
@@ -115,7 +119,7 @@ async function validSourceChunkIds(materialId: string, questions: MCQ[]) {
     return new Set<string>();
   }
 
-  return new Set((data ?? []).map((row: any) => String(row.id)));
+  return new Set(((data ?? []) as SourceChunkIdRow[]).map((row) => String(row.id)));
 }
 
 export async function POST(req: NextRequest) {
@@ -177,6 +181,7 @@ export async function POST(req: NextRequest) {
       created_by: user.id,
       published: true,
       visibility: "private",
+      questions_count: questions.length,
       source_material_id: materialId,
       due_at: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
     })
