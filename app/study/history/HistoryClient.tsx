@@ -20,12 +20,6 @@ import {
 import { Drawer } from "@/components/ui/Drawer";
 import { SelectRow } from "@/components/ui/study-filters";
 
-// ─── Brand accent ─────────────────────────────────────────────────────────────
-// Study Hub accent: indigo.
-const ACCENT = "#5B35D5";
-const ACCENT_BG = "#EEEDFE"; // purple-50
-const ACCENT_TEXT = "#3C3489"; // purple-800
-
 // ─── Utilities ────────────────────────────────────────────────────────────────
 
 function watToday(): string {
@@ -137,17 +131,17 @@ function StatsCards({ stats, loading }: { stats: StatsData | null; loading: bool
       <div className="grid grid-cols-3 gap-2">
       {/* Attempts */}
       <div className="rounded-2xl border border-border bg-background p-3">
-        <p className="text-[11px] text-muted-foreground">Attempts</p>
-        <p className="mt-1 text-xl font-medium tabular-nums text-foreground">
+        <p className="text-[11px] text-muted-brand">Attempts</p>
+        <p className="mt-1 font-[family-name:var(--font-bricolage)] text-xl font-bold tabular-nums text-foreground">
           {stats.totalAttempts}
         </p>
-        <p className="mt-0.5 text-[10px] text-muted-foreground">all time</p>
+        <p className="mt-0.5 text-[10px] text-muted-brand">all time</p>
       </div>
 
       {/* Avg score */}
       <div className="rounded-2xl border border-border bg-background p-3">
-        <p className="text-[11px] text-muted-foreground">Avg score</p>
-        <p className="mt-1 text-xl font-medium tabular-nums text-foreground">
+        <p className="text-[11px] text-muted-brand">Avg score</p>
+        <p className="mt-1 font-[family-name:var(--font-bricolage)] text-xl font-bold tabular-nums text-foreground">
           {stats.avgScore != null ? `${stats.avgScore}%` : "—"}
         </p>
         {delta != null && delta !== 0 && (
@@ -162,12 +156,12 @@ function StatsCards({ stats, loading }: { stats: StatsData | null; loading: bool
 
       {/* Best */}
       <div className="rounded-2xl border border-border bg-background p-3">
-        <p className="text-[11px] text-muted-foreground">Best</p>
-        <p className="mt-1 text-xl font-medium tabular-nums text-foreground">
+        <p className="text-[11px] text-muted-brand">Best</p>
+        <p className="mt-1 font-[family-name:var(--font-bricolage)] text-xl font-bold tabular-nums text-foreground">
           {stats.bestScore != null ? `${stats.bestScore}%` : "—"}
         </p>
         {stats.bestCourseCode && (
-          <p className="mt-0.5 text-[10px] text-muted-foreground">{stats.bestCourseCode}</p>
+          <p className="mt-0.5 text-[10px] text-muted-brand">{stats.bestCourseCode}</p>
         )}
       </div>
 
@@ -203,8 +197,7 @@ function StreakBanner({ streak }: { streak: number }) {
   if (streak === 0) return null;
   return (
     <div
-      className="flex items-center justify-between rounded-2xl px-4 py-3"
-      style={{ background: ACCENT }}
+      className="flex items-center justify-between rounded-2xl bg-primary px-4 py-3"
     >
       <div>
         <p className="text-sm font-medium text-white">Active streak</p>
@@ -237,18 +230,17 @@ function WeeklyBarChart({ bars }: { bars: WeekBar[] }) {
             <div key={bar.date} className="flex flex-1 flex-col items-center gap-1">
               {bar.avgPct != null ? (
                 <div
-                  className="w-full rounded-t-[3px]"
+                  className="w-full rounded-t-[3px] bg-primary"
                   style={{
                     height,
-                    background: ACCENT,
                     opacity: isToday ? 1 : 0.35 + (bar.avgPct / 100) * 0.55,
                   }}
                 />
               ) : bar.active ? (
                 // practiced but no graded score (all in-progress)
                 <div
-                  className="w-full rounded-t-[3px]"
-                  style={{ height: 4, background: ACCENT, opacity: 0.2 }}
+                  className="w-full rounded-t-[3px] bg-primary/20"
+                  style={{ height: 4 }}
                 />
               ) : (
                 <div className="w-full" style={{ height: 0 }} />
@@ -261,7 +253,7 @@ function WeeklyBarChart({ bars }: { bars: WeekBar[] }) {
         {bars.map((bar) => (
           <div
             key={bar.date}
-            className="flex-1 text-center text-[9px] text-muted-foreground"
+            className="flex-1 text-center text-[9px] text-muted-brand"
           >
             {bar.label}
           </div>
@@ -283,7 +275,7 @@ const CHART_PAD_Y = 8;
 function ScoreTrendLine({ points }: { points: TrendPoint[] }) {
   if (points.length < 2) {
     return (
-      <div className="flex h-[72px] items-center justify-center text-xs text-muted-foreground">
+      <div className="flex h-[72px] items-center justify-center text-xs text-muted-brand">
         Need at least 2 graded attempts to plot a trend.
       </div>
     );
@@ -306,8 +298,8 @@ function ScoreTrendLine({ points }: { points: TrendPoint[] }) {
 
   return (
     <svg viewBox={`0 0 ${CHART_W} ${CHART_H}`} width="100%" height={CHART_H} overflow="visible">
-      <path d={fillPath} fill={ACCENT} fillOpacity={0.1} />
-      <path d={linePath} fill="none" stroke={ACCENT} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
+      <path d={fillPath} fill="#5B35D5" fillOpacity={0.1} />
+      <path d={linePath} fill="none" stroke="#5B35D5" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
       {coords.map(({ x, y, p }, i) => (
         <circle key={i} cx={x} cy={y} r={3.5} fill="white" stroke={pctToColor(p.pct)} strokeWidth={2} />
       ))}
@@ -366,7 +358,7 @@ function ProgressSection({
                 "rounded-[9px] px-3 py-1.5 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
                 tab === t
                   ? "bg-secondary font-medium text-foreground"
-                  : "text-muted-foreground hover:text-foreground"
+                  : "text-muted-brand hover:text-foreground"
               )}
             >
               {t === "trend" ? "Score trend" : "Activity"}
@@ -387,14 +379,9 @@ function ProgressSection({
                 className={cn(
                   "rounded-full border px-3 py-1 text-[11px] transition",
                   trendView === v
-                    ? "font-medium text-white"
-                    : "border-border bg-background text-muted-foreground hover:text-foreground"
+                    ? "border-primary bg-primary font-medium text-white"
+                    : "border-border bg-background text-muted-brand hover:text-foreground"
                 )}
-                style={
-                  trendView === v
-                    ? { background: ACCENT, borderColor: ACCENT }
-                    : undefined
-                }
               >
                 {v === "week" ? "Week" : "All"}
               </button>
@@ -414,7 +401,7 @@ function ProgressSection({
                       "rounded-full border px-2.5 py-1 text-[11px] transition",
                       !activeCourse
                         ? "border-border bg-secondary font-medium text-foreground"
-                        : "border-border/60 bg-background text-muted-foreground hover:text-foreground"
+                        : "border-border/60 bg-background text-muted-brand hover:text-foreground"
                     )}
                   >
                     All
@@ -428,7 +415,7 @@ function ProgressSection({
                         "rounded-full border px-2.5 py-1 text-[11px] transition",
                         activeCourse === code
                           ? "border-border bg-secondary font-medium text-foreground"
-                          : "border-border/60 bg-background text-muted-foreground hover:text-foreground"
+                          : "border-border/60 bg-background text-muted-brand hover:text-foreground"
                       )}
                     >
                       {code}
@@ -438,7 +425,7 @@ function ProgressSection({
               )}
               <ScoreTrendLine points={filteredTrend} />
               {filteredTrend.length >= 2 && (
-                <div className="flex items-center justify-between text-[11px] text-muted-foreground">
+                <div className="flex items-center justify-between text-[11px] text-muted-brand">
                   <span>
                     {new Date(filteredTrend[0].submittedAt).toLocaleDateString(undefined, {
                       month: "short", day: "numeric",
@@ -456,7 +443,7 @@ function ProgressSection({
         </div>
       ) : (
         <div>
-          <p className="mb-2 text-[11px] text-muted-foreground">
+          <p className="mb-2 text-[11px] text-muted-brand">
             {activeCount} active day{activeCount !== 1 ? "s" : ""} in the last 30 days
           </p>
           <div className="flex flex-wrap gap-1">
@@ -464,11 +451,7 @@ function ProgressSection({
               <div
                 key={date}
                 title={date}
-                className="h-4 w-4 shrink-0 rounded-[3px]"
-                style={{
-                  background: did_practice ? ACCENT : "var(--color-background-secondary)",
-                  opacity: did_practice ? 1 : 0.5,
-                }}
+                className={cn("h-4 w-4 shrink-0 rounded-[3px]", did_practice ? "bg-primary" : "bg-muted/50")}
               />
             ))}
           </div>
@@ -483,10 +466,7 @@ function ProgressSection({
 function ScoreDot({ pct, inProgress }: { pct: number | null; inProgress?: boolean }) {
   if (inProgress) {
     return (
-      <div
-        className="h-2.5 w-2.5 shrink-0 rounded-full border"
-        style={{ borderColor: ACCENT, background: ACCENT_BG }}
-      />
+      <div className="h-2.5 w-2.5 shrink-0 rounded-full border border-primary bg-primary-light" />
     );
   }
   if (pct == null) {
@@ -558,10 +538,7 @@ function SetGroupCard({ group }: { group: SetGroup }) {
             {pilotScore}%
           </span>
         ) : hasAnyInProgress ? (
-          <span
-            className="shrink-0 rounded-full px-2.5 py-1 text-[11px] font-medium"
-            style={{ background: ACCENT_BG, color: ACCENT_TEXT }}
-          >
+          <span className="shrink-0 rounded-full bg-primary-light px-2.5 py-1 text-[11px] font-medium text-primary-text">
             In progress
           </span>
         ) : null}
@@ -570,15 +547,15 @@ function SetGroupCard({ group }: { group: SetGroup }) {
       {/* Meta row */}
       <div className="flex flex-wrap items-center gap-2">
         {courseCode && (
-          <span className="rounded-full border border-border bg-background px-2 py-0.5 text-[11px] text-muted-foreground">
+          <span className="rounded-full border border-border bg-background px-2 py-0.5 text-[11px] text-muted-brand">
             {courseCode}
           </span>
         )}
-        <span className="text-[11px] text-muted-foreground">
+        <span className="text-[11px] text-muted-brand">
           {totalCount} attempt{totalCount !== 1 ? "s" : ""}
         </span>
         {lastAt && (
-          <span className="flex items-center gap-1 text-[11px] text-muted-foreground">
+          <span className="flex items-center gap-1 text-[11px] text-muted-brand">
             <Clock className="h-3 w-3" />
             {formatWhen(lastAt)}
           </span>
@@ -600,7 +577,7 @@ function SetGroupCard({ group }: { group: SetGroup }) {
             return <ScoreDot key={a.id} pct={pct} inProgress={isIP} />;
           })}
           {hasAnyInProgress && (
-            <span className="ml-1 text-[10px] text-muted-foreground">1 in progress</span>
+            <span className="ml-1 text-[10px] text-muted-brand">1 in progress</span>
           )}
         </div>
       )}
@@ -612,7 +589,7 @@ function SetGroupCard({ group }: { group: SetGroup }) {
           <Link
             href={`/study/history/${latest.id}`}
             className={cn(
-              "inline-flex items-center justify-center rounded-2xl border border-border bg-background px-3 py-2.5 text-xs text-muted-foreground no-underline",
+              "inline-flex items-center justify-center rounded-2xl border border-border bg-background px-3 py-2.5 text-xs text-muted-brand no-underline",
               "hover:bg-secondary/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
             )}
           >
@@ -624,8 +601,7 @@ function SetGroupCard({ group }: { group: SetGroup }) {
         {inProgressAttempt ? (
           <Link
             href={`/study/practice/${setId}`}
-            className="inline-flex flex-1 items-center justify-center gap-2 rounded-2xl px-4 py-2.5 text-sm font-medium text-white no-underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-            style={{ background: ACCENT }}
+            className="inline-flex flex-1 items-center justify-center gap-2 rounded-2xl bg-primary px-4 py-2.5 text-sm font-medium text-white no-underline hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           >
             Continue
             <ArrowRight className="h-4 w-4" />
@@ -1085,8 +1061,7 @@ export default function HistoryClient() {
         </Link>
         <Link
           href="/study/practice"
-          className="inline-flex items-center gap-2 rounded-2xl px-4 py-2.5 text-sm font-medium text-white no-underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-          style={{ background: ACCENT }}
+          className="inline-flex items-center gap-2 rounded-2xl bg-primary px-4 py-2.5 text-sm font-medium text-white no-underline hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
         >
           <BookOpen className="h-4 w-4" />
           Practice
@@ -1096,12 +1071,12 @@ export default function HistoryClient() {
       {/* Page header */}
       <div className="flex items-start justify-between gap-3">
         <div>
-          <p className="text-lg font-medium text-foreground">History</p>
-          <p className="mt-0.5 text-sm text-muted-foreground">
+          <p className="font-[family-name:var(--font-bricolage)] text-lg font-bold text-foreground">History</p>
+          <p className="mt-0.5 text-sm text-muted-brand">
             Track your progress and review every attempt.
           </p>
         </div>
-        <History className="h-5 w-5 shrink-0 text-muted-foreground" />
+        <History className="h-5 w-5 shrink-0 text-muted-brand" />
       </div>
 
       {/* Stats */}
@@ -1124,12 +1099,12 @@ export default function HistoryClient() {
         <Card className="rounded-3xl border bg-background/85 backdrop-blur space-y-3">
           {/* Search bar */}
           <div className="flex items-center gap-2 rounded-2xl border border-border bg-background px-3 py-2">
-            <svg className="h-4 w-4 shrink-0 text-muted-foreground" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><circle cx="11" cy="11" r="8" /><path d="m21 21-4.35-4.35" /></svg>
+            <svg className="h-4 w-4 shrink-0 text-muted-brand" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><circle cx="11" cy="11" r="8" /><path d="m21 21-4.35-4.35" /></svg>
             <input
               value={q}
               onChange={(e) => setQ(e.target.value)}
               placeholder="Search by course code or set title…"
-              className="w-full bg-transparent text-sm text-foreground outline-none placeholder:text-muted-foreground"
+              className="w-full bg-transparent text-sm text-foreground outline-none placeholder:text-muted-brand"
             />
             {q && (
               <button
@@ -1160,7 +1135,7 @@ export default function HistoryClient() {
                 "rounded-full border px-3 py-1.5 text-xs transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
                 !courseParam && !statusParam
                   ? "border-border bg-foreground font-medium text-background"
-                  : "border-border/60 bg-background text-muted-foreground hover:text-foreground"
+                  : "border-border/60 bg-background text-muted-brand hover:text-foreground"
               )}
             >
               All
@@ -1185,7 +1160,7 @@ export default function HistoryClient() {
                   "rounded-full border px-3 py-1.5 text-xs transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
                   courseParam === code
                     ? "border-border bg-foreground font-medium text-background"
-                    : "border-border/60 bg-background text-muted-foreground hover:text-foreground"
+                    : "border-border/60 bg-background text-muted-brand hover:text-foreground"
                 )}
               >
                 {code}
@@ -1210,10 +1185,9 @@ export default function HistoryClient() {
                 className={cn(
                   "rounded-full border px-3 py-1.5 text-xs transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
                   statusParam === s
-                    ? "font-medium text-white"
-                    : "border-border/60 bg-background text-muted-foreground hover:text-foreground"
+                    ? "border-primary bg-primary font-medium text-white"
+                    : "border-border/60 bg-background text-muted-brand hover:text-foreground"
                 )}
-                style={statusParam === s ? { background: ACCENT, borderColor: ACCENT } : undefined}
               >
                 {s === "in_progress" ? "In progress" : "Completed"}
               </button>
@@ -1222,13 +1196,13 @@ export default function HistoryClient() {
 
           {hasAnyFilters && (
             <div className="flex items-center justify-between">
-              <p className="text-xs text-muted-foreground">
+              <p className="text-xs text-muted-brand">
                 {setGroups.length} set{setGroups.length !== 1 ? "s" : ""} · {items.length} attempt{items.length !== 1 ? "s" : ""}
               </p>
               <button
                 type="button"
                 onClick={clearAll}
-                className="inline-flex items-center gap-1.5 rounded-full border border-border bg-background px-3 py-1.5 text-xs text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                className="inline-flex items-center gap-1.5 rounded-full border border-border bg-background px-3 py-1.5 text-xs text-muted-brand hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
               >
                 <X className="h-3.5 w-3.5" />
                 Clear all
@@ -1242,7 +1216,7 @@ export default function HistoryClient() {
       {error && (
         <div className="rounded-3xl border border-border bg-background p-4">
           <p className="text-sm font-medium text-foreground">Couldn&apos;t load history</p>
-          <p className="mt-1 text-sm text-muted-foreground">{error}</p>
+          <p className="mt-1 text-sm text-muted-brand">{error}</p>
           <button
             type="button"
             onClick={() => fetchPage(1)}
@@ -1272,8 +1246,7 @@ export default function HistoryClient() {
           action={
             <Link
               href="/study/practice"
-              className="inline-flex items-center gap-2 rounded-2xl px-4 py-3 text-sm font-medium text-white no-underline hover:opacity-90"
-              style={{ background: ACCENT }}
+              className="inline-flex items-center gap-2 rounded-2xl bg-primary px-4 py-3 text-sm font-medium text-white no-underline hover:opacity-90"
             >
               <BookOpen className="h-4 w-4" />
               Go to Practice
@@ -1284,7 +1257,7 @@ export default function HistoryClient() {
         <div className="space-y-5">
           {groupedSets.map(({ label, groups }) => (
             <section key={label}>
-              <p className="mb-2 px-1 text-[11px] font-medium uppercase tracking-widest text-muted-foreground">
+              <p className="mb-2 px-1 text-[11px] font-medium uppercase tracking-widest text-muted-brand">
                 {label}
               </p>
               <div className="grid gap-3 sm:grid-cols-2">
@@ -1319,7 +1292,7 @@ export default function HistoryClient() {
               <ArrowRight className="h-4 w-4" />
             </button>
           ) : (
-            <p className="text-sm text-muted-foreground">You&apos;ve reached the end.</p>
+            <p className="text-sm text-muted-brand">You&apos;ve reached the end.</p>
           )}
         </div>
       )}
@@ -1341,8 +1314,7 @@ export default function HistoryClient() {
             <button
               type="button"
               onClick={applyFilters}
-              className="inline-flex flex-1 items-center justify-center rounded-2xl px-4 py-3 text-sm font-medium text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-              style={{ background: ACCENT }}
+              className="inline-flex flex-1 items-center justify-center rounded-2xl bg-primary px-4 py-3 text-sm font-medium text-white hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
             >
               Apply
             </button>
@@ -1374,14 +1346,14 @@ export default function HistoryClient() {
         </div>
         <div className="mt-3 rounded-3xl border border-border bg-background p-4">
           <p className="text-sm font-medium text-foreground">Course code</p>
-          <p className="mt-1 text-xs text-muted-foreground">
+          <p className="mt-1 text-xs text-muted-brand">
             Or tap a course chip above the list for a quick filter.
           </p>
           <input
             value={draftCourse}
             onChange={(e) => setDraftCourse(e.target.value)}
             placeholder="e.g. GST101"
-            className="mt-3 w-full rounded-2xl border border-border bg-background px-3 py-3 text-sm text-foreground outline-none placeholder:text-muted-foreground focus:ring-2 focus:ring-ring"
+            className="mt-3 w-full rounded-2xl border border-border bg-background px-3 py-3 text-sm text-foreground outline-none placeholder:text-muted-brand focus:ring-2 focus:ring-ring"
           />
         </div>
       </Drawer>

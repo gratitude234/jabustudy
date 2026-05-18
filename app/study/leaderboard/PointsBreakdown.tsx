@@ -33,7 +33,7 @@ export function PointsBreakdown({ row }: { row: LeaderRow }) {
         type="button"
         onClick={() => setOpen((v) => !v)}
         className={cn(
-          "flex items-center gap-1 text-[11px] font-semibold text-muted-foreground select-none",
+          "flex items-center gap-1 text-[11px] font-semibold text-muted-brand select-none",
           "hover:text-foreground transition-colors focus-visible:outline-none"
         )}
       >
@@ -52,21 +52,21 @@ export function PointsBreakdown({ row }: { row: LeaderRow }) {
                   key={key}
                   className="rounded-xl border border-border bg-background px-2.5 py-2"
                 >
-                  <p className="text-[10px] font-semibold text-muted-foreground">{label}</p>
+                  <p className="text-[10px] font-semibold text-muted-brand">{label}</p>
                   <p className="mt-0.5 text-sm font-extrabold text-foreground">
                     {count}
-                    <span className="ml-1 text-[10px] font-semibold text-muted-foreground">
+                    <span className="ml-1 text-[10px] font-semibold text-muted-brand">
                       ×{multiplier}
                     </span>
                   </p>
-                  <p className="mt-0.5 text-[10px] text-muted-foreground">= {earned} pts</p>
+                  <p className="mt-0.5 text-[10px] text-muted-brand">= {earned} pts</p>
                 </div>
               );
             })}
           </div>
 
           {row.practice_days > 0 && (
-            <p className="mt-2 text-[10px] text-muted-foreground">
+            <p className="mt-2 text-[10px] text-muted-brand">
               🔥 Practiced on {row.practice_days} day{row.practice_days !== 1 ? "s" : ""}
             </p>
           )}

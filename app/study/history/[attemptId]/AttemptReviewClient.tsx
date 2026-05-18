@@ -25,11 +25,6 @@ import {
   XCircle,
 } from "lucide-react";
 
-// ─── Brand accent ─────────────────────────────────────────────────────────────
-const ACCENT = "#5B35D5";
-const ACCENT_BG = "#EEEDFE";
-const ACCENT_TEXT = "#3C3489";
-
 // ─── Utilities ────────────────────────────────────────────────────────────────
 
 function fmtDate(iso?: string | null) {
@@ -148,23 +143,23 @@ function AiExplainInline({
         onClick={fetchExplanation}
         className={cn(
           "flex w-full items-center gap-3 rounded-2xl border px-3 py-2.5 text-left transition-all",
-          "border-[#5B35D5]/20 bg-[#EEEDFE] hover:bg-[#EEEDFE]/80",
-          "dark:border-[#5B35D5]/30 dark:bg-[#5B35D5]/10",
-          "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#5B35D5] focus-visible:ring-offset-2"
+          "border-primary/20 bg-primary-light hover:bg-primary-light/80",
+          "dark:border-primary/30 dark:bg-primary/10",
+          "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
         )}
       >
-        <span className="grid h-8 w-8 shrink-0 place-items-center rounded-xl bg-[#5B35D5]/10 text-[#5B35D5] dark:text-indigo-300">
+        <span className="grid h-8 w-8 shrink-0 place-items-center rounded-xl bg-primary/10 text-primary dark:text-indigo-300">
           <Sparkles className="h-4 w-4" />
         </span>
         <div className="min-w-0 flex-1">
-          <p className="text-xs font-extrabold text-[#3B24A8] dark:text-indigo-300">
+          <p className="text-xs font-extrabold text-primary-text dark:text-indigo-300">
             Ask AI to go deeper
           </p>
-          <p className="text-[11px] text-[#5B35D5]/70 dark:text-[#5B35D5]/60">
+          <p className="text-[11px] text-primary/70 dark:text-primary/60">
             Expanded explanation powered by Gemini
           </p>
         </div>
-        <Sparkles className="h-3.5 w-3.5 shrink-0 text-[#5B35D5]" />
+        <Sparkles className="h-3.5 w-3.5 shrink-0 text-primary" />
       </button>
     );
   }
@@ -173,14 +168,14 @@ function AiExplainInline({
     return (
       <div className={cn(
         "flex items-center gap-3 rounded-2xl border px-3 py-3",
-        "border-[#5B35D5]/20 bg-[#EEEDFE] dark:border-[#5B35D5]/30 dark:bg-[#5B35D5]/10"
+        "border-primary/20 bg-primary-light dark:border-primary/30 dark:bg-primary/10"
       )}>
-        <span className="grid h-8 w-8 shrink-0 place-items-center rounded-xl bg-[#5B35D5]/10 text-[#5B35D5]">
+        <span className="grid h-8 w-8 shrink-0 place-items-center rounded-xl bg-primary/10 text-primary">
           <Loader2 className="h-4 w-4 animate-spin" />
         </span>
         <div>
-          <p className="text-xs font-extrabold text-[#3B24A8] dark:text-indigo-300">Thinking…</p>
-          <p className="text-[11px] text-[#5B35D5]/70">Generating your explanation</p>
+          <p className="text-xs font-extrabold text-primary-text dark:text-indigo-300">Thinking…</p>
+          <p className="text-[11px] text-primary/70">Generating your explanation</p>
         </div>
       </div>
     );
@@ -206,13 +201,13 @@ function AiExplainInline({
   return (
     <div className={cn(
       "rounded-2xl border px-4 py-3",
-      "border-[#5B35D5]/20 bg-[#EEEDFE] dark:border-[#5B35D5]/30 dark:bg-[#5B35D5]/10"
+      "border-primary/20 bg-primary-light dark:border-primary/30 dark:bg-primary/10"
     )}>
       <div className="mb-2 flex items-center gap-2">
-        <Sparkles className="h-3.5 w-3.5 text-[#5B35D5]" />
-        <p className="text-xs font-extrabold text-[#3B24A8] dark:text-indigo-300">AI Explanation</p>
+        <Sparkles className="h-3.5 w-3.5 text-primary" />
+        <p className="text-xs font-extrabold text-primary-text dark:text-indigo-300">AI Explanation</p>
       </div>
-      <p className="whitespace-pre-wrap text-sm leading-relaxed text-[#3B24A8]/85 dark:text-indigo-200">
+      <p className="whitespace-pre-wrap text-sm leading-relaxed text-primary-text/85 dark:text-indigo-200">
         {state.text}
       </p>
     </div>
@@ -274,7 +269,7 @@ function QuestionPalette({
           <div className="flex items-start justify-between gap-3">
             <div>
               <p className="text-base font-medium text-foreground">Questions</p>
-              <p className="mt-1 text-xs text-muted-foreground">
+              <p className="mt-1 text-xs text-muted-brand">
                 Green = correct · Red = wrong · Grey = skipped
               </p>
             </div>
@@ -326,7 +321,7 @@ function QuestionPalette({
                   "inline-flex items-center gap-2 rounded-full border px-3 py-2 text-xs font-medium transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
                   tab === t
                     ? "border-border bg-secondary text-foreground"
-                    : "border-border/60 bg-background text-muted-foreground hover:bg-secondary/50 hover:text-foreground"
+                    : "border-border/60 bg-background text-muted-brand hover:bg-secondary/50 hover:text-foreground"
                 )}
               >
                 {t === "wrong" ? "Wrong" : t === "flagged" ? "Flagged" : t === "unanswered" ? "Skipped" : "All"}
@@ -667,7 +662,7 @@ export default function AttemptReviewClient() {
     return (
       <div className="space-y-4 pb-10">
         <Card className="rounded-3xl">
-          <div className="flex items-center gap-2 text-sm text-muted-foreground">
+          <div className="flex items-center gap-2 text-sm text-muted-brand">
             <Loader2 className="h-4 w-4 animate-spin" />
             Loading review…
           </div>
@@ -732,8 +727,7 @@ export default function AttemptReviewClient() {
           {derived.wrongIds.length > 0 && (
             <button
               type="button" onClick={retryWrong}
-              className="inline-flex items-center gap-2 rounded-2xl px-3 py-2 text-sm font-medium text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-              style={{ background: ACCENT }}
+              className="inline-flex items-center gap-2 rounded-2xl bg-primary px-3 py-2 text-sm font-medium text-white hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
             >
               Retry wrong ({derived.wrongIds.length})
             </button>
@@ -744,8 +738,8 @@ export default function AttemptReviewClient() {
       {/* Thin progress line */}
       <div className="h-0.5 w-full overflow-hidden rounded-full bg-border/30">
         <div
-          className="h-full rounded-full transition-all duration-300"
-          style={{ width: `${progressPct}%`, background: ACCENT }}
+          className="h-full rounded-full bg-primary transition-all duration-300"
+          style={{ width: `${progressPct}%` }}
         />
       </div>
 
@@ -769,16 +763,19 @@ export default function AttemptReviewClient() {
                 </Link>
               )}
               {setMeta.level && (
-                <span className="rounded-full border border-border bg-background px-2.5 py-1 text-xs text-muted-foreground">
+                <span className="rounded-full border border-border bg-background px-2.5 py-1 text-xs text-muted-brand">
                   {String(setMeta.level)}L
                 </span>
               )}
               <span
-                className="rounded-full border px-2.5 py-1 text-xs font-medium"
+                className={cn(
+                  "rounded-full border px-2.5 py-1 text-xs font-medium",
+                  attempt.status !== "submitted" && "border-primary/30 bg-primary-light text-primary-text"
+                )}
                 style={
                   attempt.status === "submitted"
                     ? { background: "#EAF3DE", color: "#3B6D11", borderColor: "#97C459" }
-                    : { background: ACCENT_BG, color: ACCENT_TEXT, borderColor: "#AFA9EC" }
+                    : undefined
                 }
               >
                 {attempt.status === "submitted" ? "Submitted" : "In progress"}
@@ -816,7 +813,7 @@ export default function AttemptReviewClient() {
               <p className="text-base font-medium tabular-nums text-foreground" style={color ? { color } : undefined}>
                 {value}
               </p>
-              <p className="mt-0.5 text-[10px] text-muted-foreground">{label}</p>
+              <p className="mt-0.5 text-[10px] text-muted-brand">{label}</p>
             </div>
           ))}
         </div>
@@ -838,7 +835,7 @@ export default function AttemptReviewClient() {
                 "inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-medium transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
                 tab === key
                   ? "border-foreground bg-foreground text-background"
-                  : "border-border/60 bg-background text-muted-foreground hover:text-foreground"
+                  : "border-border/60 bg-background text-muted-brand hover:text-foreground"
               )}
             >
               {label}
@@ -862,7 +859,7 @@ export default function AttemptReviewClient() {
         {/* LEFT — Question list (desktop sidebar, hidden on mobile) */}
         <Card className="hidden rounded-3xl lg:block">
           <p className="text-sm font-medium text-foreground">Questions</p>
-          <p className="mt-1 text-xs text-muted-foreground">
+          <p className="mt-1 text-xs text-muted-brand">
             Tap a question to review it.
           </p>
 
@@ -897,7 +894,7 @@ export default function AttemptReviewClient() {
                     )}
                   >
                     <div className="min-w-0">
-                      <p className="text-xs text-muted-foreground">Question {qIndex + 1}</p>
+                      <p className="text-xs text-muted-brand">Question {qIndex + 1}</p>
                       <p className="mt-1 line-clamp-2 text-sm font-medium text-foreground">
                         {normalize(q?.prompt ?? "")}
                       </p>
@@ -909,7 +906,7 @@ export default function AttemptReviewClient() {
                           </span>
                         )}
                         {!chosenIdForQ ? (
-                          <span className="rounded-full border border-border bg-background px-2 py-0.5 text-muted-foreground">Skipped</span>
+                          <span className="rounded-full border border-border bg-background px-2 py-0.5 text-muted-brand">Skipped</span>
                         ) : ok ? (
                           <span className="rounded-full border border-emerald-300/40 bg-emerald-100/30 px-2 py-0.5 text-emerald-800 dark:bg-emerald-950/20 dark:text-emerald-300">Correct</span>
                         ) : (
@@ -919,7 +916,7 @@ export default function AttemptReviewClient() {
                     </div>
                     <div className="mt-0.5 shrink-0">
                       {!chosenIdForQ ? (
-                        <span className="inline-flex h-8 w-8 items-center justify-center rounded-2xl border border-border bg-background text-sm text-muted-foreground">—</span>
+                        <span className="inline-flex h-8 w-8 items-center justify-center rounded-2xl border border-border bg-background text-sm text-muted-brand">—</span>
                       ) : ok ? (
                         <CheckCircle2 className="h-5 w-5 text-emerald-600" />
                       ) : (
@@ -944,12 +941,12 @@ export default function AttemptReviewClient() {
         {/* RIGHT — Question detail */}
         <Card className="rounded-3xl">
           {!selected ? (
-            <p className="text-sm text-muted-foreground">Select a question to review.</p>
+            <p className="text-sm text-muted-brand">Select a question to review.</p>
           ) : (
             <>
               {/* Question header row */}
               <div className="flex items-start justify-between gap-3">
-                <p className="text-xs text-muted-foreground">
+                <p className="text-xs text-muted-brand">
                   Question <span className="font-medium text-foreground">{selectedIndexInAll + 1}</span> of {derived.total}
                 </p>
                 <button
@@ -959,7 +956,7 @@ export default function AttemptReviewClient() {
                     "inline-flex items-center gap-1.5 rounded-2xl border px-3 py-1.5 text-xs font-medium transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
                     flagged[selected.id]
                       ? "border-border bg-secondary text-foreground"
-                      : "border-border bg-background text-muted-foreground hover:text-foreground"
+                      : "border-border bg-background text-muted-brand hover:text-foreground"
                   )}
                 >
                   {flagged[selected.id]
@@ -1030,22 +1027,19 @@ export default function AttemptReviewClient() {
                   <div className="flex items-center gap-2">
                     <p className="text-sm font-medium text-foreground">Explanation</p>
                     {isWrong && (
-                      <span
-                        className="rounded-full px-2 py-0.5 text-[10px]"
-                        style={{ background: ACCENT_BG, color: ACCENT_TEXT }}
-                      >
+                      <span className="rounded-full bg-primary-light px-2 py-0.5 text-[10px] text-primary-text">
                         Auto-opened
                       </span>
                     )}
                   </div>
                   {expOpen[selected.id]
-                    ? <ChevronUp className="h-4 w-4 text-muted-foreground" />
-                    : <ChevronDown className="h-4 w-4 text-muted-foreground" />
+                    ? <ChevronUp className="h-4 w-4 text-muted-brand" />
+                    : <ChevronDown className="h-4 w-4 text-muted-brand" />
                   }
                 </button>
 
                 {expOpen[selected.id] && (
-                  <p className="mt-3 whitespace-pre-wrap text-sm leading-relaxed text-muted-foreground">
+                  <p className="mt-3 whitespace-pre-wrap text-sm leading-relaxed text-muted-brand">
                     {normalize(selected.explanation ?? "No explanation provided.")}
                   </p>
                 )}
@@ -1074,7 +1068,7 @@ export default function AttemptReviewClient() {
                     </button>
 
                     {correctOpt && (
-                      <p className="text-right text-xs text-muted-foreground">
+                      <p className="text-right text-xs text-muted-brand">
                         Correct: <span className="font-medium text-foreground">{normalize(correctOpt.text)}</span>
                       </p>
                     )}
@@ -1108,7 +1102,7 @@ export default function AttemptReviewClient() {
                 className={cn(
                   "inline-flex items-center gap-2 rounded-2xl border px-3 py-2 text-sm font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
                   selectedIndexInAll <= 0
-                    ? "border-border/50 bg-background text-muted-foreground opacity-50"
+                    ? "border-border/50 bg-background text-muted-brand opacity-50"
                     : "border-border bg-background text-foreground hover:bg-secondary/50"
                 )}
               >
@@ -1120,7 +1114,7 @@ export default function AttemptReviewClient() {
                 <p className="text-sm font-medium text-foreground">
                   {selectedIndexInAll + 1} / {derived.total}
                 </p>
-                <p className="text-[10px] text-muted-foreground">
+                <p className="text-[10px] text-muted-brand">
                   {derived.wrong > 0 ? `${derived.wrong} wrong` : ""}
                   {derived.wrong > 0 && derived.unanswered > 0 ? " · " : ""}
                   {derived.unanswered > 0 ? `${derived.unanswered} skipped` : ""}
@@ -1132,10 +1126,9 @@ export default function AttemptReviewClient() {
                 type="button" onClick={next}
                 disabled={selectedIndexInAll >= questions.length - 1}
                 className={cn(
-                  "inline-flex items-center gap-2 rounded-2xl px-3 py-2 text-sm font-medium text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                  "inline-flex items-center gap-2 rounded-2xl bg-primary px-3 py-2 text-sm font-medium text-white hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
                   selectedIndexInAll >= questions.length - 1 ? "opacity-50" : ""
                 )}
-                style={{ background: ACCENT }}
               >
                 Next <ArrowRight className="h-4 w-4" />
               </button>

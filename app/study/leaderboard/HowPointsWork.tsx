@@ -41,7 +41,7 @@ export function HowPointsWork() {
                   i > 0 && "border-t border-border/60"
                 )}
               >
-                <span className="text-muted-foreground">{r.label}</span>
+                <span className="text-muted-brand">{r.label}</span>
                 <span className="font-semibold text-foreground">{r.pts}</span>
               </div>
             ))}

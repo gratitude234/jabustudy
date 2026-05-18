@@ -423,7 +423,7 @@ function ScopeTabs({
               "shrink-0 rounded-full border px-3 py-1.5 text-xs font-semibold transition",
               "focus-visible:outline-none",
               active
-                ? "border-white bg-white text-[#3B24A8]"
+                ? "border-white bg-white text-primary-text"
                 : "border-white/25 bg-white/10 text-white/70 hover:bg-white/20 hover:text-white",
               t.disabled && "pointer-events-none opacity-40"
             )}
@@ -457,7 +457,7 @@ function MyRankStrip({
         <span className="text-sm font-semibold text-white">{name}</span>
       </div>
       <div className="text-right">
-        <span className="text-sm font-extrabold text-white">#{rank}</span>
+        <span className="font-[family-name:var(--font-bricolage)] text-sm font-extrabold text-white">#{rank}</span>
         <span className="ml-2 text-xs text-white/60">{points.toLocaleString("en-NG")} pts</span>
       </div>
     </div>
@@ -481,12 +481,12 @@ function Podium({
   const order = [top3[1], top3[0], top3[2]].filter(Boolean);
   const ranks  = [2, 1, 3];
   const baseHeights = { 1: "h-14", 2: "h-10", 3: "h-7" };
-  const baseColors  = { 1: "bg-[#5B35D5]", 2: "bg-[#888780]", 3: "bg-[#D85A30]" };
+  const baseColors  = { 1: "bg-primary", 2: "bg-[#888780]", 3: "bg-[#D85A30]" };
   const avatarSizes = { 1: "h-14 w-14 text-base", 2: "h-11 w-11 text-sm", 3: "h-10 w-10 text-xs" };
   const medals      = { 1: "🥇", 2: "🥈", 3: "🥉" };
 
   return (
-    <div className="flex items-end justify-center gap-2 px-4 pt-5 pb-0 bg-[#EEEDFE]">
+    <div className="flex items-end justify-center gap-2 px-4 pt-5 pb-0 bg-primary-light">
       {order.map((row, i) => {
         const rank = ranks[i] as 1 | 2 | 3;
         const isMe = row.user_id === currentUserId;
@@ -506,19 +506,19 @@ function Podium({
                 className={cn(
                   "grid place-items-center rounded-full font-semibold text-white",
                   avatarSizes[rank],
-                  isMe ? "bg-[#5B35D5]" : rank === 1 ? "bg-[#5B35D5]" : rank === 2 ? "bg-[#888780]" : "bg-[#D85A30]"
+                  isMe ? "bg-primary" : rank === 1 ? "bg-primary" : rank === 2 ? "bg-[#888780]" : "bg-[#D85A30]"
                 )}
               >
                 {inits}
               </div>
               {/* Flame badge for practice streak */}
               {row.practice_days >= 3 && (
-                <span className="absolute -bottom-1 -right-1 rounded-full border-2 border-[#EEEDFE] bg-[#EF9F27] px-1 py-px text-[8px] font-bold text-[#412402]">
+                <span className="absolute -bottom-1 -right-1 rounded-full border-2 border-primary-light bg-[#EF9F27] px-1 py-px text-[8px] font-bold text-[#412402]">
                   🔥{row.practice_days}d
                 </span>
               )}
               {isMe && (
-                <span className="absolute -top-1 -right-1 rounded-full border-2 border-[#EEEDFE] bg-[#5B35D5] px-1 py-px text-[8px] font-bold text-white">
+                <span className="absolute -top-1 -right-1 rounded-full border-2 border-primary-light bg-primary px-1 py-px text-[8px] font-bold text-white">
                   you
                 </span>
               )}
@@ -530,7 +530,7 @@ function Podium({
             </p>
             <p className={cn(
               "text-center text-[11px]",
-              rank === 1 ? "font-extrabold text-[#3B24A8]" : "text-muted-foreground"
+              rank === 1 ? "font-extrabold text-primary-text" : "text-muted-brand"
             )}>
               {row.points.toLocaleString("en-NG")} pts
             </p>
@@ -578,7 +578,7 @@ function RankRow({
       className={cn(
         "overflow-hidden rounded-2xl border transition-colors",
         isCurrentUser
-          ? "border-[#5B35D5]/30 bg-[#EEEDFE]"
+          ? "border-primary/30 bg-primary-light"
           : "border-border bg-background hover:bg-secondary/30"
       )}
     >
@@ -586,7 +586,7 @@ function RankRow({
       <div className="flex items-center gap-3 px-3 py-2.5">
         <span className={cn(
           "w-6 shrink-0 text-center text-xs font-semibold",
-          isCurrentUser ? "text-[#5B35D5]" : "text-muted-foreground"
+          isCurrentUser ? "text-primary" : "text-muted-brand"
         )}>
           {rank}
         </span>
@@ -594,7 +594,7 @@ function RankRow({
         <div
           className={cn(
             "grid h-8 w-8 shrink-0 place-items-center rounded-full text-[11px] font-semibold text-white",
-            isCurrentUser ? "bg-[#5B35D5]" : "bg-secondary"
+            isCurrentUser ? "bg-primary" : "bg-secondary"
           )}
           style={isCurrentUser ? {} : { background: "var(--color-background-tertiary)", color: "var(--color-text-secondary)" }}
         >
@@ -605,32 +605,32 @@ function RankRow({
           <div className="flex items-center gap-1.5">
             <p className={cn(
               "truncate text-sm font-semibold",
-              isCurrentUser ? "text-[#3B24A8]" : "text-foreground"
+              isCurrentUser ? "text-primary-text" : "text-foreground"
             )}>
               {name}
             </p>
             {repUserIds.has(row.user_id) && (
               <span className={cn(
                 "inline-flex items-center gap-1 rounded-full px-2 py-0.5",
-                "border border-[#AFA9EC] bg-[#EEEDFE]",
-                "text-[10px] font-semibold text-[#3C3489]",
-                "dark:border-[#5B35D5]/40 dark:bg-[#5B35D5]/10",
+                "border border-primary/30 bg-primary-light",
+                "text-[10px] font-semibold text-primary-text",
+                "dark:border-primary/40 dark:bg-primary/10",
                 "dark:text-indigo-200"
               )}>
                 <ShieldCheck
                   style={{ width: 10, height: 10 }}
-                  className="text-[#5B35D5] dark:text-indigo-300"
+                  className="text-primary dark:text-indigo-300"
                 />
                 {repRoleMap.get(row.user_id) ?? "Course Rep"}
               </span>
             )}
             {isCurrentUser && (
-              <span className="shrink-0 rounded-full bg-[#5B35D5] px-1.5 py-px text-[9px] font-bold text-white">
+              <span className="shrink-0 rounded-full bg-primary px-1.5 py-px text-[9px] font-bold text-white">
                 you
               </span>
             )}
           </div>
-          <p className="mt-0.5 text-xs text-muted-foreground">
+          <p className="mt-0.5 text-xs text-muted-brand">
             {row.accepted > 0 ? `${row.accepted} accepted · ` : ""}
             {row.answers} answers
             {streakLabel ? ` · ${streakLabel}` : ""}
@@ -639,7 +639,7 @@ function RankRow({
 
         <p className={cn(
           "shrink-0 text-sm font-extrabold",
-          isCurrentUser ? "text-[#3B24A8]" : "text-foreground"
+          isCurrentUser ? "text-primary-text" : "text-foreground"
         )}>
           {row.points.toLocaleString("en-NG")} pts
         </p>
@@ -665,7 +665,7 @@ export default async function LeaderboardPage({
   if (!entryState.profileComplete && !hasExplicitScope) {
     return (
       <div className="space-y-3 pb-28 md:pb-6">
-        <div className="overflow-hidden rounded-3xl border border-border bg-[#5B35D5] shadow-sm">
+        <div className="overflow-hidden rounded-3xl border border-border bg-primary shadow-sm">
           <div className="px-5 pt-5 pb-4">
             <Link
               href="/study"
@@ -673,20 +673,20 @@ export default async function LeaderboardPage({
             >
               <ArrowLeft className="h-3.5 w-3.5" /> Back
             </Link>
-            <h1 className="text-2xl font-extrabold tracking-tight text-white">Leaderboard</h1>
+            <h1 className="font-[family-name:var(--font-bricolage)] text-2xl font-extrabold tracking-tight text-white">Leaderboard</h1>
             <p className="mt-1 text-xs text-white/60">Top contributors in your academic scope</p>
           </div>
         </div>
 
-        <div className="rounded-3xl border border-[#5B35D5]/20 bg-card p-5 shadow-sm">
+        <div className="rounded-3xl border border-primary/20 bg-card p-5 shadow-sm">
           <p className="text-base font-extrabold text-foreground">Set up your academic profile</p>
-          <p className="mt-1 text-sm text-muted-foreground">
+          <p className="mt-1 text-sm text-muted-brand">
             Save your official department and level to compare progress with the right classmates.
           </p>
           <div className="mt-4 flex flex-wrap gap-2">
             <Link
               href="/study/onboarding?next=/study/leaderboard"
-              className="inline-flex items-center justify-center rounded-2xl bg-[#5B35D5] px-4 py-2.5 text-sm font-semibold text-white no-underline hover:bg-[#3B24A8]"
+              className="inline-flex items-center justify-center rounded-2xl bg-primary px-4 py-2.5 text-sm font-semibold text-white no-underline hover:opacity-90"
             >
               Complete setup
             </Link>
@@ -754,7 +754,7 @@ export default async function LeaderboardPage({
     <div className="space-y-3 pb-28 md:pb-6">
 
       {/* ── Hero ───────────────────────────────────────────────────────── */}
-      <div className="overflow-hidden rounded-3xl border border-border bg-[#5B35D5] shadow-sm">
+      <div className="overflow-hidden rounded-3xl border border-border bg-primary shadow-sm">
         <div className="px-5 pt-5 pb-4">
           {/* Nav row */}
           <div className="mb-4 flex items-center justify-between">
@@ -768,7 +768,7 @@ export default async function LeaderboardPage({
           </div>
 
           {/* Title */}
-          <h1 className="text-2xl font-extrabold tracking-tight text-white">Leaderboard</h1>
+          <h1 className="font-[family-name:var(--font-bricolage)] text-2xl font-extrabold tracking-tight text-white">Leaderboard</h1>
           <p className="mt-1 text-xs text-white/60">
             Top contributors · {scopeLabel}
           </p>
@@ -829,7 +829,7 @@ export default async function LeaderboardPage({
 
       {/* Top 3 in top badge for current user */}
       {myRow && myRank && myRank <= 3 && (
-        <div className="rounded-2xl border border-[#5B35D5]/20 bg-[#EEEDFE] px-4 py-3 text-sm font-semibold text-[#3B24A8]">
+        <div className="rounded-2xl border border-primary/20 bg-primary-light px-4 py-3 text-sm font-semibold text-primary-text">
           You are in the top 3 — your entry is highlighted in the podium below.
         </div>
       )}
@@ -840,7 +840,7 @@ export default async function LeaderboardPage({
           <p className="text-sm font-semibold text-foreground">
             {scopeEmpty ? "No activity in this scope yet" : "No activity yet"}
           </p>
-          <p className="mt-1 text-sm text-muted-foreground">
+          <p className="mt-1 text-sm text-muted-brand">
             {scopeEmpty
               ? "Be the first to earn points here — ask questions, answer peers, and practice."
               : "Once people start asking and answering questions, top helpers will appear here."}
@@ -848,7 +848,7 @@ export default async function LeaderboardPage({
           <div className="mt-4 flex flex-wrap gap-2">
             <Link
               href="/study/questions/ask"
-              className="inline-flex items-center justify-center rounded-2xl bg-[#5B35D5] px-4 py-2.5 text-sm font-semibold text-white no-underline hover:bg-[#3B24A8]"
+              className="inline-flex items-center justify-center rounded-2xl bg-primary px-4 py-2.5 text-sm font-semibold text-white no-underline hover:opacity-90"
             >
               Ask a question
             </Link>
@@ -872,7 +872,7 @@ export default async function LeaderboardPage({
       {/* ── Rank list ──────────────────────────────────────────────────── */}
       {(rest.length > 0 || outsideTopNRow) && (
         <div className="space-y-1.5">
-          <p className="px-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+          <p className="px-1 text-[10px] font-semibold uppercase tracking-wider text-muted-brand">
             Rankings 4 – {rows.length}
           </p>
 
