@@ -107,29 +107,35 @@
 }
 
 .dark {
-  --background: oklch(0.145 0 0);
-  --foreground: oklch(0.985 0 0);
+  /* Bold Scholar dark palette */
+  --background: #0F0B1E;
+  --foreground: #EDE9FF;
 
-  --card: oklch(0.205 0 0);
-  --card-foreground: oklch(0.985 0 0);
+  --card: #1A1530;
+  --card-foreground: #EDE9FF;
 
-  --popover: oklch(0.205 0 0);
-  --popover-foreground: oklch(0.985 0 0);
+  --popover: #1A1530;
+  --popover-foreground: #EDE9FF;
 
   --primary: oklch(0.68 0.2 266);
   --primary-foreground: oklch(0.145 0 0);
 
-  --secondary: oklch(0.269 0 0);
-  --secondary-foreground: oklch(0.985 0 0);
+  --secondary: #1E1A30;
+  --secondary-foreground: #EDE9FF;
 
-  --muted: oklch(0.269 0 0);
+  --muted: #1E1A30;
   --muted-foreground: oklch(0.708 0 0);
 
   --accent: oklch(0.75 0.18 155);
   --accent-foreground: oklch(0.145 0 0);
 
-  --border: oklch(1 0 0 / 10%);
-  --input: oklch(1 0 0 / 15%);
+  /* Bold Scholar extended tokens — dark variants */
+  --primary-light: rgba(91, 53, 213, 0.15);
+  --primary-text: #C4B5FD;
+  --muted-brand: #9B8EC4;
+
+  --border: rgba(255, 255, 255, 0.08);
+  --input: rgba(255, 255, 255, 0.12);
   --ring: oklch(0.68 0.2 266);
 }
 

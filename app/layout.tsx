@@ -17,6 +17,7 @@ const bricolage = Bricolage_Grotesque({
 import AppChrome from "@/components/layout/AppChrome";
 import ServiceWorkerRegister from "@/components/ServiceWorkerRegister";
 import PWAInstallProvider from "@/components/PWAInstallProvider";
+import { ThemeProvider } from "@/components/ThemeProvider";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { metadataBaseUrl } from "@/lib/publicUrl";
 
@@ -78,6 +79,12 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           before any useEffect can register a listener. We stash it on window
           so PWAInstallProvider can pick it up whenever it mounts.
         */}
+        {/* Flash-prevention: apply dark class before React hydrates */}
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `(function(){var t=localStorage.getItem('jabustudy-theme');if(t==='dark'||(t!=='light'&&window.matchMedia('(prefers-color-scheme:dark)').matches))document.documentElement.classList.add('dark');})();`,
+          }}
+        />
         <script
           dangerouslySetInnerHTML={{
             __html: `
@@ -97,11 +104,13 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           <div className="absolute -bottom-52 -left-52 h-[36rem] w-[36rem] rounded-full bg-accent/10 blur-3xl" />
         </div>
 
-        <PWAInstallProvider>
-          <AuthProvider>
-            <AppChrome>{children}</AppChrome>
-          </AuthProvider>
-        </PWAInstallProvider>
+        <ThemeProvider>
+          <PWAInstallProvider>
+            <AuthProvider>
+              <AppChrome>{children}</AppChrome>
+            </AuthProvider>
+          </PWAInstallProvider>
+        </ThemeProvider>
         <ServiceWorkerRegister />
       </body>
     </html>

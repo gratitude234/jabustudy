@@ -4,8 +4,8 @@ import { Suspense, useEffect, useState } from "react";
 import { usePathname } from "next/navigation";
 
 import MobileTopBar from "@/components/layout/MobileTopBar";
+import SidebarNav from "@/components/layout/SidebarNav";
 import StudyBottomNav from "@/components/layout/StudyBottomNav";
-import TopNav from "@/components/layout/TopNav";
 import PWAInstallBanner from "@/components/PWAInstallBanner";
 import { NotificationsProvider } from "@/contexts/NotificationsContext";
 
@@ -30,17 +30,22 @@ export default function AppChrome({ children }: { children: React.ReactNode }) {
 
   return (
     <NotificationsProvider>
+      {/* Mobile top bar (hidden at md+) */}
       <Suspense fallback={null}>
         <MobileTopBar />
       </Suspense>
 
+      {/* Desktop sidebar (hidden below md) */}
       <Suspense fallback={null}>
-        <TopNav />
+        <SidebarNav />
       </Suspense>
 
-      <main className={[APP_CONTAINER, "py-6 md:py-8", "pb-20 md:pb-8"].join(" ")}>
-        {children}
-      </main>
+      {/* Content — shifted right by sidebar width at md+ */}
+      <div className="md:ml-[220px]">
+        <main className={[APP_CONTAINER, "py-6 md:py-8", "pb-20 md:pb-8"].join(" ")}>
+          {children}
+        </main>
+      </div>
 
       <StudyBottomNav />
 

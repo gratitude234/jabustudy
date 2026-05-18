@@ -407,7 +407,7 @@ function MiniTabs({ value, onChange }: { value: ViewKey; onChange: (v: ViewKey) 
   ];
 
   return (
-    <div className="flex w-full items-center gap-2 overflow-x-auto rounded-3xl border border-border bg-background p-2">
+    <div className="flex w-full items-center gap-2 overflow-x-auto pb-0.5">
       {items.map((it) => {
         const active = value === it.k;
         return (
@@ -416,11 +416,11 @@ function MiniTabs({ value, onChange }: { value: ViewKey; onChange: (v: ViewKey) 
             type="button"
             onClick={() => onChange(it.k)}
             className={cn(
-              "inline-flex shrink-0 items-center gap-2 rounded-2xl border px-3 py-2 text-sm font-semibold transition",
+              "inline-flex shrink-0 items-center gap-2 rounded-full px-3 py-2 text-sm font-semibold transition",
               "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background",
               active
-                ? "border-primary/25 bg-primary-light text-primary-text"
-                : "border-transparent text-muted-foreground hover:bg-secondary/50 hover:text-foreground"
+                ? "bg-primary-light text-primary-text"
+                : "bg-secondary text-muted-brand hover:bg-primary-light/50 hover:text-foreground"
             )}
           >
             {it.icon}

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { BookOpen, ArrowRight } from "lucide-react";
+import { BookOpen, ArrowRight, Brain, Calculator, HelpCircle, Trophy, Zap } from "lucide-react";
 import Link from "next/link";
 import { supabase } from "@/lib/supabase";
 import { trackHomeView, type StudyHomeHeroState } from "@/lib/studyAnalytics";
@@ -235,7 +235,8 @@ function StudyHomeInner() {
   const isNewUser = totalAttempts === 0;
 
   return (
-    <div className="space-y-4 pb-28 md:pb-6">
+    <div className="pb-28 md:pb-6 lg:flex lg:items-start lg:gap-6">
+      <div className="min-w-0 flex-1 space-y-4">
       <StudyTabs contributorStatus={rep.status} />
 
       {!loading && !isProfileComplete && !browseWithoutSetup ? (
@@ -305,6 +306,61 @@ function StudyHomeInner() {
       <MyCourses scopeLabel={scopeLabel} />
         </>
       )}
+      </div>
+
+      {/* Right panel — visible only at lg+ */}
+      <aside className="hidden lg:flex lg:w-[270px] lg:shrink-0 lg:flex-col lg:gap-3 sticky top-8">
+        {heroMetrics && (
+          <div className="overflow-hidden rounded-3xl border border-border bg-card shadow-sm">
+            <div className="border-b border-border px-4 py-3">
+              <p className="text-xs font-bold uppercase tracking-wider text-muted-brand">Today</p>
+            </div>
+            <div className="divide-y divide-border">
+              <div className="flex items-center justify-between px-4 py-3">
+                <span className="text-sm text-muted-brand">Due cards</span>
+                <span className="font-bold tabular-nums text-foreground">{heroMetrics.dueCount}</span>
+              </div>
+              <div className="flex items-center justify-between px-4 py-3">
+                <span className="text-sm text-muted-brand">Streak</span>
+                <span className="font-bold text-foreground">🔥 {heroMetrics.streak}d</span>
+              </div>
+            </div>
+            <div className="px-4 pb-4 pt-3">
+              <Link
+                href="/study/practice"
+                className="flex w-full items-center justify-center gap-2 rounded-2xl bg-primary px-4 py-2.5 text-sm font-bold text-white no-underline transition hover:opacity-90"
+              >
+                <Zap className="h-4 w-4" />
+                Practice now
+              </Link>
+            </div>
+          </div>
+        )}
+
+        <div className="overflow-hidden rounded-3xl border border-border bg-card shadow-sm">
+          <p className="border-b border-border px-4 py-3 text-xs font-bold uppercase tracking-wider text-muted-brand">
+            Quick links
+          </p>
+          <div className="divide-y divide-border">
+            {[
+              { href: "/study/library",     label: "Library",     Icon: BookOpen    },
+              { href: "/study/gpa",         label: "GPA Tools",   Icon: Calculator  },
+              { href: "/study/ai-plan",     label: "AI Plan",     Icon: Brain       },
+              { href: "/study/tutors",      label: "Tutors",      Icon: HelpCircle  },
+              { href: "/study/leaderboard", label: "Leaderboard", Icon: Trophy      },
+            ].map(({ href, label, Icon }) => (
+              <Link
+                key={href}
+                href={href}
+                className="flex items-center gap-3 px-4 py-2.5 text-sm text-muted-brand no-underline transition hover:bg-secondary/30 hover:text-foreground"
+              >
+                <Icon className="h-4 w-4 shrink-0" />
+                {label}
+              </Link>
+            ))}
+          </div>
+        </div>
+      </aside>
     </div>
   );
 }

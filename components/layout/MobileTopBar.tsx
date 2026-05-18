@@ -1,11 +1,12 @@
 "use client";
 
 import Link from "next/link";
-import { Search, UploadCloud, X } from "lucide-react";
+import { Moon, Search, Sun, SunMoon, UploadCloud, X } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 
 import NotificationBell from "@/components/notifications/NotificationBell";
+import { useTheme } from "@/components/ThemeProvider";
 
 function buildNextUrl(pathname: string, sp: URLSearchParams, nextQ: string) {
   const copy = new URLSearchParams(sp.toString());
@@ -23,6 +24,7 @@ export default function MobileTopBar() {
   const pathname = usePathname();
   const router = useRouter();
   const sp = useSearchParams();
+  const { theme, setTheme, resolvedTheme } = useTheme();
 
   const isPracticeSession = /^\/study\/practice\/[^/]+/.test(pathname);
   const showSearch = pathname.startsWith("/study") && !isPracticeSession;
@@ -75,6 +77,20 @@ export default function MobileTopBar() {
           </Link>
 
           <div className="flex items-center gap-2">
+            <button
+              type="button"
+              aria-label="Toggle theme"
+              onClick={() => setTheme(theme === "dark" ? "light" : theme === "light" ? "system" : "dark")}
+              className="grid h-8 w-8 place-items-center rounded-xl text-muted-brand transition hover:bg-secondary/60 hover:text-foreground"
+            >
+              {resolvedTheme === "dark" ? (
+                <Moon className="h-4 w-4" />
+              ) : theme === "system" ? (
+                <SunMoon className="h-4 w-4" />
+              ) : (
+                <Sun className="h-4 w-4" />
+              )}
+            </button>
             <NotificationBell />
             <Link
               href="/study/materials/upload"

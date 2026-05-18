@@ -6,7 +6,6 @@ import { useEffect, useMemo, useState } from "react";
 import {
   ArrowRight,
   BadgeCheck,
-  BookMarked,
   BookOpen,
   Brain,
   Calculator,
@@ -284,10 +283,11 @@ function StudyMeInner() {
           </div>
         </div>
 
-        <div className="grid grid-cols-3 gap-2">
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
           <StatPill label="Saved" value={counts.saved} />
           <StatPill label="Practice" value={counts.attempts} />
-          <StatPill label={isContributor ? "Uploads" : "Questions"} value={isContributor ? counts.uploads : counts.questions} />
+          <StatPill label="Uploads" value={counts.uploads} />
+          <StatPill label="Questions" value={counts.questions} />
         </div>
 
         {!hasPrefs ? (
@@ -305,48 +305,58 @@ function StudyMeInner() {
       </Card>
 
       <section className="space-y-3">
-        <h2 className="text-sm font-bold text-foreground">Study actions</h2>
-        <div className="grid grid-cols-2 gap-3">
-          <ActionCard
+        <h2 className="text-sm font-bold text-foreground">Academic profile</h2>
+        <div className="overflow-hidden rounded-3xl border border-border bg-card shadow-sm">
+          {[
+            { label: "Faculty", value: prefs?.faculty ?? "Not set" },
+            { label: "Department", value: prefs?.department ?? "Not set" },
+            { label: "Level", value: prefs?.level ? `${prefs.level}L` : "Not set" },
+            { label: "Semester", value: semesterLabel(prefs?.semester) },
+          ].map(({ label, value }, i, arr) => (
+            <div
+              key={label}
+              className={cn(
+                "flex items-center justify-between px-4 py-3",
+                i < arr.length - 1 && "border-b border-border"
+              )}
+            >
+              <span className="text-xs text-muted-brand">{label}</span>
+              <span className="text-sm font-medium text-foreground">{value}</span>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      <section className="space-y-3">
+        <h2 className="text-sm font-bold text-foreground">Study tools</h2>
+        <div className="space-y-2">
+          <ToolRow
             href="/study/saved"
             title="Saved"
             desc={`${counts.saved.toLocaleString("en-NG")} saved resources`}
             icon={<Library className="h-4 w-4" />}
             tone="study"
           />
-          <ActionCard
+          <ToolRow
             href="/study/history"
             title="Practice History"
             desc={`${counts.attempts.toLocaleString("en-NG")} submitted attempts`}
             icon={<History className="h-4 w-4" />}
             tone="blue"
           />
-          <ActionCard
+          <ToolRow
             href="/study/gpa"
             title="GPA Tools"
             desc="CGPA, targets and semester planning"
             icon={<Calculator className="h-4 w-4" />}
             tone="green"
           />
-          <ActionCard
+          <ToolRow
             href="/study/questions"
             title="My Questions"
             desc={`${counts.questions.toLocaleString("en-NG")} asked so far`}
             icon={<MessageCircleQuestion className="h-4 w-4" />}
             tone="amber"
-          />
-        </div>
-      </section>
-
-      <section className="space-y-3">
-        <h2 className="text-sm font-bold text-foreground">Academic profile</h2>
-        <div className="space-y-2">
-          <ToolRow
-            href="/study/onboarding"
-            title="Courses and Preferences"
-            desc={`${prefs?.faculty ?? "Faculty not set"} - ${semesterLabel(prefs?.semester)}`}
-            icon={<BookMarked className="h-4 w-4" />}
-            tone="study"
           />
           <ToolRow
             href="/study/library"
