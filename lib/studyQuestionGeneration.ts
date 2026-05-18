@@ -71,6 +71,9 @@ export type CoverageGenerationResult = {
     model: string;
     fallbackProvider?: "bedrock" | "gemini";
     fallbackReason?: string;
+    repairedJson?: boolean;
+    repairProvider?: "bedrock" | "gemini";
+    repairModel?: string;
   };
 };
 
@@ -272,6 +275,9 @@ Return ONLY JSON:
       model: result.model,
       fallbackProvider: result.fallbackProvider,
       fallbackReason: result.fallbackReason,
+      repairedJson: result.repairedJson,
+      repairProvider: result.repairProvider,
+      repairModel: result.repairModel,
     },
   };
 }
@@ -407,6 +413,9 @@ Return ONLY JSON:
       model: result.model,
       fallbackProvider: result.fallbackProvider,
       fallbackReason: result.fallbackReason,
+      repairedJson: result.repairedJson,
+      repairProvider: result.repairProvider,
+      repairModel: result.repairModel,
     },
   };
 }

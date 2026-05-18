@@ -37,7 +37,20 @@ export type AiTextResult =
   | { ok: false; error: string; provider?: AiProvider; model?: string };
 
 export type AiJsonResult<T> =
-  | { ok: true; data: T; provider: AiProvider; model: string; rawText: string; fallbackProvider?: AiProvider; fallbackReason?: string }
+  | {
+      ok: true;
+      data: T;
+      provider: AiProvider;
+      model: string;
+      rawText: string;
+      fallbackProvider?: AiProvider;
+      fallbackReason?: string;
+      repairedJson?: boolean;
+      repairProvider?: AiProvider;
+      repairModel?: string;
+      originalProvider?: AiProvider;
+      originalModel?: string;
+    }
   | { ok: false; error: string; provider?: AiProvider; model?: string; rawText?: string };
 
 export type AiStreamResult =
@@ -72,7 +85,12 @@ function isTransientAiError(error: unknown) {
 }
 
 function configured(provider: AiProvider) {
+  if (provider === "bedrock" && !isBedrockEnabled()) return false;
   return provider === "bedrock" ? isBedrockConfigured() : isGeminiConfigured();
+}
+
+function isBedrockEnabled() {
+  return process.env.AI_ENABLE_BEDROCK?.trim().toLowerCase() === "true";
 }
 
 function modelFor(provider: AiProvider, config: AiRequestConfig) {
@@ -86,11 +104,13 @@ function normalizeProvider(value: string | undefined): AiProvider | null {
 }
 
 function primaryProvider(config: AiRequestConfig): AiProvider {
-  return config.provider ?? normalizeProvider(process.env.AI_PROVIDER) ?? "gemini";
+  const provider = config.provider ?? normalizeProvider(process.env.AI_PROVIDER) ?? "gemini";
+  return provider === "bedrock" && !isBedrockEnabled() ? "gemini" : provider;
 }
 
 function fallbackProvider(primary: AiProvider): AiProvider | null {
   const fallback = normalizeProvider(process.env.AI_FALLBACK_PROVIDER);
+  if (fallback === "bedrock" && !isBedrockEnabled()) return null;
   if (fallback && fallback !== primary) return fallback;
   if (primary === "bedrock" && isGeminiConfigured()) return "gemini";
   return null;
@@ -263,6 +283,7 @@ export async function generateJson<T>(config: AiRequestConfig): Promise<AiJsonRe
     logAiFailure(result.provider, "parseJson", error);
     const repairConfig: AiRequestConfig = {
       ...jsonConfig,
+      provider: "gemini",
       messages: [userMessage(jsonRepairPrompt(result.text))],
       temperature: 0,
       maxTokens: Math.max(jsonConfig.maxTokens ?? 600, 1000),
@@ -275,11 +296,16 @@ export async function generateJson<T>(config: AiRequestConfig): Promise<AiJsonRe
         return {
           ok: true,
           data: parseJsonText<T>(repaired.text),
-          provider: repaired.provider,
-          model: repaired.model,
+          provider: result.provider,
+          model: result.model,
           fallbackProvider: repaired.fallbackProvider,
           fallbackReason: repaired.fallbackReason,
           rawText: repaired.text,
+          repairedJson: true,
+          repairProvider: repaired.provider,
+          repairModel: repaired.model,
+          originalProvider: result.provider,
+          originalModel: result.model,
         };
       } catch (repairError) {
         logAiFailure(repaired.provider, "parseRepairedJson", repairError);
