@@ -88,6 +88,17 @@ export function geminiModelName(modelRole: AiModelRole = "generation", explicitM
     DEFAULT_GENERATION_MODEL;
 }
 
+export function geminiFallbackModelName(modelRole: AiModelRole = "generation", primaryModel?: string) {
+  const fallback = modelRole === "fast"
+    ? process.env.GEMINI_MODEL_FAST_FALLBACK?.trim()
+    : modelRole === "document"
+      ? process.env.GEMINI_MODEL_DOCUMENT_FALLBACK?.trim() || DEFAULT_FAST_MODEL
+      : process.env.GEMINI_MODEL_GENERATION_FALLBACK?.trim() || DEFAULT_FAST_MODEL;
+
+  if (!fallback || fallback === primaryModel) return undefined;
+  return fallback;
+}
+
 function geminiThinkingBudget(modelRole: AiModelRole = "generation", explicitBudget?: number) {
   if (typeof explicitBudget === "number" && Number.isFinite(explicitBudget)) {
     return Math.max(0, Math.floor(explicitBudget));

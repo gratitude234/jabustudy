@@ -314,6 +314,8 @@ Return ONLY a valid JSON object — no markdown, no backticks, no preamble, no e
     inputMode: "extracted-text" | "inline-file";
     fallbackProvider?: "bedrock" | "gemini";
     fallbackReason?: string;
+    modelFallbackFrom?: string;
+    modelFallbackReason?: string;
     reason?: string;
   } | null = null;
   const result = await generateJson<{ questions: unknown[] }>({
@@ -335,6 +337,8 @@ Return ONLY a valid JSON object — no markdown, no backticks, no preamble, no e
     model: result.model,
     fallbackProvider: result.fallbackProvider,
     fallbackReason: result.fallbackReason,
+    modelFallbackFrom: result.modelFallbackFrom,
+    modelFallbackReason: result.modelFallbackReason,
     inputMode: extracted.every((item) => item.content.kind === "text") ? "extracted-text" : "inline-file",
   };
   if (!rawText) {
