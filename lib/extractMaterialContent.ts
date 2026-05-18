@@ -1,6 +1,6 @@
 // lib/extractMaterialContent.ts
 // Server-side utility that turns uploaded study materials into text or inline
-// file payloads for Gemini. Supports PDF, images, DOCX, and PPTX.
+// file payloads for the configured AI provider. Supports PDF, images, DOCX, and PPTX.
 // Never import this from a "use client" file.
 
 import JSZip from "jszip";
@@ -50,8 +50,13 @@ function shouldExtractPdfText(): boolean {
   const explicitDisable = process.env.DISABLE_PDF_TEXT_EXTRACTION?.trim().toLowerCase();
   if (explicitDisable === "true") return false;
 
-  // Prefer extracted text whenever a PDF has selectable text. If pdf-parse fails
-  // in a runtime, Gemini can read the PDF directly for that request.
+  // Vercel's Node runtime can miss native canvas polyfills required by pdfjs.
+  // In that case, send the PDF directly to the AI provider unless extraction
+  // has been explicitly enabled.
+  if (process.env.VERCEL === "1") return false;
+
+  // Prefer extracted text locally whenever a PDF has selectable text. If
+  // pdf-parse fails in a runtime, the AI provider can read the PDF directly.
   return true;
 }
 
@@ -193,7 +198,7 @@ async function extractPptxText(buffer: ArrayBuffer): Promise<string> {
  * Extracts content from a study material buffer for AI generation.
  *
  * - Text PDFs    -> selectable text extracted before sending to Gemini
- * - PDFs on Vercel/scanned PDFs -> inline file payload for Gemini
+ * - PDFs on Vercel/scanned PDFs -> inline file payload for the AI provider
  * - Images       -> inline file payload for Gemini
  * - DOCX         -> text extracted with mammoth
  * - PPTX         -> slide text extracted from DrawingML XML via jszip
@@ -217,7 +222,7 @@ export async function extractMaterialContent(
           kind: "inline",
           mimeType: "application/pdf",
           base64: Buffer.from(buffer).toString("base64"),
-          reason: "Gemini read the PDF directly.",
+          reason: "The AI provider read the PDF directly.",
         };
       }
     } else {
@@ -226,7 +231,7 @@ export async function extractMaterialContent(
         kind: "inline",
         mimeType: "application/pdf",
         base64: Buffer.from(buffer).toString("base64"),
-        reason: "Gemini read the PDF directly.",
+        reason: "The AI provider read the PDF directly.",
       };
     }
 
@@ -234,7 +239,7 @@ export async function extractMaterialContent(
       kind: "inline",
       mimeType: "application/pdf",
       base64: Buffer.from(buffer).toString("base64"),
-      reason: "Gemini read the PDF directly.",
+      reason: "The AI provider read the PDF directly.",
     };
   }
 

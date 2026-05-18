@@ -29,6 +29,21 @@ function getRegion() {
   return process.env.AWS_REGION?.trim() || process.env.AWS_DEFAULT_REGION?.trim() || "us-east-1";
 }
 
+function sonnet46InferenceProfileId(model: string) {
+  const region = getRegion().toLowerCase();
+  if (region.startsWith("eu-")) return `eu.${model}`;
+  if (region === "ap-southeast-2" || region === "ap-southeast-4" || region === "ap-southeast-6") {
+    return `au.${model}`;
+  }
+  if (region.startsWith("us-") || region.startsWith("ca-")) return `us.${model}`;
+  return `global.${model}`;
+}
+
+function normalizeModelId(model: string) {
+  if (model === DEFAULT_GENERATION_MODEL) return sonnet46InferenceProfileId(model);
+  return model;
+}
+
 function getClient() {
   if (!client) {
     client = new BedrockRuntimeClient({ region: getRegion() });
@@ -37,11 +52,11 @@ function getClient() {
 }
 
 export function bedrockModelName(modelRole: "generation" | "fast" = "generation", explicitModel?: string) {
-  if (explicitModel?.trim()) return explicitModel.trim();
+  if (explicitModel?.trim()) return normalizeModelId(explicitModel.trim());
   if (modelRole === "fast") {
-    return process.env.BEDROCK_MODEL_FAST?.trim() || DEFAULT_FAST_MODEL;
+    return normalizeModelId(process.env.BEDROCK_MODEL_FAST?.trim() || DEFAULT_FAST_MODEL);
   }
-  return process.env.BEDROCK_MODEL_GENERATION?.trim() || DEFAULT_GENERATION_MODEL;
+  return normalizeModelId(process.env.BEDROCK_MODEL_GENERATION?.trim() || DEFAULT_GENERATION_MODEL);
 }
 
 export function isBedrockConfigured() {
