@@ -36,11 +36,6 @@ import {
 } from "lucide-react";
 import { Card, EmptyState } from "../../_components/StudyUI";
 
-// ─── Brand accent ─────────────────────────────────────────────────────────────
-const ACCENT      = "#5B35D5";
-const ACCENT_BG   = "#EEEDFE";
-const ACCENT_TEXT = "#3C3489";
-
 const DRAFT_KEY = "jabuStudy_uploadDraft";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -834,14 +829,14 @@ export default function UploadMaterialsPage() {
         </div>
 
         {isRep ? (
-          <div className="hidden items-center gap-2 rounded-2xl border border-border bg-background px-3 py-2 text-xs text-muted-foreground sm:flex">
+          <div className="hidden items-center gap-2 rounded-2xl border border-border bg-background px-3 py-2 text-xs text-muted-brand sm:flex">
             {role === "dept_librarian" ? <Building2 className="h-4 w-4" /> : <GraduationCap className="h-4 w-4" />}
             <span className="font-medium">{role === "dept_librarian" ? "Dept librarian" : "Course rep"}</span>
             <span className="opacity-40">·</span>
             <span className="truncate">{scopeBadge}</span>
           </div>
         ) : userId ? (
-          <div className="hidden items-center gap-2 rounded-2xl border border-border bg-background px-3 py-2 text-xs text-muted-foreground sm:flex">
+          <div className="hidden items-center gap-2 rounded-2xl border border-border bg-background px-3 py-2 text-xs text-muted-brand sm:flex">
             <Users className="h-4 w-4" />
             <span>Student upload</span>
           </div>
@@ -850,8 +845,8 @@ export default function UploadMaterialsPage() {
 
       {/* Page header */}
       <div>
-        <h1 className="text-lg font-medium text-foreground">Upload materials</h1>
-        <p className="mt-1 text-sm text-muted-foreground">
+        <h1 className="font-[family-name:var(--font-bricolage)] text-lg font-medium text-foreground">Upload materials</h1>
+        <p className="mt-1 text-sm text-muted-brand">
           Anyone can contribute — uploads go to a review queue before going live.
         </p>
       </div>
@@ -859,7 +854,7 @@ export default function UploadMaterialsPage() {
       {/* Loading / auth gate */}
       {loading ? (
         <Card className="rounded-3xl">
-          <div className="flex items-center gap-2 text-sm text-muted-foreground">
+          <div className="flex items-center gap-2 text-sm text-muted-brand">
             <Loader2 className="h-4 w-4 animate-spin" /> Loading…
           </div>
         </Card>
@@ -872,8 +867,7 @@ export default function UploadMaterialsPage() {
             action={
               <Link
                 href="/login?next=%2Fstudy%2Fmaterials%2Fupload"
-                className="inline-flex items-center justify-center rounded-2xl px-4 py-2 text-sm font-medium text-white"
-                style={{ background: ACCENT }}
+                className="inline-flex items-center justify-center rounded-2xl bg-primary px-4 py-2 text-sm font-medium text-white"
               >
                 Sign in
               </Link>
@@ -886,16 +880,16 @@ export default function UploadMaterialsPage() {
             <div
               className={cn(
                 "flex items-center gap-3 rounded-2xl px-4 py-3",
-                "border border-[#AFA9EC] bg-[#EEEDFE]",
-                "dark:border-[#5B35D5]/40 dark:bg-[#5B35D5]/10"
+                "border border-primary/30 bg-primary-light",
+                "dark:border-primary/40 dark:bg-primary/10"
               )}
             >
-              <ShieldCheck className="h-4 w-4 shrink-0 text-[#5B35D5] dark:text-indigo-300" />
+              <ShieldCheck className="h-4 w-4 shrink-0 text-primary dark:text-indigo-300" />
               <div className="min-w-0 flex-1">
-                <p className="text-sm font-extrabold text-[#3C3489] dark:text-indigo-200">
+                <p className="text-sm font-extrabold text-primary-text dark:text-indigo-200">
                   Uploading as: {role === "dept_librarian" ? "Dept Librarian" : "Course Rep"}
                 </p>
-                <p className="mt-0.5 text-xs text-[#534AB7] dark:text-indigo-300">
+                <p className="mt-0.5 text-xs text-primary/70 dark:text-indigo-300">
                   {repDeptName ?? "Your department"}
                   {role === "course_rep" && allowedLevels?.length
                     ? ` · ${allowedLevels.map((l) => `${l}L`).join(", ")}`
@@ -928,7 +922,7 @@ export default function UploadMaterialsPage() {
 
           {/* Wizard step indicator */}
           {step !== "queue" && (
-            <div className="flex items-center gap-1 text-xs text-muted-foreground">
+            <div className="flex items-center gap-1 text-xs text-muted-brand">
               {([1, 2, 3] as const).map((s, i) => (
                 <span key={s} className="flex items-center gap-1">
                   {i > 0 && <span className="opacity-30">›</span>}
@@ -950,7 +944,7 @@ export default function UploadMaterialsPage() {
           {/* ── Step 1: Files ─────────────────────────────────────────────── */}
           {step === 1 && (
             <section className="space-y-4">
-              <p className="text-xs font-medium uppercase tracking-widest text-muted-foreground">
+              <p className="text-xs font-medium uppercase tracking-widest text-muted-brand">
                 Step 1 — Select files
               </p>
 
@@ -977,40 +971,35 @@ export default function UploadMaterialsPage() {
                 onClick={() => fileInputRef.current?.click()}
                 className={cn(
                   "cursor-pointer rounded-2xl border-2 border-dashed p-8 text-center transition",
-                  isDragging ? "bg-secondary/50" : "bg-background hover:bg-secondary/30"
+                  isDragging ? "border-primary bg-secondary/50" : "border-border bg-background hover:bg-secondary/30"
                 )}
-                style={{ borderColor: isDragging ? ACCENT : "var(--color-border-secondary)" }}
               >
                 <UploadCloud
-                  className="mx-auto h-8 w-8 mb-3"
-                  style={{ color: isDragging ? ACCENT : "var(--color-text-tertiary)" }}
+                  className={cn("mx-auto h-8 w-8 mb-3", isDragging ? "text-primary" : "text-muted-brand")}
                 />
                 <p className="text-sm font-medium text-foreground">Drop files here</p>
-                <p className="mt-1 text-xs text-muted-foreground">or tap to browse · multiple files allowed</p>
+                <p className="mt-1 text-xs text-muted-brand">or tap to browse · multiple files allowed</p>
                 <div className="mt-4 inline-block rounded-2xl border border-border bg-background px-4 py-2 text-xs font-medium text-foreground">
                   Choose files
                 </div>
-                <p className="mt-3 text-[10px] text-muted-foreground">
+                <p className="mt-3 text-[10px] text-muted-brand">
                   PDF, images, Office docs · Max 50 MB each
                 </p>
               </div>
 
               {/* Auto-fill banner */}
               {autoFillBanner && (
-                <div
-                  className="flex items-center justify-between gap-2 rounded-2xl border px-3 py-2"
-                  style={{ borderColor: "#AFA9EC", background: ACCENT_BG }}
-                >
+                <div className="flex items-center justify-between gap-2 rounded-2xl border border-primary/30 bg-primary-light px-3 py-2">
                   <div className="flex items-center gap-2">
-                    <Info className="h-4 w-4 shrink-0" style={{ color: ACCENT }} />
-                    <p className="text-xs" style={{ color: ACCENT_TEXT }}>Auto-filled from filename</p>
+                    <Info className="h-4 w-4 shrink-0 text-primary" />
+                    <p className="text-xs text-primary-text">Auto-filled from filename</p>
                   </div>
                   <button
                     type="button"
                     onClick={() => setAutoFillBanner(false)}
                     className="rounded-lg p-1 hover:bg-black/5"
                   >
-                    <X className="h-3.5 w-3.5" style={{ color: ACCENT_TEXT }} />
+                    <X className="h-3.5 w-3.5 text-primary-text" />
                   </button>
                 </div>
               )}
@@ -1026,7 +1015,7 @@ export default function UploadMaterialsPage() {
                       <div className="shrink-0">{getFileIcon(f.file.type)}</div>
                       <div className="min-w-0 flex-1">
                         <p className="truncate text-sm font-medium text-foreground">{f.file.name}</p>
-                        <p className="text-xs text-muted-foreground">
+                        <p className="text-xs text-muted-brand">
                           {fmtBytes(f.file.size)}
                           {f.hashing
                             ? " · Computing hash…"
@@ -1035,7 +1024,7 @@ export default function UploadMaterialsPage() {
                             : ""}
                         </p>
                       </div>
-                      {f.hashing && <Loader2 className="h-4 w-4 shrink-0 animate-spin text-muted-foreground" />}
+                      {f.hashing && <Loader2 className="h-4 w-4 shrink-0 animate-spin text-muted-brand" />}
                       <button
                         type="button"
                         onClick={() => removeFile(f.id)}
@@ -1054,11 +1043,10 @@ export default function UploadMaterialsPage() {
                   type="button"
                   disabled={files.length === 0}
                   onClick={() => setStep(2)}
-                  className="inline-flex items-center gap-2 rounded-2xl px-5 py-2.5 text-sm font-medium transition"
-                  style={{
-                    background: files.length > 0 ? ACCENT : "var(--color-background-secondary)",
-                    color: files.length > 0 ? "#fff" : "var(--color-text-tertiary)",
-                  }}
+                  className={cn(
+                    "inline-flex items-center gap-2 rounded-2xl px-5 py-2.5 text-sm font-medium transition",
+                    files.length > 0 ? "bg-primary text-white" : "bg-secondary text-muted-brand"
+                  )}
                 >
                   Continue <ArrowRight className="h-4 w-4" />
                 </button>
@@ -1070,11 +1058,10 @@ export default function UploadMaterialsPage() {
                   type="button"
                   disabled={files.length === 0}
                   onClick={() => setStep(2)}
-                  className="w-full inline-flex items-center justify-center gap-2 rounded-2xl py-3.5 text-sm font-medium transition"
-                  style={{
-                    background: files.length > 0 ? ACCENT : "var(--color-background-secondary)",
-                    color: files.length > 0 ? "#fff" : "var(--color-text-tertiary)",
-                  }}
+                  className={cn(
+                    "w-full inline-flex items-center justify-center gap-2 rounded-2xl py-3.5 text-sm font-medium transition",
+                    files.length > 0 ? "bg-primary text-white" : "bg-secondary text-muted-brand"
+                  )}
                 >
                   {files.length === 0
                     ? "Add files to continue"
@@ -1089,19 +1076,19 @@ export default function UploadMaterialsPage() {
           {step === 2 && (
             <section className="space-y-4">
               <div className="flex items-center justify-between">
-                <p className="text-xs font-medium uppercase tracking-widest text-muted-foreground">
+                <p className="text-xs font-medium uppercase tracking-widest text-muted-brand">
                   Step 2 — Select course
                 </p>
                 <button
                   type="button"
                   onClick={() => setStep(1)}
-                  className="text-xs text-muted-foreground hover:text-foreground"
+                  className="text-xs text-muted-brand hover:text-foreground"
                 >
                   ← Back
                 </button>
               </div>
 
-              <p className="text-xs text-muted-foreground">
+              <p className="text-xs text-muted-brand">
                 This course applies to all {files.length} file{files.length === 1 ? "" : "s"}. You can override per file on the next step.
               </p>
 
@@ -1122,21 +1109,20 @@ export default function UploadMaterialsPage() {
               {/* Search row */}
               <div className="flex items-center gap-2">
                 <div className="flex flex-1 items-center gap-2 rounded-2xl border border-border bg-background px-3 py-2">
-                  <Search className="h-4 w-4 shrink-0 text-muted-foreground" />
+                  <Search className="h-4 w-4 shrink-0 text-muted-brand" />
                   <input
                     value={q}
                     onChange={(e) => setQ(e.target.value)}
                     placeholder="Search course code or title…"
-                    className="w-full bg-transparent text-sm text-foreground outline-none placeholder:text-muted-foreground"
+                    className="w-full bg-transparent text-sm text-foreground outline-none placeholder:text-muted-brand"
                   />
-                  {coursesLoading && <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground" />}
+                  {coursesLoading && <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-brand" />}
                 </div>
                 {isRep && (
                   <button
                     type="button"
                     onClick={() => openCreateCourse({ code: q })}
-                    className="inline-flex shrink-0 items-center gap-1.5 rounded-2xl px-3 py-2 text-sm font-medium text-white"
-                    style={{ background: ACCENT }}
+                    className="inline-flex shrink-0 items-center gap-1.5 rounded-2xl bg-primary px-3 py-2 text-sm font-medium text-white"
                   >
                     <Plus className="h-4 w-4" /> Create
                   </button>
@@ -1145,23 +1131,19 @@ export default function UploadMaterialsPage() {
 
               {/* Selected course chip */}
               {selectedCourse && (
-                <div
-                  className="flex items-center justify-between gap-2 rounded-2xl border px-3 py-2.5"
-                  style={{ borderColor: ACCENT, background: ACCENT_BG }}
-                >
+                <div className="flex items-center justify-between gap-2 rounded-2xl border border-primary bg-primary-light px-3 py-2.5">
                   <div className="min-w-0">
-                    <p className="truncate text-sm font-medium" style={{ color: ACCENT_TEXT }}>
+                    <p className="truncate text-sm font-medium text-primary-text">
                       {selectedCourse.course_code}
                     </p>
-                    <p className="truncate text-xs" style={{ color: "#534AB7" }}>
+                    <p className="truncate text-xs text-primary/70">
                       {selectedCourse.course_title ?? "—"} · {LEVEL_LABEL(selectedCourse.level)} · {selectedCourse.semester}
                     </p>
                   </div>
                   <button
                     type="button"
                     onClick={() => setSelectedCourseId("")}
-                    className="inline-flex shrink-0 items-center gap-1 rounded-xl border px-2 py-1 text-xs"
-                    style={{ borderColor: "#AFA9EC", color: ACCENT_TEXT, background: "#fff" }}
+                    className="inline-flex shrink-0 items-center gap-1 rounded-xl border border-primary/30 bg-background px-2 py-1 text-xs text-primary-text"
                   >
                     Change <ChevronDown className="h-3.5 w-3.5" />
                   </button>
@@ -1176,15 +1158,14 @@ export default function UploadMaterialsPage() {
                       {isRep ? (
                         <>
                           <p className="text-sm font-medium text-foreground">No matching courses found</p>
-                          <p className="mt-1 text-xs text-muted-foreground">
+                          <p className="mt-1 text-xs text-muted-brand">
                             Create the course (within your scope) and upload immediately.
                           </p>
                           <div className="mt-3 flex flex-wrap gap-2">
                             <button
                               type="button"
                               onClick={() => openCreateCourse({ code: q })}
-                              className="rounded-2xl px-3 py-2 text-xs font-medium text-white"
-                              style={{ background: ACCENT }}
+                              className="rounded-2xl bg-primary px-3 py-2 text-xs font-medium text-white"
                             >
                               Create course
                             </button>
@@ -1201,15 +1182,14 @@ export default function UploadMaterialsPage() {
                           <p className="text-sm font-medium text-foreground">
                             {normalizeCourseCode(q)} isn't in the catalog yet.
                           </p>
-                          <p className="mt-1 text-xs text-muted-foreground">
+                          <p className="mt-1 text-xs text-muted-brand">
                             Your course rep can add it — tap below to flag it.
                           </p>
                           <div className="mt-3 flex flex-wrap gap-2">
                             <button
                               type="button"
                               onClick={flagCourse}
-                              className="inline-flex items-center gap-1.5 rounded-2xl px-3 py-2 text-xs font-medium text-white"
-                              style={{ background: ACCENT }}
+                              className="inline-flex items-center gap-1.5 rounded-2xl bg-primary px-3 py-2 text-xs font-medium text-white"
                             >
                               <Flag className="h-3.5 w-3.5" /> Flag this course →
                             </button>
@@ -1248,9 +1228,9 @@ export default function UploadMaterialsPage() {
                             <div className="flex items-center justify-between gap-3">
                               <div className="min-w-0">
                                 <p className="truncate text-sm font-medium text-foreground">{c.course_code}</p>
-                                <p className="truncate text-xs text-muted-foreground">{c.course_title ?? "—"}</p>
+                                <p className="truncate text-xs text-muted-brand">{c.course_title ?? "—"}</p>
                               </div>
-                              <span className="shrink-0 text-xs text-muted-foreground">
+                              <span className="shrink-0 text-xs text-muted-brand">
                                 {LEVEL_LABEL(c.level)} · {c.semester}
                               </span>
                             </div>
@@ -1268,11 +1248,10 @@ export default function UploadMaterialsPage() {
                   type="button"
                   disabled={!selectedCourse}
                   onClick={() => setStep(3)}
-                  className="inline-flex items-center gap-2 rounded-2xl px-5 py-2.5 text-sm font-medium transition"
-                  style={{
-                    background: selectedCourse ? ACCENT : "var(--color-background-secondary)",
-                    color: selectedCourse ? "#fff" : "var(--color-text-tertiary)",
-                  }}
+                  className={cn(
+                    "inline-flex items-center gap-2 rounded-2xl px-5 py-2.5 text-sm font-medium transition",
+                    selectedCourse ? "bg-primary text-white" : "bg-secondary text-muted-brand"
+                  )}
                 >
                   Continue <ArrowRight className="h-4 w-4" />
                 </button>
@@ -1284,11 +1263,10 @@ export default function UploadMaterialsPage() {
                   type="button"
                   disabled={!selectedCourse}
                   onClick={() => setStep(3)}
-                  className="w-full inline-flex items-center justify-center gap-2 rounded-2xl py-3.5 text-sm font-medium transition"
-                  style={{
-                    background: selectedCourse ? ACCENT : "var(--color-background-secondary)",
-                    color: selectedCourse ? "#fff" : "var(--color-text-tertiary)",
-                  }}
+                  className={cn(
+                    "w-full inline-flex items-center justify-center gap-2 rounded-2xl py-3.5 text-sm font-medium transition",
+                    selectedCourse ? "bg-primary text-white" : "bg-secondary text-muted-brand"
+                  )}
                 >
                   {!selectedCourse ? "Select a course to continue" : "Continue →"}
                 </button>
@@ -1300,13 +1278,13 @@ export default function UploadMaterialsPage() {
           {step === 3 && (
             <section className="space-y-4">
               <div className="flex items-center justify-between">
-                <p className="text-xs font-medium uppercase tracking-widest text-muted-foreground">
+                <p className="text-xs font-medium uppercase tracking-widest text-muted-brand">
                   Step 3 — File details
                 </p>
                 <button
                   type="button"
                   onClick={() => setStep(2)}
-                  className="text-xs text-muted-foreground hover:text-foreground"
+                  className="text-xs text-muted-brand hover:text-foreground"
                 >
                   ← Back
                 </button>
@@ -1314,7 +1292,7 @@ export default function UploadMaterialsPage() {
 
               {/* Global notes */}
               <label className="block space-y-1.5">
-                <span className="text-xs font-medium text-muted-foreground">
+                <span className="text-xs font-medium text-muted-brand">
                   Notes <span className="font-normal opacity-60">(optional — applies to all files)</span>
                 </span>
                 <textarea
@@ -1322,7 +1300,7 @@ export default function UploadMaterialsPage() {
                   onChange={(e) => setDescription(e.target.value)}
                   placeholder="Lecturer name, which section it covers…"
                   rows={2}
-                  className="w-full resize-none rounded-2xl border border-border bg-background px-3 py-2.5 text-sm text-foreground outline-none placeholder:text-muted-foreground"
+                  className="w-full resize-none rounded-2xl border border-border bg-background px-3 py-2.5 text-sm text-foreground outline-none placeholder:text-muted-brand"
                 />
               </label>
 
@@ -1346,7 +1324,7 @@ export default function UploadMaterialsPage() {
                         <div className="shrink-0">{getFileIcon(f.file.type)}</div>
                         <div className="min-w-0 flex-1">
                           <p className="truncate text-sm font-medium text-foreground">{f.file.name}</p>
-                          <p className="text-xs text-muted-foreground">
+                          <p className="text-xs text-muted-brand">
                             {MATERIAL_TYPES.find((x) => x.key === f.materialType)?.label ?? f.materialType}
                             {hasError && (
                               <span className="ml-2 rounded-full bg-amber-100 px-1.5 py-0.5 text-[10px] font-medium text-amber-800">
@@ -1371,17 +1349,17 @@ export default function UploadMaterialsPage() {
                       {f.expanded && (
                         <div className="border-t border-border bg-secondary/20 p-3 space-y-3">
                           <label className="block space-y-1.5">
-                            <span className="text-xs font-medium text-muted-foreground">Title</span>
+                            <span className="text-xs font-medium text-muted-brand">Title</span>
                             <input
                               value={f.title}
                               onChange={(e) => updateFile(f.id, { title: e.target.value })}
                               placeholder="Auto-filled — you can edit"
-                              className="w-full rounded-2xl border border-border bg-background px-3 py-2.5 text-sm text-foreground outline-none placeholder:text-muted-foreground focus:border-border/80"
+                              className="w-full rounded-2xl border border-border bg-background px-3 py-2.5 text-sm text-foreground outline-none placeholder:text-muted-brand focus:border-border/80"
                             />
                           </label>
 
                           <div>
-                            <span className="text-xs font-medium text-muted-foreground">Material type</span>
+                            <span className="text-xs font-medium text-muted-brand">Material type</span>
                             <div className="mt-1.5 grid grid-cols-3 gap-1.5">
                               {MATERIAL_TYPES.map((t) => {
                                 const active = t.key === f.materialType;
@@ -1394,20 +1372,16 @@ export default function UploadMaterialsPage() {
                                       materialType: t.key,
                                       pqYear: t.key !== "past_question" ? "" : f.pqYear,
                                     })}
-                                    className="flex flex-col items-center rounded-xl border py-2 px-1 text-center transition"
-                                    style={
-                                      active
-                                        ? { borderColor: ACCENT, background: ACCENT_BG }
-                                        : { borderColor: "var(--color-border-tertiary)", background: "var(--color-background-primary)" }
-                                    }
+                                    className={cn(
+                                      "flex flex-col items-center rounded-xl border py-2 px-1 text-center transition",
+                                      active ? "border-primary bg-primary-light" : "border-border bg-background"
+                                    )}
                                   >
                                     <Icon
-                                      className="h-3.5 w-3.5 mb-1"
-                                      style={{ color: active ? ACCENT : "var(--color-text-secondary)" }}
+                                      className={cn("h-3.5 w-3.5 mb-1", active ? "text-primary" : "text-muted-brand")}
                                     />
                                     <span
-                                      className="text-[10px] font-medium leading-tight"
-                                      style={{ color: active ? ACCENT_TEXT : "var(--color-text-primary)" }}
+                                      className={cn("text-[10px] font-medium leading-tight", active ? "text-primary-text" : "text-foreground")}
                                     >
                                       {t.label}
                                     </span>
@@ -1420,26 +1394,26 @@ export default function UploadMaterialsPage() {
                           {f.materialType === "past_question" && (
                             <div className="grid grid-cols-2 gap-3">
                               <label className="block space-y-1.5">
-                                <span className="text-xs font-medium text-muted-foreground">Year</span>
+                                <span className="text-xs font-medium text-muted-brand">Year</span>
                                 <input
                                   inputMode="numeric"
                                   value={f.pqYear}
                                   onChange={(e) => updateFile(f.id, { pqYear: e.target.value ? Number(e.target.value) : "" })}
                                   placeholder="e.g. 2021"
                                   className={cn(
-                                    "w-full rounded-2xl border bg-background px-3 py-2 text-sm text-foreground outline-none placeholder:text-muted-foreground",
+                                    "w-full rounded-2xl border bg-background px-3 py-2 text-sm text-foreground outline-none placeholder:text-muted-brand",
                                     !f.pqYear ? "border-amber-400" : "border-border"
                                   )}
                                 />
                               </label>
                               <label className="block space-y-1.5">
-                                <span className="text-xs font-medium text-muted-foreground">Session</span>
+                                <span className="text-xs font-medium text-muted-brand">Session</span>
                                 <input
                                   value={f.pqSession}
                                   onChange={(e) => updateFile(f.id, { pqSession: e.target.value })}
                                   placeholder="2022/2023"
                                   className={cn(
-                                    "w-full rounded-2xl border bg-background px-3 py-2 text-sm text-foreground outline-none placeholder:text-muted-foreground",
+                                    "w-full rounded-2xl border bg-background px-3 py-2 text-sm text-foreground outline-none placeholder:text-muted-brand",
                                     !f.pqSession.includes("/") ? "border-amber-400" : "border-border"
                                   )}
                                 />
@@ -1454,14 +1428,11 @@ export default function UploadMaterialsPage() {
               </div>
 
               {/* Review queue notice */}
-              <div className="flex items-start gap-2.5 rounded-2xl p-3" style={{ background: ACCENT_BG }}>
-                <div
-                  className="mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-full text-[9px] font-bold text-white"
-                  style={{ background: ACCENT }}
-                >
+              <div className="flex items-start gap-2.5 rounded-2xl bg-primary-light p-3">
+                <div className="mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-primary text-[9px] font-bold text-white">
                   i
                 </div>
-                <p className="text-xs leading-relaxed" style={{ color: ACCENT_TEXT }}>
+                <p className="text-xs leading-relaxed text-primary-text">
                   Your upload goes to a review queue.{" "}
                   {isRep
                     ? "As a rep your uploads are auto-approved."
@@ -1476,11 +1447,10 @@ export default function UploadMaterialsPage() {
                   type="button"
                   disabled={!canSubmitStep3}
                   onClick={startUpload}
-                  className="inline-flex items-center gap-2 rounded-2xl px-6 py-3 text-sm font-medium transition"
-                  style={{
-                    background: canSubmitStep3 ? ACCENT : "var(--color-background-secondary)",
-                    color: canSubmitStep3 ? "#fff" : "var(--color-text-tertiary)",
-                  }}
+                  className={cn(
+                    "inline-flex items-center gap-2 rounded-2xl px-6 py-3 text-sm font-medium transition",
+                    canSubmitStep3 ? "bg-primary text-white" : "bg-secondary text-muted-brand"
+                  )}
                 >
                   <UploadCloud className="h-4 w-4" />
                   Submit {files.length} upload{files.length === 1 ? "" : "s"}
@@ -1493,11 +1463,10 @@ export default function UploadMaterialsPage() {
                   type="button"
                   disabled={!canSubmitStep3}
                   onClick={startUpload}
-                  className="w-full inline-flex items-center justify-center gap-2 rounded-2xl py-3.5 text-sm font-medium transition"
-                  style={{
-                    background: canSubmitStep3 ? ACCENT : "var(--color-background-secondary)",
-                    color: canSubmitStep3 ? "#fff" : "var(--color-text-tertiary)",
-                  }}
+                  className={cn(
+                    "w-full inline-flex items-center justify-center gap-2 rounded-2xl py-3.5 text-sm font-medium transition",
+                    canSubmitStep3 ? "bg-primary text-white" : "bg-secondary text-muted-brand"
+                  )}
                 >
                   <UploadCloud className="h-4 w-4" />
                   {filesWithErrors.length > 0
@@ -1513,7 +1482,7 @@ export default function UploadMaterialsPage() {
           {step === "queue" && (
             <section className="space-y-4">
               <div className="flex items-center justify-between">
-                <p className="text-xs font-medium uppercase tracking-widest text-muted-foreground">
+                <p className="text-xs font-medium uppercase tracking-widest text-muted-brand">
                   Upload queue
                 </p>
                 <button
@@ -1530,7 +1499,7 @@ export default function UploadMaterialsPage() {
                   className={cn(
                     "rounded-2xl px-4 py-3.5",
                     isRep
-                      ? "border border-[#AFA9EC] bg-[#EEEDFE] dark:border-[#5B35D5]/40 dark:bg-[#5B35D5]/10"
+                      ? "border border-primary/30 bg-primary-light dark:border-primary/40 dark:bg-primary/10"
                       : "border border-emerald-300/50 bg-emerald-50 dark:border-emerald-700/40 dark:bg-emerald-950/20"
                   )}
                 >
@@ -1538,13 +1507,13 @@ export default function UploadMaterialsPage() {
                     <CheckCircle2
                       className={cn(
                         "h-4 w-4 shrink-0",
-                        isRep ? "text-[#5B35D5] dark:text-indigo-300" : "text-emerald-600 dark:text-emerald-400"
+                        isRep ? "text-primary dark:text-indigo-300" : "text-emerald-600 dark:text-emerald-400"
                       )}
                     />
                     <p
                       className={cn(
                         "text-sm font-extrabold",
-                        isRep ? "text-[#3C3489] dark:text-indigo-200" : "text-emerald-900 dark:text-emerald-200"
+                        isRep ? "text-primary-text dark:text-indigo-200" : "text-emerald-900 dark:text-emerald-200"
                       )}
                     >
                       {isRep
@@ -1556,7 +1525,7 @@ export default function UploadMaterialsPage() {
                   <p
                     className={cn(
                       "mb-3 text-xs leading-relaxed",
-                      isRep ? "text-[#534AB7] dark:text-indigo-300" : "text-emerald-800/80 dark:text-emerald-300"
+                      isRep ? "text-primary/70 dark:text-indigo-300" : "text-emerald-800/80 dark:text-emerald-300"
                     )}
                   >
                     {isRep
@@ -1571,7 +1540,7 @@ export default function UploadMaterialsPage() {
                         className={cn(
                           "inline-flex items-center gap-1.5 rounded-xl px-3 py-1.5 text-xs font-extrabold text-white no-underline",
                           isRep
-                            ? "bg-[#5B35D5] hover:bg-[#4526B8]"
+                            ? "bg-primary hover:opacity-90"
                             : "bg-emerald-700 hover:bg-emerald-800 dark:bg-emerald-600 dark:hover:bg-emerald-700"
                         )}
                       >
@@ -1585,7 +1554,7 @@ export default function UploadMaterialsPage() {
                       className={cn(
                         "inline-flex items-center gap-1.5 rounded-xl border px-3 py-1.5 text-xs font-extrabold",
                         isRep
-                          ? "border-[#AFA9EC] bg-white/70 text-[#3C3489] hover:bg-white dark:border-[#5B35D5]/40 dark:bg-[#5B35D5]/10 dark:text-indigo-300"
+                          ? "border-primary/30 bg-white/70 text-primary-text hover:bg-white dark:border-primary/40 dark:bg-primary/10 dark:text-indigo-300"
                           : "border-emerald-300/60 bg-white/70 text-emerald-800 hover:bg-white dark:border-emerald-700/40 dark:bg-emerald-950/30 dark:text-emerald-300"
                       )}
                     >
@@ -1604,14 +1573,14 @@ export default function UploadMaterialsPage() {
                 return (
                   <div className="grid grid-cols-4 gap-2">
                     {[
-                      { label: "Done",     value: done,      color: "#1D9E75" },
-                      { label: "Uploading",value: uploading, color: ACCENT    },
-                      { label: "Queued",   value: queued,    color: "#6B7280" },
-                      { label: "Failed",   value: failed,    color: "#DC2626" },
-                    ].map(({ label, value, color }) => (
+                      { label: "Done",      value: done,      textClass: "text-emerald-600" },
+                      { label: "Uploading", value: uploading, textClass: "text-primary"     },
+                      { label: "Queued",    value: queued,    textClass: "text-zinc-500"    },
+                      { label: "Failed",    value: failed,    textClass: "text-rose-600"    },
+                    ].map(({ label, value, textClass }) => (
                       <div key={label} className="rounded-2xl border border-border bg-background p-3 text-center">
-                        <p className="text-lg font-semibold" style={{ color }}>{value}</p>
-                        <p className="text-[10px] text-muted-foreground">{label}</p>
+                        <p className={cn("text-lg font-semibold", textClass)}>{value}</p>
+                        <p className="text-[10px] text-muted-brand">{label}</p>
                       </div>
                     ))}
                   </div>
@@ -1626,7 +1595,7 @@ export default function UploadMaterialsPage() {
                       <div className="shrink-0">{getFileIcon(qEntry.file.type)}</div>
                       <div className="min-w-0 flex-1">
                         <p className="truncate text-sm font-medium text-foreground">{qEntry.file.name}</p>
-                        <p className="truncate text-xs text-muted-foreground">{qEntry.title}</p>
+                        <p className="truncate text-xs text-muted-brand">{qEntry.title}</p>
                       </div>
                       <div className="shrink-0">
                         {qEntry.status === "queued" && (
@@ -1635,10 +1604,7 @@ export default function UploadMaterialsPage() {
                           </span>
                         )}
                         {qEntry.status === "uploading" && (
-                          <span
-                            className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium"
-                            style={{ background: ACCENT_BG, color: ACCENT_TEXT }}
-                          >
+                          <span className="inline-flex items-center gap-1 rounded-full bg-primary-light px-2 py-0.5 text-[10px] font-medium text-primary-text">
                             <Loader2 className="h-3 w-3 animate-spin" /> Uploading
                           </span>
                         )}
@@ -1660,11 +1626,11 @@ export default function UploadMaterialsPage() {
                       <div className="mt-2">
                         <div className="h-1.5 overflow-hidden rounded-full bg-secondary">
                           <div
-                            className="h-full rounded-full transition-all duration-300"
-                            style={{
-                              width: `${qEntry.progress}%`,
-                              background: qEntry.status === "done" ? "#1D9E75" : ACCENT,
-                            }}
+                            className={cn(
+                              "h-full rounded-full transition-all duration-300",
+                              qEntry.status === "done" ? "bg-emerald-600" : "bg-primary"
+                            )}
+                            style={{ width: `${qEntry.progress}%` }}
                           />
                         </div>
                       </div>
@@ -1701,7 +1667,7 @@ export default function UploadMaterialsPage() {
                 <div className="flex items-start justify-between gap-3 border-b border-border px-4 py-3">
                   <div>
                     <p className="text-sm font-medium text-foreground">Create a course</p>
-                    <p className="mt-0.5 text-xs text-muted-foreground">
+                    <p className="mt-0.5 text-xs text-muted-brand">
                       {isRep && role === "course_rep"
                         ? "Only within your department and assigned level(s)."
                         : "Visible to all students once created."}
@@ -1710,7 +1676,7 @@ export default function UploadMaterialsPage() {
                   <button
                     type="button"
                     onClick={() => setShowCreateCourse(false)}
-                    className="rounded-xl p-2 text-muted-foreground hover:bg-secondary/50"
+                    className="rounded-xl p-2 text-muted-brand hover:bg-secondary/50"
                   >
                     <X className="h-4 w-4" />
                   </button>
@@ -1719,22 +1685,22 @@ export default function UploadMaterialsPage() {
                 <div className="p-4 space-y-3">
                   <div className="grid gap-3 sm:grid-cols-2">
                     <label className="block space-y-1.5">
-                      <span className="text-xs font-medium text-muted-foreground">Course code</span>
+                      <span className="text-xs font-medium text-muted-brand">Course code</span>
                       <div className="flex items-center gap-2 rounded-2xl border border-border bg-background px-3 py-2">
-                        <Hash className="h-4 w-4 text-muted-foreground" />
+                        <Hash className="h-4 w-4 text-muted-brand" />
                         <input
                           value={reqCode}
                           onChange={(e) => setReqCode(e.target.value)}
                           onBlur={() => setReqCode((v) => normalizeCourseCode(v))}
                           placeholder="e.g. CSC 201"
-                          className="w-full bg-transparent text-sm text-foreground outline-none placeholder:text-muted-foreground"
+                          className="w-full bg-transparent text-sm text-foreground outline-none placeholder:text-muted-brand"
                         />
                       </div>
-                      <p className="text-[11px] text-muted-foreground">Auto-formatted to "CSC 201".</p>
+                      <p className="text-[11px] text-muted-brand">Auto-formatted to "CSC 201".</p>
                     </label>
 
                     <label className="block space-y-1.5">
-                      <span className="text-xs font-medium text-muted-foreground">Semester</span>
+                      <span className="text-xs font-medium text-muted-brand">Semester</span>
                       <select
                         value={reqSemester}
                         onChange={(e) => setReqSemester(e.target.value as Semester)}
@@ -1747,24 +1713,24 @@ export default function UploadMaterialsPage() {
                     </label>
 
                     <label className="block space-y-1.5 sm:col-span-2">
-                      <span className="text-xs font-medium text-muted-foreground">Course title (optional)</span>
+                      <span className="text-xs font-medium text-muted-brand">Course title (optional)</span>
                       <div className="flex items-center gap-2 rounded-2xl border border-border bg-background px-3 py-2">
-                        <BookOpen className="h-4 w-4 text-muted-foreground" />
+                        <BookOpen className="h-4 w-4 text-muted-brand" />
                         <input
                           value={reqTitle}
                           onChange={(e) => setReqTitle(e.target.value)}
                           placeholder="e.g. Data Structures"
-                          className="w-full bg-transparent text-sm text-foreground outline-none placeholder:text-muted-foreground"
+                          className="w-full bg-transparent text-sm text-foreground outline-none placeholder:text-muted-brand"
                         />
                       </div>
                     </label>
 
                     <label className="block space-y-1.5 sm:col-span-2">
-                      <span className="text-xs font-medium text-muted-foreground">Level</span>
+                      <span className="text-xs font-medium text-muted-brand">Level</span>
                       {isRep && role === "course_rep" && Array.isArray(allowedLevels) && allowedLevels.length === 1 ? (
                         <div className="flex items-center justify-between rounded-2xl border border-border bg-secondary/50 px-3 py-2 text-sm">
                           <span className="font-medium text-foreground">{LEVEL_LABEL(allowedLevels[0])}</span>
-                          <span className="text-xs text-muted-foreground">Locked</span>
+                          <span className="text-xs text-muted-brand">Locked</span>
                         </div>
                       ) : (
                         <select
@@ -1784,11 +1750,8 @@ export default function UploadMaterialsPage() {
                     </label>
                   </div>
 
-                  <div
-                    className="flex items-start gap-2 rounded-2xl p-3 text-xs"
-                    style={{ background: ACCENT_BG, color: ACCENT_TEXT }}
-                  >
-                    <Info className="mt-0.5 h-4 w-4 shrink-0" style={{ color: ACCENT }} />
+                  <div className="flex items-start gap-2 rounded-2xl bg-primary-light p-3 text-xs text-primary-text">
+                    <Info className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
                     Use official codes (e.g. <strong>CSC 201</strong>). Prevents duplicates and makes search easy.
                   </div>
 
@@ -1805,10 +1768,9 @@ export default function UploadMaterialsPage() {
                       onClick={submitCreateCourse}
                       disabled={reqLoading}
                       className={cn(
-                        "inline-flex items-center justify-center rounded-2xl px-4 py-2.5 text-sm font-medium text-white",
+                        "inline-flex items-center justify-center rounded-2xl bg-primary px-4 py-2.5 text-sm font-medium text-white",
                         reqLoading ? "opacity-60" : ""
                       )}
-                      style={{ background: ACCENT }}
                     >
                       {reqLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                       Create course

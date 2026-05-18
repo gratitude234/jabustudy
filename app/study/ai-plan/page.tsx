@@ -147,7 +147,7 @@ function SectionCard({
         </span>
         <div>
           <p className="text-[13px] font-semibold text-foreground">{title}</p>
-          <p className="text-[12px] text-muted-foreground mt-px">{sub}</p>
+          <p className="text-[12px] text-muted-brand mt-px">{sub}</p>
         </div>
       </div>
       {children}
@@ -225,10 +225,10 @@ function CourseTagInput({
           onKeyDown={handleKeyDown}
           onBlur={commit}
           placeholder={courses.length === 0 ? "e.g. MTH 201, PHY 301…" : "Add more…"}
-          className="min-w-[100px] flex-1 bg-transparent text-[13px] text-foreground placeholder:text-muted-foreground/50 outline-none py-0.5"
+          className="min-w-[100px] flex-1 bg-transparent text-[13px] text-foreground placeholder:text-muted-brand/50 outline-none py-0.5"
         />
       </div>
-      <p className="mt-1.5 text-[11px] text-muted-foreground">
+      <p className="mt-1.5 text-[11px] text-muted-brand">
         ↵ Enter to add · Backspace to remove last ·{" "}
         <span className="font-medium text-foreground">
           {courses.length} course{courses.length !== 1 ? "s" : ""} added
@@ -266,7 +266,7 @@ function GpaSection({
       <div className="grid grid-cols-[1fr_auto_1fr] items-end gap-2">
         {/* Current */}
         <div className="flex flex-col gap-1">
-          <label className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+          <label className="text-[11px] font-semibold uppercase tracking-wide text-muted-brand">
             Current CGPA
           </label>
           <input
@@ -280,16 +280,16 @@ function GpaSection({
             className="w-full rounded-xl border border-border bg-secondary/40 px-3 py-2 text-[15px] font-semibold text-foreground outline-none transition focus:border-violet-400 focus:bg-background focus:ring-2 focus:ring-violet-500/20"
           />
           {currentPrefilled && (
-            <p className="mt-1 text-[10px] text-[#5B35D5] dark:text-indigo-300">
+            <p className="mt-1 text-[10px] text-primary dark:text-indigo-300">
               Pre-filled from your GPA calculator
             </p>
           )}
         </div>
         {/* Arrow */}
-        <span className="pb-2.5 text-lg text-muted-foreground/50">→</span>
+        <span className="pb-2.5 text-lg text-muted-brand/50">→</span>
         {/* Target */}
         <div className="flex flex-col gap-1">
-          <label className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+          <label className="text-[11px] font-semibold uppercase tracking-wide text-muted-brand">
             Target CGPA
           </label>
           <input
@@ -303,7 +303,7 @@ function GpaSection({
             className="w-full rounded-xl border border-border bg-secondary/40 px-3 py-2 text-[15px] font-semibold text-foreground outline-none transition focus:border-violet-400 focus:bg-background focus:ring-2 focus:ring-violet-500/20"
           />
           {targetPrefilled && (
-            <p className="mt-1 text-[10px] text-[#5B35D5] dark:text-indigo-300">
+            <p className="mt-1 text-[10px] text-primary dark:text-indigo-300">
               Pre-filled from your GPA calculator
             </p>
           )}
@@ -320,7 +320,7 @@ function GpaSection({
             />
           </div>
           <div className="mt-1.5 flex justify-between text-[11px]">
-            <span className="text-muted-foreground">{cur.toFixed(2)}</span>
+            <span className="text-muted-brand">{cur.toFixed(2)}</span>
             {hasBoth && (
               <span
                 className={cn(
@@ -329,7 +329,7 @@ function GpaSection({
                     ? "text-violet-600 dark:text-violet-400"
                     : parseFloat(diff) < 0
                     ? "text-rose-500"
-                    : "text-muted-foreground"
+                    : "text-muted-brand"
                 )}
               >
                 Target: {tgt.toFixed(2)}{" "}
@@ -378,17 +378,17 @@ function WeekCard({
             </span>
             <p className="text-sm font-extrabold text-foreground">{week.theme}</p>
           </div>
-          <p className="mt-0.5 text-xs text-muted-foreground line-clamp-1">{week.weeklyGoal}</p>
+          <p className="mt-0.5 text-xs text-muted-brand line-clamp-1">{week.weeklyGoal}</p>
         </div>
         {open
-          ? <ChevronUp className="h-4 w-4 shrink-0 text-muted-foreground" />
-          : <ChevronDown className="h-4 w-4 shrink-0 text-muted-foreground" />
+          ? <ChevronUp className="h-4 w-4 shrink-0 text-muted-brand" />
+          : <ChevronDown className="h-4 w-4 shrink-0 text-muted-brand" />
         }
       </button>
 
       {open && (
         <div className="border-t border-border px-4 pb-4 pt-3 space-y-2">
-          <p className="text-xs font-semibold text-muted-foreground mb-3">
+          <p className="text-xs font-semibold text-muted-brand mb-3">
             Goal: <span className="text-foreground">{week.weeklyGoal}</span>
           </p>
           {week.days.map((d, dayIdx) => {
@@ -417,7 +417,7 @@ function WeekCard({
                     </p>
                     {done && <span className="text-emerald-600 text-xs font-semibold">✓</span>}
                   </div>
-                  <span className="inline-flex items-center gap-1 rounded-full border border-border bg-background/70 px-2 py-0.5 text-[10px] font-semibold text-muted-foreground">
+                  <span className="inline-flex items-center gap-1 rounded-full border border-border bg-background/70 px-2 py-0.5 text-[10px] font-semibold text-muted-brand">
                     <Clock className="h-3 w-3" /> {d.hours}h
                   </span>
                 </div>
@@ -426,7 +426,7 @@ function WeekCard({
                 </p>
                 <ul className="space-y-1">
                   {d.tasks.map((t, i) => (
-                    <li key={i} className="flex items-start gap-1.5 text-xs text-muted-foreground">
+                    <li key={i} className="flex items-start gap-1.5 text-xs text-muted-brand">
                       <span className="mt-0.5 h-1.5 w-1.5 shrink-0 rounded-full bg-current opacity-60" />
                       {t}
                     </li>
@@ -440,11 +440,11 @@ function WeekCard({
                       href={`/study/practice?course=${encodeURIComponent(code)}&view=for_you`}
                       className={cn(
                         "mt-2 inline-flex items-center gap-1.5 rounded-xl",
-                        "border border-[#AFA9EC] bg-[#EEEDFE]/70 px-3 py-1.5",
-                        "text-[11px] font-extrabold text-[#3C3489] no-underline",
-                        "transition hover:bg-[#EEEDFE]",
-                        "dark:border-[#5B35D5]/40 dark:bg-[#5B35D5]/10",
-                        "dark:text-indigo-200 dark:hover:bg-[#5B35D5]/20"
+                        "border border-primary/30 bg-primary-light/70 px-3 py-1.5",
+                        "text-[11px] font-extrabold text-primary-text no-underline",
+                        "transition hover:bg-primary-light",
+                        "dark:border-primary/40 dark:bg-primary/10",
+                        "dark:text-indigo-200 dark:hover:bg-primary/20"
                       )}
                     >
                       <Zap className="h-3 w-3" />
@@ -970,19 +970,19 @@ export default function AiStudyPlanPage() {
               <Sparkles className="h-3 w-3" /> Gemini
             </span>
           </div>
-          <p className="text-[13px] text-muted-foreground">Personalised week-by-week study schedule</p>
+          <p className="text-[13px] text-muted-brand">Personalised week-by-week study schedule</p>
         </div>
       </div>
 
       {profileComplete === false ? (
-        <div className="rounded-3xl border border-[#5B35D5]/20 bg-card p-5 shadow-sm">
+        <div className="rounded-3xl border border-primary/20 bg-card p-5 shadow-sm">
           <p className="text-base font-extrabold text-foreground">Set up your academic profile first</p>
-          <p className="mt-1 text-sm text-muted-foreground">
+          <p className="mt-1 text-sm text-muted-brand">
             AI Study Plan needs your official department, level, semester and courses to generate a useful plan.
           </p>
           <Link
             href="/study/onboarding?next=/study/ai-plan"
-            className="mt-4 inline-flex items-center gap-2 rounded-2xl bg-[#5B35D5] px-4 py-3 text-sm font-bold text-white no-underline hover:bg-[#4a2bb0]"
+            className="mt-4 inline-flex items-center gap-2 rounded-2xl bg-primary px-4 py-3 text-sm font-bold text-white no-underline hover:bg-[#4a2bb0]"
           >
             Complete setup <ArrowRight className="h-4 w-4" />
           </Link>
@@ -994,27 +994,27 @@ export default function AiStudyPlanPage() {
           <div className="mb-3 flex items-center justify-between gap-3">
             <div>
               <p className="text-sm font-extrabold text-foreground">Your last study plan</p>
-              <p className="mt-0.5 text-xs text-muted-foreground">
+              <p className="mt-0.5 text-xs text-muted-brand">
                 Generated {savedPlanAt ? formatWhen(savedPlanAt) : "recently"} - {savedPlan.totalWeeks} weeks
               </p>
             </div>
             <button
               type="button"
               onClick={() => setPlan(savedPlan)}
-              className="rounded-xl border border-[#AFA9EC] px-3 py-1.5 text-xs font-bold text-[#5B35D5] transition hover:bg-[#EEEDFE] dark:border-[#5B35D5]/40 dark:text-indigo-200 dark:hover:bg-[#5B35D5]/10"
+              className="rounded-xl border border-primary/30 px-3 py-1.5 text-xs font-bold text-primary transition hover:bg-primary-light dark:border-primary/40 dark:text-indigo-200 dark:hover:bg-primary/10"
             >
               View →
             </button>
           </div>
-          <p className="line-clamp-2 text-xs text-muted-foreground">{savedPlan.summary}</p>
+          <p className="line-clamp-2 text-xs text-muted-brand">{savedPlan.summary}</p>
         </div>
       ) : null}
 
       {/* ── Prefill banner */}
       {prefilling ? (
         <div className="flex items-center gap-2 rounded-xl border border-border bg-secondary/40 px-3 py-2">
-          <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground" />
-          <p className="text-xs text-muted-foreground">Loading your courses…</p>
+          <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-brand" />
+          <p className="text-xs text-muted-brand">Loading your courses…</p>
         </div>
       ) : prefillSource ? (
         <div className="flex items-center gap-2 rounded-xl border border-violet-200/60 bg-violet-50/60 px-3 py-2 dark:border-violet-700/30 dark:bg-violet-950/20">
@@ -1075,7 +1075,7 @@ export default function AiStudyPlanPage() {
         <div className="grid grid-cols-2 gap-4">
           {/* Weeks until exam */}
           <div className="flex flex-col gap-1.5">
-            <span className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+            <span className="text-[11px] font-semibold uppercase tracking-wide text-muted-brand">
               Weeks until exam
             </span>
             <div className="flex flex-wrap gap-1.5">
@@ -1091,7 +1091,7 @@ export default function AiStudyPlanPage() {
                       "rounded-lg border px-2.5 py-1.5 text-xs font-semibold transition",
                       isActive
                         ? URGENCY_WEEK_CHIP[urg]
-                        : "border-border bg-secondary/50 text-muted-foreground hover:border-border/80 hover:bg-secondary"
+                        : "border-border bg-secondary/50 text-muted-brand hover:border-border/80 hover:bg-secondary"
                     )}
                   >
                     {w}w
@@ -1107,7 +1107,7 @@ export default function AiStudyPlanPage() {
 
           {/* Daily hours */}
           <div className="flex flex-col gap-1.5">
-            <span className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+            <span className="text-[11px] font-semibold uppercase tracking-wide text-muted-brand">
               Daily study hours
             </span>
             <div className="flex flex-wrap gap-1.5">
@@ -1120,7 +1120,7 @@ export default function AiStudyPlanPage() {
                     "rounded-lg border px-2.5 py-1.5 text-xs font-semibold transition",
                     dailyHours === h
                       ? "border-violet-400 bg-violet-50 text-violet-800 dark:border-violet-700/60 dark:bg-violet-950/30 dark:text-violet-200"
-                      : "border-border bg-secondary/50 text-muted-foreground hover:border-border/80 hover:bg-secondary"
+                      : "border-border bg-secondary/50 text-muted-brand hover:border-border/80 hover:bg-secondary"
                   )}
                 >
                   {h}h
@@ -1140,13 +1140,13 @@ export default function AiStudyPlanPage() {
         title={
           <>
             Weak courses{" "}
-            <span className="ml-1 text-[11px] font-normal text-muted-foreground">optional</span>
+            <span className="ml-1 text-[11px] font-normal text-muted-brand">optional</span>
           </>
         }
         sub="These get extra days in your plan — tick any you're struggling with"
       >
         {courses.length === 0 ? (
-          <p className="text-[12px] text-muted-foreground py-1">
+          <p className="text-[12px] text-muted-brand py-1">
             Add courses above to select weak ones.
           </p>
         ) : (
@@ -1181,7 +1181,7 @@ export default function AiStudyPlanPage() {
                     "flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-xs font-semibold transition",
                     isWeak
                       ? "border-amber-400 bg-amber-50 text-amber-800 dark:border-amber-700/60 dark:bg-amber-950/30 dark:text-amber-200"
-                      : "border-border bg-secondary/50 text-muted-foreground hover:border-amber-300 hover:bg-amber-50/50 dark:hover:border-amber-700/40 dark:hover:bg-amber-950/10"
+                      : "border-border bg-secondary/50 text-muted-brand hover:border-amber-300 hover:bg-amber-50/50 dark:hover:border-amber-700/40 dark:hover:bg-amber-950/10"
                   )}
                 >
                   {/* Checkbox dot */}
@@ -1243,7 +1243,7 @@ export default function AiStudyPlanPage() {
               {streamingText.length} chars
             </span>
           </div>
-          <pre className="font-mono text-[10px] text-muted-foreground whitespace-pre-wrap max-h-40 overflow-hidden leading-relaxed">
+          <pre className="font-mono text-[10px] text-muted-brand whitespace-pre-wrap max-h-40 overflow-hidden leading-relaxed">
             {streamingText.length > 600
               ? "…" + streamingText.slice(-580)
               : streamingText}
@@ -1260,7 +1260,7 @@ export default function AiStudyPlanPage() {
             { dot: "#F59E0B", label: "Study tips" },
             { dot: "#EF4444", label: "Progress tracking" },
           ].map(({ dot, label }) => (
-            <span key={label} className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
+            <span key={label} className="flex items-center gap-1.5 text-[11px] text-muted-brand">
               <span className="h-1.5 w-1.5 rounded-full" style={{ background: dot }} />
               {label}
             </span>
@@ -1277,7 +1277,7 @@ export default function AiStudyPlanPage() {
           {/* Saved plan banner */}
           {savedPlanAt && (
             <div className="flex items-center justify-between gap-3 rounded-2xl border border-border bg-secondary/40 px-4 py-2.5">
-              <p className="text-xs text-muted-foreground">Generated {formatWhen(savedPlanAt)}</p>
+              <p className="text-xs text-muted-brand">Generated {formatWhen(savedPlanAt)}</p>
               <div className="flex items-center gap-2">
                 <button
                   type="button"
@@ -1289,7 +1289,7 @@ export default function AiStudyPlanPage() {
                 <button
                   type="button"
                   onClick={clearPlan}
-                  className="text-xs font-semibold text-muted-foreground hover:text-foreground"
+                  className="text-xs font-semibold text-muted-brand hover:text-foreground"
                 >
                   Clear
                 </button>
@@ -1313,7 +1313,7 @@ export default function AiStudyPlanPage() {
           {plan.generalTips?.length > 0 && (
             <div className="rounded-2xl border border-border bg-card p-4">
               <div className="flex items-center gap-2 mb-3">
-                <Target className="h-4 w-4 text-muted-foreground" />
+                <Target className="h-4 w-4 text-muted-brand" />
                 <p className="text-sm font-extrabold text-foreground">General Tips</p>
               </div>
               <ul className="space-y-2">
@@ -1329,7 +1329,7 @@ export default function AiStudyPlanPage() {
 
           {/* Week-by-week header */}
           <div className="flex items-center gap-2 px-1">
-            <BookOpen className="h-4 w-4 text-muted-foreground" />
+            <BookOpen className="h-4 w-4 text-muted-brand" />
             <p className="text-sm font-extrabold text-foreground">Week-by-Week Schedule</p>
           </div>
 
@@ -1340,7 +1340,7 @@ export default function AiStudyPlanPage() {
                   <p className="text-sm font-extrabold text-foreground">
                     Week {planCompletionStats.currentWeek} of {planCompletionStats.weeksTotal}
                   </p>
-                  <p className="mt-0.5 text-xs text-muted-foreground">
+                  <p className="mt-0.5 text-xs text-muted-brand">
                     {planCompletionStats.doneDays} of {planCompletionStats.totalDays} days complete
                   </p>
                 </div>
@@ -1349,7 +1349,7 @@ export default function AiStudyPlanPage() {
                     "text-lg font-extrabold tabular-nums",
                     planCompletionStats.pct === 100
                       ? "text-emerald-600 dark:text-emerald-400"
-                      : "text-[#5B35D5] dark:text-indigo-300"
+                      : "text-primary dark:text-indigo-300"
                   )}
                 >
                   {planCompletionStats.pct}%
@@ -1359,7 +1359,7 @@ export default function AiStudyPlanPage() {
                 <div
                   className={cn(
                     "h-full rounded-full transition-all duration-500",
-                    planCompletionStats.pct === 100 ? "bg-emerald-500" : "bg-[#5B35D5]"
+                    planCompletionStats.pct === 100 ? "bg-emerald-500" : "bg-primary"
                   )}
                   style={{ width: `${planCompletionStats.pct}%` }}
                 />
@@ -1383,7 +1383,7 @@ export default function AiStudyPlanPage() {
             />
           ))}
 
-          <p className="text-center text-[11px] text-muted-foreground px-4">
+          <p className="text-center text-[11px] text-muted-brand px-4">
             AI can make mistakes. Adjust this plan based on your actual syllabus and exam schedule.
           </p>
 
