@@ -28,12 +28,8 @@ import {
   History,
   Flame,
   Layers,
-  Plus,
   Loader2,
   Zap,
-  ShieldCheck,
-  Lock,
-  PenLine,
 } from "lucide-react";
 
 type SortKey = "newest" | "oldest";
@@ -686,7 +682,6 @@ function QuizSetCard({
   const bestPct       = summary?.bestPct ?? null;
   const isMastered    = bestPct != null && bestPct >= 70;
   const isPrivate = s.visibility === "private" && s.created_by === currentUserId;
-  const isOfficialAi = s.source === "rep_ai_bank";
 
   return (
     <Card className={cn(
@@ -722,11 +717,6 @@ function QuizSetCard({
             {isPrivate && (
               <span className="rounded-full border border-amber-300/40 bg-amber-100/30 px-1.5 py-0.5 text-[10px] font-extrabold text-amber-800 dark:bg-amber-950/20 dark:text-amber-300">
                 Private
-              </span>
-            )}
-            {isOfficialAi && (
-              <span className="rounded-full border border-primary/30 bg-primary-light px-1.5 py-0.5 text-[10px] font-extrabold text-primary-text">
-                AI-built
               </span>
             )}
           </div>
@@ -790,274 +780,7 @@ function QuizSetCard({
 
 // â"€â"€â"€ Rep status â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€
 
-type RepStatus = "loading" | "not_applied" | "pending" | "rejected" | "approved";
-
-type RepScope = {
-  faculty_id: string | null;
-  department_id: string | null;
-  levels: number[] | null;
-  all_levels: boolean;
-} | null;
-
 // â"€â"€â"€ Create Set Drawer â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€
-
-const SEMESTERS_OPT = ["1st", "2nd", "summer"] as const;
-const LEVELS_OPT    = [100, 200, 300, 400, 500, 600] as const;
-
-function CreateSetDrawer({
-  open,
-  onClose,
-  repScope,
-  onCreated,
-}: {
-  open: boolean;
-  onClose: () => void;
-  repScope: RepScope;
-  onCreated: (newId: string) => void;
-}) {
-  const router = useRouter();
-  const [title, setTitle]         = useState("");
-  const [description, setDesc]    = useState("");
-  const [courseCode, setCourse]   = useState("");
-  const [level, setLevel]         = useState("");
-  const [semester, setSemester]   = useState("");
-  const [timeLimit, setTimeLimit] = useState("");
-  const [difficulty, setDifficulty] = useState("");
-  const [saving, setSaving]       = useState(false);
-  const [err, setErr]             = useState<string | null>(null);
-
-  // Reset form whenever drawer opens
-  useEffect(() => {
-    if (!open) return;
-    setTitle(""); setDesc(""); setCourse("");
-    setLevel(""); setSemester(""); setTimeLimit("");
-    setDifficulty("");
-    setErr(null); setSaving(false);
-  }, [open]);
-
-  // Limit level options to rep's approved scope if applicable
-  const allowedLevels = repScope?.all_levels
-    ? LEVELS_OPT
-    : repScope?.levels?.length
-      ? (LEVELS_OPT.filter((l) => repScope!.levels!.includes(l)) as unknown as typeof LEVELS_OPT)
-      : LEVELS_OPT;
-
-  async function handleSubmit() {
-    const t = title.trim();
-    if (!t) { setErr("Title is required."); return; }
-
-    const lvNum = level ? Number(level) : null;
-    const tlNum = timeLimit ? Number(timeLimit) : null;
-
-    if (tlNum !== null && (!Number.isFinite(tlNum) || tlNum <= 0)) {
-      setErr("Time limit must be a positive number of minutes."); return;
-    }
-
-    setSaving(true);
-    setErr(null);
-
-    try {
-      const payload: Record<string, unknown> = {
-        title: t,
-        description: description.trim() || null,
-        course_code:  courseCode.trim().toUpperCase() || null,
-        level:        lvNum,
-        semester:     semester || null,
-        time_limit_minutes: tlNum,
-        difficulty:   difficulty || null,
-        published: false,
-        questions_count: 0,
-      };
-
-      const { data, error } = await supabase
-        .from("study_quiz_sets")
-        .insert(payload)
-        .select("id")
-        .single();
-
-      if (error) throw error;
-
-      const newId = (data as { id: string }).id;
-      onCreated(newId);
-      onClose();
-      // Navigate to the admin editor to add questions
-      router.push(`/study-admin/question-quality/${newId}`);
-    } catch (e: any) {
-      setErr(e?.message || "Failed to create set. Check your permissions.");
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  return (
-    <Drawer
-      open={open}
-      onClose={onClose}
-      title="Create practice set"
-      footer={
-        <div className="flex items-center gap-2">
-          <button
-            type="button"
-            onClick={onClose}
-            className={cn(
-              "inline-flex flex-1 items-center justify-center gap-2 rounded-2xl border border-border bg-background px-4 py-3 text-sm font-semibold text-foreground",
-              "hover:bg-secondary/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-card"
-            )}
-          >
-            Cancel
-          </button>
-          <button
-            type="button"
-            onClick={handleSubmit}
-            disabled={saving}
-            className={cn(
-              "inline-flex flex-1 items-center justify-center gap-2 rounded-2xl border border-foreground bg-foreground px-4 py-3 text-sm font-semibold text-background",
-              "hover:opacity-90 disabled:opacity-60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-card"
-            )}
-          >
-            {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <PenLine className="h-4 w-4" />}
-            {saving ? "Creating..." : "Create & add questions"}
-          </button>
-        </div>
-      }
-    >
-      <div className="space-y-3">
-        {err && (
-          <div className="flex items-start gap-2 rounded-2xl border border-red-200 bg-red-50 p-3 text-sm text-red-800">
-            <X className="mt-0.5 h-4 w-4 shrink-0" />
-            <span>{err}</span>
-          </div>
-        )}
-
-        {/* Rep badge */}
-        <div className="flex items-center gap-2 rounded-2xl border border-border bg-secondary/50 px-3 py-2">
-          <ShieldCheck className="h-4 w-4 shrink-0 text-muted-foreground" />
-          <p className="text-xs font-semibold text-muted-foreground">
-            {repScope?.all_levels
-              ? "Rep access - all levels"
-              : `Rep access - level${(repScope?.levels?.length ?? 0) > 1 ? "s" : ""} ${(repScope?.levels ?? []).join(", ")}`}
-          </p>
-        </div>
-
-        {/* Title */}
-        <label className="block rounded-2xl border border-border bg-background px-3 py-2">
-          <span className="text-xs font-semibold text-muted-foreground">Title *</span>
-          <input
-            value={title}
-            onChange={(e) => setTitle(e.target.value)}
-            placeholder="e.g. GST101 Past Questions 2024"
-            className="mt-1 w-full bg-transparent text-sm text-foreground outline-none placeholder:text-muted-foreground"
-            autoFocus
-          />
-        </label>
-
-        {/* Description */}
-        <label className="block rounded-2xl border border-border bg-background px-3 py-2">
-          <span className="text-xs font-semibold text-muted-foreground">Description (optional)</span>
-          <textarea
-            value={description}
-            onChange={(e) => setDesc(e.target.value)}
-            placeholder="Short description of what's covered..."
-            rows={2}
-            className="mt-1 w-full resize-none bg-transparent text-sm text-foreground outline-none placeholder:text-muted-foreground"
-          />
-        </label>
-
-        {/* Course + Level */}
-        <div className="grid gap-2 sm:grid-cols-2">
-          <label className="block rounded-2xl border border-border bg-background px-3 py-2">
-            <span className="text-xs font-semibold text-muted-foreground">Course code</span>
-            <input
-              value={courseCode}
-              onChange={(e) => setCourse(e.target.value)}
-              placeholder="e.g. GST101"
-              className="mt-1 w-full bg-transparent text-sm text-foreground uppercase outline-none placeholder:normal-case placeholder:text-muted-foreground"
-            />
-          </label>
-
-          <label className="block rounded-2xl border border-border bg-background px-3 py-2">
-            <span className="text-xs font-semibold text-muted-foreground">Level</span>
-            <select
-              value={level}
-              onChange={(e) => setLevel(e.target.value)}
-              className="mt-1 w-full bg-transparent text-sm text-foreground outline-none"
-            >
-              <option value="">Any level</option>
-              {allowedLevels.map((l) => (
-                <option key={l} value={l}>{l}L</option>
-              ))}
-            </select>
-          </label>
-        </div>
-
-        {/* Semester + Time limit */}
-        <div className="grid gap-2 sm:grid-cols-2">
-          <label className="block rounded-2xl border border-border bg-background px-3 py-2">
-            <span className="text-xs font-semibold text-muted-foreground">Semester</span>
-            <select
-              value={semester}
-              onChange={(e) => setSemester(e.target.value)}
-              className="mt-1 w-full bg-transparent text-sm text-foreground outline-none"
-            >
-              <option value="">Any</option>
-              {SEMESTERS_OPT.map((s) => (
-                <option key={s} value={s}>{s}</option>
-              ))}
-            </select>
-          </label>
-
-          <label className="block rounded-2xl border border-border bg-background px-3 py-2">
-            <span className="text-xs font-semibold text-muted-foreground">Time limit (minutes)</span>
-            <input
-              value={timeLimit}
-              onChange={(e) => setTimeLimit(e.target.value)}
-              placeholder="e.g. 60 (leave blank = untimed)"
-              inputMode="numeric"
-              className="mt-1 w-full bg-transparent text-sm text-foreground outline-none placeholder:text-muted-foreground"
-            />
-          </label>
-        </div>
-
-        {/* Difficulty */}
-        <div className="block rounded-2xl border border-border bg-background px-3 py-2">
-          <span className="text-xs font-semibold text-muted-foreground">Difficulty</span>
-          <div className="mt-2 grid grid-cols-4 gap-1.5">
-            {(["", "easy", "medium", "hard"] as const).map((d) => {
-              const label = d === "" ? "Any" : d === "easy" ? "Easy" : d === "medium" ? "Medium" : "Hard";
-              const active = difficulty === d;
-              return (
-                <button
-                  key={d}
-                  type="button"
-                  onClick={() => setDifficulty(d)}
-                  className={cn(
-                    "inline-flex items-center justify-center rounded-xl border px-2 py-2 text-[11px] font-semibold transition",
-                    active
-                      ? d === "" ? "border-border bg-secondary text-foreground"
-                        : d === "easy" ? "border-emerald-300 bg-emerald-50 text-emerald-700"
-                        : d === "medium" ? "border-amber-300 bg-amber-50 text-amber-700"
-                        : "border-rose-300 bg-rose-50 text-rose-700"
-                      : "border-border/60 bg-background text-muted-foreground hover:bg-secondary/50"
-                  )}
-                >
-                  {label}
-                </button>
-              );
-            })}
-          </div>
-          <p className="mt-1.5 text-[10px] text-muted-foreground">
-            Easy = warm-up / 10 or fewer Qs. Medium = 11-30 Qs. Hard = exam sim / 30+ Qs
-          </p>
-        </div>
-
-        <p className="text-xs text-muted-foreground">
-          After creating the set you'll be taken to the editor to add questions. The set starts unpublished - submit it
-          for review when ready.
-        </p>
-      </div>
-    </Drawer>
-  );
-}
 
 // â"€â"€â"€ "Suggested for today" widget â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€
 
@@ -1275,32 +998,6 @@ function PracticeHomeInner() {
     const t = window.setTimeout(() => setToast(null), 2600);
     return () => window.clearTimeout(t);
   }, [toast]);
-
-  // â"€â"€ Rep status (gates "Create set" button) â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€
-  const [repStatus, setRepStatus]   = useState<RepStatus>("loading");
-  const [repScope, setRepScope]     = useState<RepScope>(null);
-  const [createOpen, setCreateOpen] = useState(false);
-
-  useEffect(() => {
-    let mounted = true;
-    (async () => {
-      try {
-        const res = await fetch("/api/study/rep-applications/me");
-        if (!res.ok) { if (mounted) setRepStatus("not_applied"); return; }
-        const json = await res.json();
-        if (!mounted) return;
-        if (json.status === "approved") {
-          setRepStatus("approved");
-          setRepScope(json.scope ?? null);
-        } else {
-          setRepStatus(json.status ?? "not_applied");
-        }
-      } catch {
-        if (mounted) setRepStatus("not_applied");
-      }
-    })();
-    return () => { mounted = false; };
-  }, []);
 
   // Pagination
   const PAGE_SIZE = 12;
@@ -2027,20 +1724,6 @@ function PracticeHomeInner() {
       {/* Tabs: For you / Recent / All */}
       <div className="flex items-center justify-between gap-3">
         <MiniTabs value={viewParam} onChange={setView} />
-        {repStatus === "approved" && (
-          <button
-            type="button"
-            onClick={() => setCreateOpen(true)}
-            className={cn(
-              "inline-flex shrink-0 items-center gap-2 rounded-2xl border border-primary/20 bg-primary-light px-3 py-2 text-sm font-semibold text-primary-text",
-              "hover:bg-primary/10",
-              "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
-            )}
-          >
-            <Plus className="h-4 w-4" />
-            Create set
-          </button>
-        )}
       </div>
 
       {/* Suggested for today widget */}
@@ -2357,17 +2040,6 @@ function PracticeHomeInner() {
         </>
       )}
 
-      {/* Rep status info banners */}
-      {repStatus === "pending" && (
-        <div className="flex items-start gap-3 rounded-3xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800 dark:border-amber-800/40 dark:bg-amber-950/30 dark:text-amber-300">
-          <Lock className="mt-0.5 h-4 w-4 shrink-0" />
-          <div>
-            <p className="font-semibold">Rep application pending</p>
-            <p className="mt-0.5 text-xs opacity-80">Your rep application is under review. You'll be able to create sets once approved.</p>
-          </div>
-        </div>
-      )}
-
       {/* Filters drawer */}
       <Drawer
         open={drawerOpen}
@@ -2633,14 +2305,6 @@ function PracticeHomeInner() {
           <p className="text-sm text-muted-foreground">Nothing to preview.</p>
         )}
       </Drawer>
-
-      {/* Create set drawer (rep-gated) */}
-      <CreateSetDrawer
-        open={createOpen}
-        onClose={() => setCreateOpen(false)}
-        repScope={repScope}
-        onCreated={(id) => setToast(`Set created - redirecting to editor...`)}
-      />
 
       {/* Request course modal */}
       <RequestCourseModal

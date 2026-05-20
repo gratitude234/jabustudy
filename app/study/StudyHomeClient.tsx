@@ -13,7 +13,6 @@ import { HeroCard } from "./_components/HeroCard";
 import { QuickActions } from "./_components/QuickActions";
 import BannerSlot from "./_components/BannerSlot";
 import StatsStrip from "./_components/StatsStrip";
-import QuickStartChecklist from "./_components/QuickStartChecklist";
 
 export default function StudyHomeClient() {
   return (
@@ -231,7 +230,6 @@ function StudyHomeInner() {
     setSwitchingSemester(false);
   }
 
-  const isNewUser = totalAttempts === 0;
 
   return (
     <div className="pb-28 md:pb-6 lg:flex lg:items-start lg:gap-6">
@@ -291,15 +289,9 @@ function StudyHomeInner() {
 
       <QuickActions repStatus={rep.status} />
 
-      {userId && totalAttempts === null ? (
-        <div className="h-20 animate-pulse rounded-3xl bg-muted" />
+      {userId && totalAttempts !== null && totalAttempts > 0 ? (
+        <StatsStrip userId={userId} />
       ) : null}
-
-      {userId && totalAttempts !== null
-          ? isNewUser
-          ? <QuickStartChecklist userId={userId} hasPrefs={isProfileComplete} />
-          : <StatsStrip userId={userId} />
-        : null}
 
       <ForYouSection chips={chips} setChips={setChips} onClearFilters={clearFilters} />
 

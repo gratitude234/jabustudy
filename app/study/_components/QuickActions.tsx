@@ -37,7 +37,7 @@ const TILES: readonly (QuickActionLinkTile | QuickActionMoreTile)[] = [
   {
     href: "/study/practice",
     label: "Practice",
-    sublabel: "AI-generated Qs",
+    sublabel: "Past questions",
     icon: Sparkles,
     primary: true,
     isNew: false,
