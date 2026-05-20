@@ -88,6 +88,44 @@ type QuizSetRow = {
   created_at?: string | null;
 };
 
+const PRACTICE_SET_BASE_FIELDS = [
+  "id",
+  "title",
+  "description",
+  "course_code",
+  "level",
+  "created_at",
+  "created_by",
+] as const;
+
+const PRACTICE_SET_OPTIONAL_FIELDS = [
+  "semester",
+  "time_limit_minutes",
+  "difficulty",
+  "published",
+  "questions_count",
+  "visibility",
+  "source",
+] as const;
+
+type PracticeSetOptionalField = (typeof PRACTICE_SET_OPTIONAL_FIELDS)[number];
+
+function isMissingPracticeSetColumn(message: string, column: PracticeSetOptionalField) {
+  const lower = message.toLowerCase();
+  return lower.includes(`study_quiz_sets.${column}`) || lower.includes(`'${column}'`) || lower.includes(column);
+}
+
+function missingPracticeSetColumn(message: string) {
+  return PRACTICE_SET_OPTIONAL_FIELDS.find((column) => isMissingPracticeSetColumn(message, column)) ?? null;
+}
+
+function practiceSetSelectFields(disabledColumns: Set<PracticeSetOptionalField>) {
+  return [
+    ...PRACTICE_SET_BASE_FIELDS,
+    ...PRACTICE_SET_OPTIONAL_FIELDS.filter((field) => !disabledColumns.has(field)),
+  ].join(",");
+}
+
 type LatestAttempt = {
   id: string;
   set_id: string | null;
@@ -338,7 +376,7 @@ function DifficultyBadge({ difficulty }: { difficulty: "easy" | "medium" | "hard
         s.className
       )}
     >
-      {difficulty === "easy" ? "â—" : difficulty === "medium" ? "â—†" : "â–²"} {s.label}
+      {difficulty === "easy" ? "Easy" : difficulty === "medium" ? "Medium" : "Hard"}
     </span>
   );
 }
@@ -878,7 +916,7 @@ function CreateSetDrawer({
             )}
           >
             {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <PenLine className="h-4 w-4" />}
-            {saving ? "Creatingâ€¦" : "Create & add questions"}
+            {saving ? "Creating..." : "Create & add questions"}
           </button>
         </div>
       }
@@ -896,8 +934,8 @@ function CreateSetDrawer({
           <ShieldCheck className="h-4 w-4 shrink-0 text-muted-foreground" />
           <p className="text-xs font-semibold text-muted-foreground">
             {repScope?.all_levels
-              ? "Rep access â€" all levels"
-              : `Rep access â€" level${(repScope?.levels?.length ?? 0) > 1 ? "s" : ""} ${(repScope?.levels ?? []).join(", ")}`}
+              ? "Rep access - all levels"
+              : `Rep access - level${(repScope?.levels?.length ?? 0) > 1 ? "s" : ""} ${(repScope?.levels ?? []).join(", ")}`}
           </p>
         </div>
 
@@ -919,7 +957,7 @@ function CreateSetDrawer({
           <textarea
             value={description}
             onChange={(e) => setDesc(e.target.value)}
-            placeholder="Short description of what's coveredâ€¦"
+            placeholder="Short description of what's covered..."
             rows={2}
             className="mt-1 w-full resize-none bg-transparent text-sm text-foreground outline-none placeholder:text-muted-foreground"
           />
@@ -985,7 +1023,7 @@ function CreateSetDrawer({
           <span className="text-xs font-semibold text-muted-foreground">Difficulty</span>
           <div className="mt-2 grid grid-cols-4 gap-1.5">
             {(["", "easy", "medium", "hard"] as const).map((d) => {
-              const label = d === "" ? "Any" : d === "easy" ? "â— Easy" : d === "medium" ? "â—† Medium" : "â–² Hard";
+              const label = d === "" ? "Any" : d === "easy" ? "Easy" : d === "medium" ? "Medium" : "Hard";
               const active = difficulty === d;
               return (
                 <button
@@ -1008,12 +1046,12 @@ function CreateSetDrawer({
             })}
           </div>
           <p className="mt-1.5 text-[10px] text-muted-foreground">
-            Easy = warm-up / â‰¤10 Qs Â· Medium = 11â€"30 Qs Â· Hard = exam sim / 30+ Qs
+            Easy = warm-up / 10 or fewer Qs. Medium = 11-30 Qs. Hard = exam sim / 30+ Qs
           </p>
         </div>
 
         <p className="text-xs text-muted-foreground">
-          After creating the set you'll be taken to the editor to add questions. The set starts unpublished â€" submit it
+          After creating the set you'll be taken to the editor to add questions. The set starts unpublished - submit it
           for review when ready.
         </p>
       </div>
@@ -1565,74 +1603,94 @@ function PracticeHomeInner() {
     }
 
     try {
-      const selectFields =
-        "id,title,description,course_code,level,semester,time_limit_minutes,difficulty,published,questions_count,created_at,visibility,created_by,source";
-
-      let query = supabase.from("study_quiz_sets").select(selectFields, { count: "exact" });
-
-      // Always filter to published sets â€" unpublished sets are not accessible to students
-      query = query.eq("published", true);
-
-      const qNorm = normalizeQuery(qParam);
-      if (authedUserId) {
-        if (qNorm) {
-          query = query.or(
-            [
-              `and(visibility.eq.public,title.ilike.%${qNorm}%)`,
-              `and(visibility.eq.public,description.ilike.%${qNorm}%)`,
-              `and(visibility.eq.public,course_code.ilike.%${qNorm}%)`,
-              `and(created_by.eq.${authedUserId},title.ilike.%${qNorm}%)`,
-              `and(created_by.eq.${authedUserId},description.ilike.%${qNorm}%)`,
-              `and(created_by.eq.${authedUserId},course_code.ilike.%${qNorm}%)`,
-            ].join(",")
-          );
-        } else {
-          query = query.or(`visibility.eq.public,created_by.eq.${authedUserId}`);
-        }
-      } else {
-        query = query.eq("visibility", "public");
-        if (qNorm) {
-          query = query.or(`title.ilike.%${qNorm}%,description.ilike.%${qNorm}%,course_code.ilike.%${qNorm}%`);
-        }
-      }
-
-      const course = courseParam.trim().toUpperCase();
-      if (course) query = query.eq("course_code", course);
-      else if (viewParam === "for_you" && !personalizedOff && courseCodes.length > 0) {
-        query = query.in("course_code", courseCodes);
-      }
-
-      if (levelParam) {
-        const lv = Number(levelParam);
-        if (Number.isFinite(lv)) query = query.eq("level", lv);
-      } else if (viewParam === "for_you" && !personalizedOff && typeof contextPrefs?.level === "number") {
-        query = query.eq("level", contextPrefs.level);
-      }
-
-      if (semesterParam) {
-        const semMap: Record<string, string> = { "1st": "first", "2nd": "second", "summer": "summer" };
-        const s = semMap[semesterParam.trim()] ?? semesterParam.trim().toLowerCase();
-        if (s) query = query.eq("semester", s);
-      } else if (viewParam === "for_you" && !personalizedOff && contextPrefs?.semester) {
-        const semMap: Record<string, string> = { "1st": "first", "2nd": "second", "summer": "summer" };
-        const s = semMap[contextPrefs.semester.trim()] ?? contextPrefs.semester.trim().toLowerCase();
-        if (s) query = query.eq("semester", s);
-      }
-
-      if (difficultyParam) {
-        const d = difficultyParam.trim().toLowerCase();
-        if (d === "easy" || d === "medium" || d === "hard") {
-          query = query.eq("difficulty", d);
-        }
-      }
-
-      if (sortParam === "oldest") query = query.order("created_at", { ascending: true });
-      else query = query.order("created_at", { ascending: false });
-
       const from = (nextPage - 1) * PAGE_SIZE;
       const to = from + PAGE_SIZE - 1;
+      const disabledColumns = new Set<PracticeSetOptionalField>();
 
-      const res = await query.range(from, to);
+      const buildQuery = () => {
+        let query = supabase
+          .from("study_quiz_sets")
+          .select(practiceSetSelectFields(disabledColumns), { count: "exact" });
+
+        if (!disabledColumns.has("published")) {
+          query = query.eq("published", true);
+        }
+
+        const qNorm = normalizeQuery(qParam);
+        const hasVisibility = !disabledColumns.has("visibility");
+        if (authedUserId) {
+          if (qNorm) {
+            query = query.or(
+              hasVisibility
+                ? [
+                    `and(visibility.eq.public,title.ilike.%${qNorm}%)`,
+                    `and(visibility.eq.public,description.ilike.%${qNorm}%)`,
+                    `and(visibility.eq.public,course_code.ilike.%${qNorm}%)`,
+                    `and(created_by.eq.${authedUserId},title.ilike.%${qNorm}%)`,
+                    `and(created_by.eq.${authedUserId},description.ilike.%${qNorm}%)`,
+                    `and(created_by.eq.${authedUserId},course_code.ilike.%${qNorm}%)`,
+                  ].join(",")
+                : `title.ilike.%${qNorm}%,description.ilike.%${qNorm}%,course_code.ilike.%${qNorm}%`
+            );
+          } else if (hasVisibility) {
+            query = query.or(`visibility.eq.public,created_by.eq.${authedUserId}`);
+          }
+        } else {
+          if (hasVisibility) query = query.eq("visibility", "public");
+          if (qNorm) {
+            query = query.or(`title.ilike.%${qNorm}%,description.ilike.%${qNorm}%,course_code.ilike.%${qNorm}%`);
+          }
+        }
+
+        const course = courseParam.trim().toUpperCase();
+        if (course) query = query.eq("course_code", course);
+        else if (viewParam === "for_you" && !personalizedOff && courseCodes.length > 0) {
+          query = query.in("course_code", courseCodes);
+        }
+
+        if (levelParam) {
+          const lv = Number(levelParam);
+          if (Number.isFinite(lv)) query = query.eq("level", lv);
+        } else if (viewParam === "for_you" && !personalizedOff && typeof contextPrefs?.level === "number") {
+          query = query.eq("level", contextPrefs.level);
+        }
+
+        if (!disabledColumns.has("semester")) {
+          if (semesterParam) {
+            const semMap: Record<string, string> = { "1st": "first", "2nd": "second", summer: "summer" };
+            const s = semMap[semesterParam.trim()] ?? semesterParam.trim().toLowerCase();
+            if (s) query = query.eq("semester", s);
+          } else if (viewParam === "for_you" && !personalizedOff && contextPrefs?.semester) {
+            const semMap: Record<string, string> = { "1st": "first", "2nd": "second", summer: "summer" };
+            const s = semMap[contextPrefs.semester.trim()] ?? contextPrefs.semester.trim().toLowerCase();
+            if (s) query = query.eq("semester", s);
+          }
+        }
+
+        if (!disabledColumns.has("difficulty") && difficultyParam) {
+          const d = difficultyParam.trim().toLowerCase();
+          if (d === "easy" || d === "medium" || d === "hard") {
+            query = query.eq("difficulty", d);
+          }
+        }
+
+        if (sortParam === "oldest") query = query.order("created_at", { ascending: true });
+        else query = query.order("created_at", { ascending: false });
+
+        return query.range(from, to);
+      };
+
+      let res = await buildQuery();
+      while (res.error) {
+        const missingColumn = missingPracticeSetColumn(res.error.message || "");
+        if (!missingColumn || disabledColumns.has(missingColumn)) break;
+
+        disabledColumns.add(missingColumn);
+        setSchemaHint(
+          `Your database is missing optional practice set column "${missingColumn}". The list is loading without that metadata; run the latest Supabase migrations to restore the full filters.`
+        );
+        res = await buildQuery();
+      }
 
       if (res.error) {
         const msg = res.error.message || "Unknown error";
@@ -1644,10 +1702,11 @@ function PracticeHomeInner() {
           msg.includes("approved") ||
           msg.includes("questions_count") ||
           msg.includes("time_limit_minutes") ||
+          msg.includes("difficulty") ||
           msg.includes("semester")
         ) {
           setSchemaHint(
-            "Some optional columns are missing (e.g., semester/time_limit/questions_count/published). The page still works â€" add them later for richer UX."
+            "Some optional columns are missing (e.g., semester/time_limit/difficulty/questions_count/published). Run the latest Supabase migrations to restore the full practice set experience."
           );
         }
 
@@ -1994,7 +2053,7 @@ function PracticeHomeInner() {
           <input
             value={q}
             onChange={(e) => setQ(e.target.value)}
-            placeholder="Search course code, title, topicâ€¦"
+            placeholder="Search course code, title, topic..."
             className="min-w-0 w-full bg-transparent text-sm text-foreground outline-none placeholder:text-muted-foreground"
           />
 
@@ -2029,7 +2088,7 @@ function PracticeHomeInner() {
         {hasAnyFilters ? (
           <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
             <p className="text-xs font-semibold text-muted-foreground">
-              Showing <span className="text-foreground">{total === 0 ? 0 : 1}</span>â€"
+              Showing <span className="text-foreground">{total === 0 ? 0 : 1}</span>-
               <span className="text-foreground">{Math.min(total, sets.length)}</span> of{" "}
               <span className="text-foreground">{total}</span>
             </p>
@@ -2048,7 +2107,7 @@ function PracticeHomeInner() {
           </div>
         ) : (
           <p className="mt-3 text-xs text-muted-foreground">
-            Tip: try <span className="font-semibold">GST101</span> or â€œAnatomyâ€.
+            Tip: try <span className="font-semibold">GST101</span> or "Anatomy".
           </p>
         )}
 
@@ -2127,7 +2186,7 @@ function PracticeHomeInner() {
       {/* Errors */}
       {loadError ? (
         <div className="rounded-3xl border border-border bg-background p-4">
-          <p className="text-sm font-semibold text-foreground">Couldnâ€™t load practice sets</p>
+          <p className="text-sm font-semibold text-foreground">Couldn't load practice sets</p>
           <p className="mt-1 text-sm text-muted-foreground">{loadError}</p>
           {schemaHint ? (
             <div className="mt-3 rounded-2xl border border-border bg-muted/40 p-3">
@@ -2287,11 +2346,11 @@ function PracticeHomeInner() {
                     loadingMore ? "opacity-70" : ""
                   )}
                 >
-                  {loadingMore ? "Loadingâ€¦" : "Load more"}
+                  {loadingMore ? "Loading..." : "Load more"}
                   <ArrowRight className="h-4 w-4" />
                 </button>
               ) : (
-                <p className="text-sm font-semibold text-muted-foreground">Youâ€™ve reached the end.</p>
+                <p className="text-sm font-semibold text-muted-foreground">You've reached the end.</p>
               )}
             </div>
           ) : null}
@@ -2423,7 +2482,7 @@ function PracticeHomeInner() {
           <p className="text-sm font-semibold text-foreground">Difficulty</p>
           <div className="mt-2 grid grid-cols-3 gap-2">
             {(["", "easy", "medium", "hard"] as const).map((d) => {
-              const label = d === "" ? "Any" : d === "easy" ? "â— Easy" : d === "medium" ? "â—† Medium" : "â–² Hard";
+              const label = d === "" ? "Any" : d === "easy" ? "Easy" : d === "medium" ? "Medium" : "Hard";
               const active = draftDifficulty === d;
               return (
                 <button
@@ -2580,7 +2639,7 @@ function PracticeHomeInner() {
         open={createOpen}
         onClose={() => setCreateOpen(false)}
         repScope={repScope}
-        onCreated={(id) => setToast(`Set created â€" redirecting to editorâ€¦`)}
+        onCreated={(id) => setToast(`Set created - redirecting to editor...`)}
       />
 
       {/* Request course modal */}
