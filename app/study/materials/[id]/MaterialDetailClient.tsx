@@ -63,7 +63,6 @@ type GeneratedMcqQuestion = {
   };
 };
 
-<<<<<<< HEAD
 type GeneratedWrittenQuestion = {
   question_type: "short_answer" | "theory";
   question: string;
@@ -87,11 +86,10 @@ type GeneratedWrittenQuestion = {
 };
 
 type GeneratedQuestion = GeneratedMcqQuestion | GeneratedWrittenQuestion;
-=======
+
 function isBetterExplanationOptionKey(value: string | undefined): value is BetterExplanationOptionKey {
   return value === "A" || value === "B" || value === "C" || value === "D";
 }
->>>>>>> 0b6b4b7e0f46702e317cef0d7539a9f58b4814c2
 
 type GenerationIntent = "weak_areas" | "untested_sections" | "application" | "hard" | "topic";
 type GenerationMode = "auto" | GenerationIntent;
@@ -132,13 +130,12 @@ const STUDENT_GENERATION_MODES: Array<{ value: GenerationMode; label: string; su
   { value: "topic", label: "Focus on a topic", sub: "Use the focus area you type below." },
 ];
 
-<<<<<<< HEAD
 const QUESTION_FORMATS: Array<{ value: QuestionFormat; label: string; sub: string }> = [
   { value: "mixed", label: "Mixed", sub: "Objective, short-answer, and theory" },
   { value: "mcq", label: "Objective", sub: "A-D questions only" },
   { value: "written", label: "Written/Theory", sub: "Typed answers and marking points" },
 ];
-=======
+
 function resolveGenerationIntent(mode: GenerationMode, config: { difficulty: "easy" | "mixed" | "hard"; focus: string }): GenerationIntent {
   if (mode !== "auto") return mode;
   if (config.focus.trim()) return "topic";
@@ -152,7 +149,6 @@ function generationModeCopy(mode: GenerationMode, config: { difficulty: "easy" |
   if (config.difficulty === "hard") return "Auto will generate harder exam-style questions.";
   return "Auto will cover weak areas first.";
 }
->>>>>>> 0b6b4b7e0f46702e317cef0d7539a9f58b4814c2
 
 type ChatMessage = {
   id: string;
@@ -959,12 +955,8 @@ export default function MaterialDetailClient({
           count: quizConfig.count,
           difficulty: quizConfig.difficulty,
           focus: quizConfig.focus || undefined,
-<<<<<<< HEAD
           questionFormat: quizConfig.questionFormat,
-          generationIntent,
-=======
           generationIntent: resolveGenerationIntent(generationMode, quizConfig),
->>>>>>> 0b6b4b7e0f46702e317cef0d7539a9f58b4814c2
         }),
       });
       const data = await readGenerateQuestionsResponse(res);
@@ -1695,7 +1687,6 @@ export default function MaterialDetailClient({
                       </div>
                     )}
 
-<<<<<<< HEAD
                     {isMcqQuestion(currentQ) ? (
                       <>
                         <div className="space-y-2.5">
@@ -1723,10 +1714,26 @@ export default function MaterialDetailClient({
                           })}
                         </div>
                         {answered && (
-                          <div className="mt-4 rounded-xl border border-primary/20 bg-primary-light/60 px-4 py-3">
-                            <p className="text-xs leading-relaxed text-primary-text/85">
-                              <span className="font-semibold">Explanation: </span>{currentQ.explanation}
-                            </p>
+                          <div className="mt-4 space-y-2">
+                            <div className="rounded-xl border border-primary/20 bg-primary-light/60 px-4 py-3">
+                              <p className="text-xs leading-relaxed text-primary-text/85">
+                                <span className="font-semibold">Explanation: </span>{currentQ.explanation}
+                              </p>
+                            </div>
+                            {isBetterExplanationOptionKey(currentAnswer?.chosen) ? (
+                              <BetterExplanationInline
+                                questionPrompt={currentQ.question}
+                                options={currentQ.options}
+                                chosenOptionKey={currentAnswer.chosen}
+                                chosenOptionText={currentQ.options[currentAnswer.chosen]}
+                                correctOptionKey={currentQ.answer}
+                                correctOptionText={currentQ.options[currentQ.answer]}
+                                isCorrect={currentAnswer.correct}
+                                basicExplanation={currentQ.explanation}
+                                studyRef={currentQ.studyRef}
+                                sourceTopic={currentQ.sourceTopic}
+                              />
+                            ) : null}
                           </div>
                         )}
                       </>
@@ -1769,7 +1776,7 @@ export default function MaterialDetailClient({
                                 <p className="text-xs font-extrabold uppercase tracking-wide text-primary-text/80">Marking points</p>
                                 <ul className="mt-1 space-y-1 text-sm leading-relaxed text-primary-text">
                                   {currentQ.marking_points.map((point, index) => (
-                                    <li key={`${point}-${index}`}>• {point}</li>
+                                    <li key={`${point}-${index}`}>- {point}</li>
                                   ))}
                                 </ul>
                               </div>
@@ -1781,53 +1788,6 @@ export default function MaterialDetailClient({
                             )}
                           </div>
                         )}
-=======
-                    <div className="space-y-2.5">
-                      {(["A", "B", "C", "D"] as const).map((key) => {
-                        const isCorrect = currentQ.answer === key;
-                        const isChosen = currentAnswer?.chosen === key;
-                        return (
-                          <button key={key} type="button"
-                            disabled={answered}
-                            onClick={() => {
-                              if (answered) return;
-                              setAnswers((prev) => ({ ...prev, [currentQuestionIndex]: { chosen: key, correct: isCorrect, skipped: false } }));
-                            }}
-                            className={cn(
-                              "flex w-full items-start gap-2.5 rounded-xl border px-3.5 py-2.5 text-sm text-left transition focus-visible:outline-none",
-                              !answered && "hover:bg-secondary/50 border-border/60 text-foreground",
-                              answered && isCorrect && "border-primary bg-primary-light font-semibold text-primary-text",
-                              answered && isChosen && !isCorrect && "border-red-400 bg-red-50 font-semibold text-red-700",
-                              answered && !isCorrect && !isChosen && "border-border/40 text-muted-brand opacity-60",
-                            )}>
-                            <span className="shrink-0 font-bold">{key}.</span>
-                            <span>{currentQ.options[key]}</span>
-                          </button>
-                        );
-                      })}
-                    </div>
-                    {answered && (
-                      <div className="mt-4 space-y-2">
-                        <div className="rounded-xl border border-primary/20 bg-primary-light/60 px-4 py-3">
-                          <p className="text-xs leading-relaxed text-primary-text/85">
-                            <span className="font-semibold">Explanation: </span>{currentQ.explanation}
-                          </p>
-                        </div>
-                        {isBetterExplanationOptionKey(currentAnswer?.chosen) ? (
-                          <BetterExplanationInline
-                            questionPrompt={currentQ.question}
-                            options={currentQ.options}
-                            chosenOptionKey={currentAnswer.chosen}
-                            chosenOptionText={currentQ.options[currentAnswer.chosen]}
-                            correctOptionKey={currentQ.answer}
-                            correctOptionText={currentQ.options[currentQ.answer]}
-                            isCorrect={currentAnswer.correct}
-                            basicExplanation={currentQ.explanation}
-                            studyRef={currentQ.studyRef}
-                            sourceTopic={currentQ.sourceTopic}
-                          />
-                        ) : null}
->>>>>>> 0b6b4b7e0f46702e317cef0d7539a9f58b4814c2
                       </div>
                     )}
                   </div>
