@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(Get-ChildItem -Path \"C:\\\\dev\\\\jabustudy\")",
+      "PowerShell(Get-ChildItem -Path \"C:\\\\dev\\\\jabustudy\\\\app\\\\study\" -Directory | Where-Object { $_.Name -match \"ai-plan|tutors|gpa\" })"
+    ]
+  }
+}

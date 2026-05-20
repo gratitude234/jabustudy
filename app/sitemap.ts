@@ -9,7 +9,6 @@ export default function sitemap(): MetadataRoute.Sitemap {
     { url: `${base}/study/library`, changeFrequency: "weekly", priority: 0.8 },
     { url: `${base}/study/practice`, changeFrequency: "weekly", priority: 0.8 },
     { url: `${base}/study/questions`, changeFrequency: "weekly", priority: 0.7 },
-    { url: `${base}/study/tutors`, changeFrequency: "weekly", priority: 0.6 },
     { url: `${base}/study/leaderboard`, changeFrequency: "weekly", priority: 0.5 },
     { url: `${base}/study/gpa`, changeFrequency: "weekly", priority: 0.5 },
   ];

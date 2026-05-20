@@ -3,10 +3,8 @@
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
-  BrainCircuit,
   Calculator,
   ChevronRight,
-  GraduationCap,
   MessagesSquare,
   ShieldCheck,
   Trophy,
@@ -72,22 +70,6 @@ const ROW_DEFS: readonly RowDef[] = [
     label: "Q&A forum",
     icon: MessagesSquare,
     tint: "coral",
-  },
-  {
-    group: "COMMUNITY",
-    key: "tutors",
-    href: "/study/tutors",
-    label: "Tutors",
-    icon: GraduationCap,
-    tint: "pink",
-  },
-  {
-    group: "PLAN & CONTRIBUTE",
-    key: "ai_plan",
-    href: "/study/ai-plan",
-    label: "AI study plan",
-    icon: BrainCircuit,
-    tint: "purple",
   },
   {
     group: "PLAN & CONTRIBUTE",

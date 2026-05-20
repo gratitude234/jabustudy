@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { BookOpen, ArrowRight, Brain, Calculator, HelpCircle, Trophy, Zap } from "lucide-react";
+import { BookOpen, ArrowRight, Calculator, Trophy, Zap } from "lucide-react";
 import Link from "next/link";
 import { supabase } from "@/lib/supabase";
 import { trackHomeView, type StudyHomeHeroState } from "@/lib/studyAnalytics";
@@ -345,8 +345,6 @@ function StudyHomeInner() {
             {[
               { href: "/study/library",     label: "Library",     Icon: BookOpen    },
               { href: "/study/gpa",         label: "GPA Tools",   Icon: Calculator  },
-              { href: "/study/ai-plan",     label: "AI Plan",     Icon: Brain       },
-              { href: "/study/tutors",      label: "Tutors",      Icon: HelpCircle  },
               { href: "/study/leaderboard", label: "Leaderboard", Icon: Trophy      },
             ].map(({ href, label, Icon }) => (
               <Link

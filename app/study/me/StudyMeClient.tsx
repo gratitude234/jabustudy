@@ -7,12 +7,10 @@ import {
   ArrowRight,
   BadgeCheck,
   BookOpen,
-  Brain,
   Calculator,
   ClipboardList,
   FileText,
   GraduationCap,
-  HelpCircle,
   History,
   Library,
   Loader2,
@@ -365,13 +363,6 @@ function StudyMeInner() {
             icon={<BookOpen className="h-4 w-4" />}
             tone="blue"
           />
-          <ToolRow
-            href="/study/tutors"
-            title="Tutors"
-            desc="Find verified student tutors"
-            icon={<HelpCircle className="h-4 w-4" />}
-            tone="green"
-          />
         </div>
       </section>
 
@@ -417,21 +408,6 @@ function StudyMeInner() {
       </section>
 
       <section className="grid gap-3 md:grid-cols-2">
-        <Card className="flex items-start gap-3">
-          <div className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-primary-light text-primary">
-            <Brain className="h-5 w-5" />
-          </div>
-          <div>
-            <h2 className="text-sm font-bold text-foreground">AI study plan</h2>
-            <p className="mt-1 text-xs leading-relaxed text-muted-brand">
-              Generate a weekly plan from your courses and available time.
-            </p>
-            <Link href="/study/ai-plan" className="mt-3 inline-flex items-center gap-1 text-xs font-bold text-primary no-underline">
-              Open planner <ArrowRight className="h-3.5 w-3.5" />
-            </Link>
-          </div>
-        </Card>
-
         <Card className="flex items-start gap-3">
           <div className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-emerald-50 text-emerald-700">
             <Target className="h-5 w-5" />

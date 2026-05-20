@@ -8,7 +8,7 @@ import {
   ArrowRight,
   AlertTriangle, CheckCircle2, Flag,
   BookOpen,
-  GraduationCap, Loader2, RotateCcw, Send,
+  Loader2, RotateCcw, Send,
   Sparkles, ThumbsUp, Zap,
 } from "lucide-react";
 
@@ -483,13 +483,6 @@ export default function QuestionDetailClient({ id }: { id: string }) {
                     <AiAnswerButton questionId={question.id} title={question.title}
                       questionBody={question.body} courseCode={question.course_code}
                       level={question.level} onAnswerAdded={(a) => setAnswers([a])} />
-                  )}
-                  {question?.created_at && (Date.now() - new Date(question.created_at).getTime()) > 86_400_000 && (
-                    <Link href={`/study/tutors${question.course_code ? `?course=${encodeURIComponent(question.course_code)}` : ""}`}
-                      className="mt-2 inline-flex items-center gap-2 rounded-2xl border border-border bg-background px-4 py-2.5 text-sm font-medium text-muted-brand no-underline hover:text-foreground hover:bg-secondary/50">
-                      <GraduationCap className="h-4 w-4" />
-                      Find a tutor for {question.course_code ?? "this course"} →
-                    </Link>
                   )}
                 </>
               ) : (
