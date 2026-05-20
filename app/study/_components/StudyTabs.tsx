@@ -114,10 +114,7 @@ export default function StudyTabs({
       <StudyOnboardingBanner />
       <nav
         aria-label="Study navigation"
-        className={cn(
-          "hidden md:block",
-          "md:static md:mx-0 md:rounded-2xl md:border md:bg-card"
-        )}
+        className="hidden"
       >
         <div className="px-2 py-2 md:px-4">
           <div className="items-center gap-1 md:flex">
