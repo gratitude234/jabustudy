@@ -63,6 +63,7 @@ function isBetterExplanationOptionKey(value: string | undefined): value is Bette
 }
 
 type GenerationIntent = "weak_areas" | "untested_sections" | "application" | "hard" | "topic";
+type GenerationMode = "auto" | GenerationIntent;
 
 type AiGenerationMeta = {
   provider: "bedrock" | "gemini";
@@ -91,13 +92,28 @@ type GenerateQuestionsResponse = {
   error?: string;
 };
 
-const STUDENT_GENERATION_MODES: Array<{ value: GenerationIntent; label: string; sub: string }> = [
+const STUDENT_GENERATION_MODES: Array<{ value: GenerationMode; label: string; sub: string }> = [
+  { value: "auto", label: "Auto", sub: "Let Jabu choose the best next set." },
   { value: "weak_areas", label: "Cover weak areas", sub: "Prioritize topics with fewer questions." },
   { value: "untested_sections", label: "Use untested sections", sub: "Pull from parts not covered well yet." },
   { value: "application", label: "More application questions", sub: "Practice using ideas, not just recalling them." },
   { value: "hard", label: "Harder questions", sub: "Make it closer to exam difficulty." },
   { value: "topic", label: "Focus on a topic", sub: "Use the focus area you type below." },
 ];
+
+function resolveGenerationIntent(mode: GenerationMode, config: { difficulty: "easy" | "mixed" | "hard"; focus: string }): GenerationIntent {
+  if (mode !== "auto") return mode;
+  if (config.focus.trim()) return "topic";
+  if (config.difficulty === "hard") return "hard";
+  return "weak_areas";
+}
+
+function generationModeCopy(mode: GenerationMode, config: { difficulty: "easy" | "mixed" | "hard"; focus: string }) {
+  if (mode !== "auto") return STUDENT_GENERATION_MODES.find((item) => item.value === mode)?.sub ?? "";
+  if (config.focus.trim()) return "Auto will focus on the topic you typed.";
+  if (config.difficulty === "hard") return "Auto will generate harder exam-style questions.";
+  return "Auto will cover weak areas first.";
+}
 
 type ChatMessage = {
   id: string;
@@ -681,7 +697,7 @@ export default function MaterialDetailClient({
   const [generateMoreError, setGenerateMoreError] = useState<string | null>(null);
   const [hintShown, setHintShown] = useState<Record<number, boolean>>({});
   const [generationAi, setGenerationAi] = useState<AiGenerationMeta | null>(null);
-  const [generationIntent, setGenerationIntent] = useState<GenerationIntent>("weak_areas");
+  const [generationMode, setGenerationMode] = useState<GenerationMode>("auto");
 
   // Quiz state machine
   const [quizState, setQuizState] = useState<"idle" | "config" | "loading" | "quiz" | "results">("idle");
@@ -867,7 +883,7 @@ export default function MaterialDetailClient({
           count: quizConfig.count,
           difficulty: quizConfig.difficulty,
           focus: quizConfig.focus || undefined,
-          generationIntent,
+          generationIntent: resolveGenerationIntent(generationMode, quizConfig),
         }),
       });
       const data = await readGenerateQuestionsResponse(res);
@@ -904,10 +920,11 @@ export default function MaterialDetailClient({
     }
   }
 
-  async function handleGenerateMore(intent: GenerationIntent = generationIntent) {
+  async function handleGenerateMore(mode: GenerationMode = generationMode) {
+    const intent = resolveGenerationIntent(mode, quizConfig);
     setGeneratingMore(true);
     setGenerateMoreError(null);
-    setGenerationIntent(intent);
+    setGenerationMode(mode);
     try {
       const res = await fetch("/api/ai/generate-questions", {
         method: "POST", headers: { "Content-Type": "application/json" },
@@ -1457,24 +1474,23 @@ export default function MaterialDetailClient({
                   </div>
 
                   <div>
-                    <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-muted-brand">Question mode</p>
-                    <div className="grid gap-2 sm:grid-cols-2">
-                      {STUDENT_GENERATION_MODES.map(({ value, label, sub }) => (
-                        <button
-                          key={value}
-                          type="button"
-                          onClick={() => setGenerationIntent(value)}
-                          className={cn(
-                            "rounded-xl border px-3 py-2.5 text-left transition focus-visible:outline-none",
-                            generationIntent === value
-                              ? "border-primary bg-primary-light"
-                              : "border-border bg-background hover:bg-secondary/40"
-                          )}
+                    <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-muted-brand">Smart targeting</p>
+                    <div className="rounded-xl border border-border bg-background px-3 py-3">
+                      <div className="flex items-center gap-3">
+                        <Sparkles className="h-4 w-4 shrink-0 text-primary" />
+                        <select
+                          value={generationMode}
+                          onChange={(e) => setGenerationMode(e.target.value as GenerationMode)}
+                          className="min-w-0 flex-1 bg-transparent text-sm font-semibold text-foreground outline-none"
                         >
-                          <p className={cn("text-xs font-extrabold", generationIntent === value ? "text-primary-text" : "text-foreground")}>{label}</p>
-                          <p className="mt-0.5 text-[11px] leading-snug text-muted-brand">{sub}</p>
-                        </button>
-                      ))}
+                          {STUDENT_GENERATION_MODES.map(({ value, label }) => (
+                            <option key={value} value={value}>{label}</option>
+                          ))}
+                        </select>
+                      </div>
+                      <p className="mt-2 text-xs leading-snug text-muted-brand">
+                        {generationModeCopy(generationMode, quizConfig)}
+                      </p>
                     </div>
                   </div>
 
@@ -1707,27 +1723,21 @@ export default function MaterialDetailClient({
                   {saveQsError && (
                     <p className="text-center text-xs font-semibold text-rose-600">{saveQsError}</p>
                   )}
-                  {/* Generate more */}
-                  <div className="grid grid-cols-2 gap-2">
-                    {STUDENT_GENERATION_MODES.slice(0, 4).map(({ value, label }) => (
-                      <button
-                        key={value}
-                        type="button"
-                        onClick={() => setGenerationIntent(value)}
-                        disabled={generatingMore}
-                        className={cn(
-                          "inline-flex min-h-10 items-center justify-center rounded-xl border px-2 py-2 text-center text-[11px] font-extrabold transition disabled:opacity-50 focus-visible:outline-none",
-                          generationIntent === value
-                            ? "border-primary bg-primary-light text-primary-text"
-                            : "border-border bg-background text-foreground hover:bg-secondary/40"
-                        )}
-                      >
-                        {label}
-                      </button>
-                    ))}
+                  <div className="flex items-center gap-2 rounded-2xl border border-border bg-background px-3 py-2">
+                    <span className="shrink-0 text-[11px] font-extrabold uppercase tracking-wide text-muted-brand">Next set</span>
+                    <select
+                      value={generationMode}
+                      onChange={(e) => setGenerationMode(e.target.value as GenerationMode)}
+                      disabled={generatingMore}
+                      className="min-w-0 flex-1 bg-transparent text-xs font-semibold text-foreground outline-none disabled:opacity-60"
+                    >
+                      {STUDENT_GENERATION_MODES.map(({ value, label }) => (
+                        <option key={value} value={value}>{label}</option>
+                      ))}
+                    </select>
                   </div>
                   <button type="button"
-                    onClick={() => handleGenerateMore(generationIntent)}
+                    onClick={() => handleGenerateMore(generationMode)}
                     disabled={generatingMore}
                     className="inline-flex w-full items-center justify-center gap-2 rounded-2xl border border-primary bg-primary-light px-4 py-3 text-sm font-semibold text-primary-text transition hover:opacity-90 disabled:opacity-50 focus-visible:outline-none">
                     {generatingMore

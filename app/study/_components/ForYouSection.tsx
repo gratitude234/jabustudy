@@ -13,6 +13,7 @@ import {
   AlertTriangle,
   ArrowRight,
   Bookmark,
+  ChevronDown,
   Clock,
   Filter,
   GraduationCap,
@@ -336,7 +337,7 @@ export function ForYouSection({
             )}
           >
             <Filter className="h-4 w-4" />
-            {summary ?? "Filter"} ▾
+            {summary ?? "Filter"} <ChevronDown className="h-3 w-3 shrink-0" />
           </button>
         </div>
 
@@ -564,7 +565,7 @@ export function MaterialCard({
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <p className="line-clamp-1 text-sm font-extrabold text-foreground">
-            {m.title ?? m.course_code ?? "Material"}
+            {(m.title ?? m.course_code ?? "Material").replace(/_/g, " ")}
           </p>
           <p className="mt-1 line-clamp-2 text-sm text-muted-foreground">
             {(m.course_code ? `${m.course_code} - ` : "") + (m.material_type ?? "material")}
