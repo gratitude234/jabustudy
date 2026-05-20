@@ -2,34 +2,55 @@ import { NextRequest, NextResponse } from "next/server";
 import { adminSupabase } from "@/lib/supabase/admin";
 import { requireStudyModeratorFromRequest } from "@/lib/studyAdmin/requireStudyModeratorFromRequest";
 import {
-  type BankTopic,
-  fetchMaterialContent,
-  generateTopicQuestions,
   getBankState,
   jsonError,
-  outlineMaterial,
   requireScopedCourse,
 } from "@/lib/repQuestionBank";
+import { generateCoverageAwareQuestions } from "@/lib/studyQuestionGeneration";
+import { validateSourceBackedQuestions } from "@/lib/studyQuestionGrounding";
 
-function topicsFrom(raw: unknown): BankTopic[] {
-  return Array.isArray(raw)
-    ? raw
-        .map((t: any) => ({
-          title: String(t?.title ?? "").trim(),
-          description: t?.description ? String(t.description) : null,
-          target: Math.max(1, Number(t?.target ?? 3)),
-          generated: Math.max(0, Number(t?.generated ?? 0)),
-        }))
-        .filter((t) => t.title)
-    : [];
-}
+type BankRunRow = {
+  status?: string | null;
+  course_id: string;
+  quiz_set_id: string;
+  batch_size?: number | null;
+};
+
+type BankMaterialRow = {
+  id: string;
+  material_id: string;
+  status?: string | null;
+  generated_count?: number | null;
+};
+
+type StudyMaterialRow = {
+  id: string;
+  title: string | null;
+  index_status: string | null;
+};
+
+type ExistingQuestionRow = {
+  prompt: string | null;
+};
+
+type InsertedQuestionRow = {
+  id: string;
+  position: number | null;
+};
+
+type RouteError = {
+  message?: string;
+  status?: number;
+  code?: string;
+};
 
 async function markRunReadyIfCovered(runId: string, quizSetId: string) {
   const { data: rows } = await adminSupabase
     .from("study_question_bank_materials")
     .select("status")
     .eq("run_id", runId);
-  const allCovered = (rows ?? []).length > 0 && (rows ?? []).every((row: any) => row.status === "covered");
+  const statusRows = (rows ?? []) as Array<{ status?: string | null }>;
+  const allCovered = statusRows.length > 0 && statusRows.every((row) => row.status === "covered");
   if (!allCovered) return;
 
   const { count } = await adminSupabase
@@ -64,9 +85,10 @@ export async function POST(
       .maybeSingle();
     if (runErr) throw runErr;
     if (!run) return jsonError("Question bank run not found.", 404, "RUN_NOT_FOUND");
-    if ((run as any).status === "completed") return jsonError("This question bank is already published.", 409, "RUN_COMPLETED");
+    const bankRun = run as BankRunRow;
+    if (bankRun.status === "completed") return jsonError("This question bank is already published.", 409, "RUN_COMPLETED");
 
-    const course = await requireScopedCourse(String((run as any).course_id), scope);
+    await requireScopedCourse(String(bankRun.course_id), scope);
 
     const { data: materialRows, error: rowsErr } = await adminSupabase
       .from("study_question_bank_materials")
@@ -75,92 +97,88 @@ export async function POST(
       .order("position", { ascending: true });
     if (rowsErr) throw rowsErr;
 
-    let current = ((materialRows ?? []) as any[]).find((row) => String(row.status) !== "covered");
+    const current = ((materialRows ?? []) as BankMaterialRow[]).find((row) => String(row.status) !== "covered");
     if (!current) {
-      await markRunReadyIfCovered(runId, String((run as any).quiz_set_id));
+      await markRunReadyIfCovered(runId, String(bankRun.quiz_set_id));
       return NextResponse.json({ ok: true, bank: await getBankState(runId), message: "All selected materials are covered." });
     }
     materialRowIdForError = String(current.id);
 
-    let topics = topicsFrom(current.topic_outline);
     const materialId = String(current.material_id);
 
     const { data: material, error: materialErr } = await adminSupabase
       .from("study_materials")
-      .select("id,title,material_type,file_path,file_url")
+      .select("id,title,material_type,file_path,file_url,index_status")
       .eq("id", materialId)
       .maybeSingle();
     if (materialErr) throw materialErr;
     if (!material) return jsonError("Material not found.", 404, "MATERIAL_NOT_FOUND");
 
-    const content = await fetchMaterialContent(material as any);
-
-    if (String(current.status) === "pending" || topics.length === 0) {
+    const materialRow = material as StudyMaterialRow;
+    if (materialRow.index_status !== "ready") {
       await adminSupabase
         .from("study_question_bank_materials")
-        .update({ status: "generating", updated_at: new Date().toISOString(), error_message: null })
+        .update({
+          status: "failed",
+          error_message: "Material is not indexed yet. Reindex it before generating source-backed questions.",
+          updated_at: new Date().toISOString(),
+        })
         .eq("id", current.id);
-
-      topics = await outlineMaterial({
-        courseCode: course.course_code,
-        materialTitle: String((material as any).title ?? "Untitled material"),
-        content,
-        topicTarget: Number((run as any).topic_target ?? 3),
-      });
-
-      await adminSupabase
-        .from("study_question_bank_materials")
-        .update({ status: "outlined", topic_outline: topics, updated_at: new Date().toISOString() })
-        .eq("id", current.id);
-      current = { ...current, status: "outlined", topic_outline: topics };
+      return jsonError(
+        "Material is not indexed yet. Reindex it before generating source-backed questions.",
+        422,
+        "MATERIAL_NOT_INDEXED"
+      );
     }
 
-    let topicIndex = topics.findIndex((topic) => topic.generated < topic.target);
-    if (topicIndex < 0) {
-      await adminSupabase
-        .from("study_question_bank_materials")
-        .update({ status: "covered", updated_at: new Date().toISOString() })
-        .eq("id", current.id);
-      await markRunReadyIfCovered(runId, String((run as any).quiz_set_id));
-      return NextResponse.json({ ok: true, bank: await getBankState(runId), message: "Material covered. Generate again for the next material." });
-    }
-
-    const topic = topics[topicIndex];
-    const count = Math.min(Number((run as any).batch_size ?? 5), topic.target - topic.generated);
+    await adminSupabase
+      .from("study_question_bank_materials")
+      .update({ status: "generating", updated_at: new Date().toISOString(), error_message: null })
+      .eq("id", current.id);
 
     const { data: existing } = await adminSupabase
       .from("study_quiz_questions")
       .select("prompt")
-      .eq("set_id", (run as any).quiz_set_id)
+      .eq("set_id", bankRun.quiz_set_id)
       .order("position", { ascending: true })
       .limit(80);
 
-    const questions = await generateTopicQuestions({
-      courseCode: course.course_code,
-      materialTitle: String((material as any).title ?? "Untitled material"),
-      topic,
-      count,
-      existingPrompts: ((existing ?? []) as any[]).map((row) => String(row.prompt ?? "")).filter(Boolean),
-      content,
+    const requestedCount = Math.max(1, Math.min(10, Number(bankRun.batch_size ?? 5)));
+    const generation = await generateCoverageAwareQuestions({
+      materialId,
+      materialTitle: String(materialRow.title ?? "Untitled material"),
+      count: requestedCount,
+      difficulty: "mixed",
+      coveredQuestions: ((existing ?? []) as ExistingQuestionRow[])
+        .map((row) => String(row.prompt ?? ""))
+        .filter(Boolean),
     });
 
-    if (!questions.length) throw new Error("AI did not return usable questions for this batch.");
+    if (!generation?.questions.length) throw new Error("AI did not return usable source-backed questions for this batch.");
+    const questions = await validateSourceBackedQuestions(materialId, generation.questions);
 
     const { count: existingCount } = await adminSupabase
       .from("study_quiz_questions")
       .select("id", { count: "exact", head: true })
-      .eq("set_id", (run as any).quiz_set_id);
+      .eq("set_id", bankRun.quiz_set_id);
 
     const { data: insertedQuestions, error: questionErr } = await adminSupabase
       .from("study_quiz_questions")
       .insert(
         questions.map((q, index) => ({
-          set_id: (run as any).quiz_set_id,
+          set_id: bankRun.quiz_set_id,
           prompt: q.question,
           explanation: q.explanation,
           position: (existingCount ?? 0) + index,
           source_material_id: materialId,
-          source_topic: topic.title,
+          source_chunk_id: q.sourceChunkId,
+          study_ref: q.studyRef,
+          source_topic: q.sourceTopic ?? q.studyRef?.topic ?? null,
+          question_kind: q.questionKind ?? null,
+          difficulty_level: q.difficultyLevel ?? null,
+          cognitive_level: q.cognitiveLevel ?? null,
+          question_fingerprint: q.questionFingerprint ?? null,
+          generation_meta: q.generationMeta ?? null,
           ai_generated: true,
         }))
       )
@@ -168,7 +186,9 @@ export async function POST(
 
     if (questionErr || !insertedQuestions?.length) throw questionErr ?? new Error("Failed to save generated questions.");
 
-    const sortedInserted = [...(insertedQuestions as any[])].sort((a, b) => Number(a.position ?? 0) - Number(b.position ?? 0));
+    const sortedInserted = [...(insertedQuestions as InsertedQuestionRow[])].sort(
+      (a, b) => Number(a.position ?? 0) - Number(b.position ?? 0)
+    );
     const optionRows = sortedInserted.flatMap((row, index) => {
       const q = questions[index];
       return (["A", "B", "C", "D"] as const).map((letter, optIndex) => ({
@@ -186,17 +206,20 @@ export async function POST(
     }
 
     const insertedCount = sortedInserted.length;
-    topics[topicIndex] = { ...topic, generated: topic.generated + insertedCount };
-    const materialCovered = topics.every((t) => t.generated >= t.target);
-    const nextStatus = materialCovered ? "covered" : "outlined";
     const nextGeneratedCount = Number(current.generated_count ?? 0) + insertedCount;
+    const nextTopicOutline = Object.entries(generation.questionKindCounts).map(([title, generated]) => ({
+      title: title.replace(/_/g, " "),
+      description: null,
+      target: generated,
+      generated,
+    }));
 
     await Promise.all([
       adminSupabase
         .from("study_question_bank_materials")
         .update({
-          status: nextStatus,
-          topic_outline: topics,
+          status: "covered",
+          topic_outline: nextTopicOutline,
           generated_count: nextGeneratedCount,
           error_message: null,
           updated_at: new Date().toISOString(),
@@ -205,23 +228,24 @@ export async function POST(
       adminSupabase
         .from("study_quiz_sets")
         .update({ questions_count: (existingCount ?? 0) + insertedCount })
-        .eq("id", (run as any).quiz_set_id),
+        .eq("id", bankRun.quiz_set_id),
       adminSupabase
         .from("study_question_bank_runs")
         .update({ status: "draft", updated_at: new Date().toISOString(), error_message: null })
         .eq("id", runId),
     ]);
 
-    await markRunReadyIfCovered(runId, String((run as any).quiz_set_id));
+    await markRunReadyIfCovered(runId, String(bankRun.quiz_set_id));
 
     return NextResponse.json({
       ok: true,
       generated: insertedCount,
-      topic: topic.title,
+      topic: generation.questions[0]?.sourceTopic ?? "Source-backed batch",
       bank: await getBankState(runId),
     });
-  } catch (e: any) {
-    const message = e?.message || "Failed to generate batch.";
+  } catch (e: unknown) {
+    const error = e as RouteError;
+    const message = error.message || "Failed to generate batch.";
     const updatedAt = new Date().toISOString();
     if (materialRowIdForError) {
       await adminSupabase
@@ -235,6 +259,6 @@ export async function POST(
         .update({ status: "failed", error_message: message, updated_at: updatedAt })
         .eq("id", runIdForError);
     }
-    return jsonError(message, Number(e?.status) || 500, e?.code);
+    return jsonError(message, Number(error.status) || 500, error.code);
   }
 }

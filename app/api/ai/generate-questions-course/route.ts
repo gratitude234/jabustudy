@@ -13,25 +13,17 @@ export const runtime = "nodejs";
 
 import { NextRequest, NextResponse } from "next/server";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
-import { generateJson, userMessage, type AiContentBlock } from "@/lib/ai";
 import { adminSupabase } from "@/lib/supabase/admin";
-import { extractMaterialContent, truncateText } from "@/lib/extractMaterialContent";
+import {
+  generateCoverageAwareQuestions,
+  type CoverageGeneratedQuestion,
+} from "@/lib/studyQuestionGeneration";
+import { validateSourceBackedQuestions } from "@/lib/studyQuestionGrounding";
 
 const DEFAULT_QUESTION_COUNT = 10;
 const MAX_QUESTION_COUNT = 15;
 const MATERIAL_LIMIT = 3;
-const MAX_FILE_BYTES = 10 * 1024 * 1024; // 10 MB per file
 const COURSE_COOLDOWN_MS = 24 * 60 * 60 * 1000; // 24 h
-const QUESTION_GEN_TEXT_CHARS = 24_000;
-const AI_QUESTION_TIMEOUT_MS =
-  parsePositiveInt(process.env.AI_QUESTION_TIMEOUT_MS) ??
-  parsePositiveInt(process.env.GEMINI_QUESTION_TIMEOUT_MS) ??
-  60_000;
-
-function parsePositiveInt(value: string | undefined) {
-  const parsed = Number.parseInt(value ?? "", 10);
-  return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
-}
 
 type SourceMaterial = {
   id: string;
@@ -52,6 +44,7 @@ type CandidateMaterial = {
   file_url?: string | null;
   material_type: string | null;
   downloads?: number | null;
+  index_status?: string | null;
 };
 
 function isAiSupported(filePath: string | null): boolean {
@@ -160,7 +153,7 @@ export async function POST(req: NextRequest) {
   const [pastQsRes, othersRes] = await Promise.all([
     admin
       .from("study_materials")
-      .select("id,title,file_path,file_url,material_type,downloads")
+      .select("id,title,file_path,file_url,material_type,downloads,index_status")
       .eq("course_id", courseId)
       .eq("approved", true)
       .eq("upload_status", "live")
@@ -171,7 +164,7 @@ export async function POST(req: NextRequest) {
 
     admin
       .from("study_materials")
-      .select("id,title,file_path,file_url,material_type,downloads")
+      .select("id,title,file_path,file_url,material_type,downloads,index_status")
       .eq("course_id", courseId)
       .eq("approved", true)
       .eq("upload_status", "live")
@@ -196,190 +189,105 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  // ── Extract content from all materials in parallel ────────────────────────
-  type Extracted = {
-    source: SourceMaterial;
-    content: Awaited<ReturnType<typeof extractMaterialContent>>;
-  };
+  const indexedCandidates = (candidates as CandidateMaterial[]).filter(
+    (material) => material.index_status === "ready"
+  );
 
-  async function extractOne(mat: CandidateMaterial): Promise<Extracted | null> {
-    try {
-      const { data: signed, error: signedErr } = await admin.storage
-        .from("study-materials")
-        .createSignedUrl(mat.file_path!, 300);
-
-      if (signedErr) {
-        console.warn(`[generate-questions-course] signed URL failed for ${mat.id}:`, signedErr.message);
-      }
-      const downloadUrl: string | null = signed?.signedUrl ?? mat.file_url ?? null;
-
-      if (!downloadUrl) {
-        console.warn(`[generate-questions-course] no download URL for material ${mat.id}`);
-        return null;
-      }
-
-      // Retry once on transient network errors
-      let fetchRes: Response | null = null;
-      for (let attempt = 0; attempt < 2; attempt++) {
-        try {
-          fetchRes = await fetch(downloadUrl, { signal: AbortSignal.timeout(45_000) });
-          break;
-        } catch (e: unknown) {
-          console.warn(`[generate-questions-course] fetch attempt ${attempt + 1} failed for ${mat.id}:`, e instanceof Error ? e.message : e);
-          if (attempt === 1) return null;
-          await new Promise((r) => setTimeout(r, 1500));
-        }
-      }
-
-      if (!fetchRes?.ok) {
-        console.warn(`[generate-questions-course] fetch failed for ${mat.id}: HTTP ${fetchRes?.status}`);
-        return null;
-      }
-
-      const buffer = await fetchRes.arrayBuffer();
-      if (buffer.byteLength > MAX_FILE_BYTES) {
-        console.warn(`[generate-questions-course] file too large for ${mat.id}: ${(buffer.byteLength / 1024 / 1024).toFixed(1)} MB`);
-        return null;
-      }
-
-      const content = await extractMaterialContent(buffer, mat.file_path!);
-      if (content.kind === "unsupported") {
-        console.warn(`[generate-questions-course] unsupported content for ${mat.id}: ${content.message}`);
-        return null;
-      }
-
-      console.log(`[generate-questions-course] extracted ${content.kind} from ${mat.id} (${mat.title})`);
-      return { source: { id: mat.id, title: mat.title, material_type: mat.material_type }, content };
-    } catch (e: unknown) {
-      console.error(`[generate-questions-course] exception for material ${mat.id}:`, e instanceof Error ? e.message : e);
-      return null;
-    }
-  }
-
-  const results = await Promise.all(candidates.map(extractOne));
-  const extracted: Extracted[] = results.filter((r): r is Extracted => r !== null);
-
-  if (extracted.length === 0) {
+  if (indexedCandidates.length === 0) {
     return NextResponse.json(
-      { error: "Could not process any course materials. Please try again." },
+      {
+        error:
+          "No indexed materials found for this course. Reindex approved materials before creating a source-backed course bank.",
+        code: "MATERIAL_NOT_INDEXED",
+      },
       { status: 422 }
     );
   }
 
-  const sources: SourceMaterial[] = extracted.map((e) => e.source);
+  type GroundedCourseQuestion = CoverageGeneratedQuestion & {
+    sourceMaterialId: string;
+    sourceChunkId: string;
+    studyRef: Record<string, string | number>;
+  };
 
-  // ── Build AI content parts ────────────────────────────────────────────────
-  const parts: AiContentBlock[] = [];
-
-  for (let i = 0; i < extracted.length; i++) {
-    const { source, content } = extracted[i];
-    const label = `MATERIAL ${i + 1} — ${source.title ?? source.id} (${source.material_type ?? "file"})`;
-
-    if (content.kind === "inline") {
-      parts.push({ type: "text", text: label });
-      parts.push({ type: "inline", mimeType: content.mimeType, data: content.base64, name: `material ${i + 1}` });
-    } else if (content.kind === "text") {
-      const truncated = truncateText(content.text, QUESTION_GEN_TEXT_CHARS);
-      parts.push({ type: "text", text: `${label}\n\n${truncated}` });
-    }
-  }
-
-  const systemPrompt = `You are an exam question generator for Nigerian university students.
-You have been given ${extracted.length} document(s) uploaded for the course ${code}.
-Your job is to generate exactly ${questionCount} multiple-choice questions strictly based on the content found in these documents.
-Do not refuse — generate questions from whatever subject matter is present in the documents, regardless of the course code.
-Cover a broad range of topics across all provided documents.
-Mix recall, application, and analysis questions at exam difficulty level.
-Each question must have exactly 4 options (A, B, C, D) with one correct answer.
-Include a short explanation (1–2 sentences) for each correct answer.
-
-Return ONLY a valid JSON object — no markdown, no backticks, no preamble, no explanatory text:
-{
-  "questions": [
-    {
-      "question": "string",
-      "options": { "A": "string", "B": "string", "C": "string", "D": "string" },
-      "answer": "A" | "B" | "C" | "D",
-      "explanation": "string"
-    }
-  ]
-}`;
-
-  parts.push({ type: "text", text: systemPrompt });
-
-  let rawText: string | null = null;
+  const questions: GroundedCourseQuestion[] = [];
+  const sources: SourceMaterial[] = [];
   let aiMeta: {
     provider: "bedrock" | "gemini";
     model: string;
-    inputMode: "extracted-text" | "inline-file";
+    inputMode: "coverage-aware";
     fallbackProvider?: "bedrock" | "gemini";
     fallbackReason?: string;
     modelFallbackFrom?: string;
     modelFallbackReason?: string;
     reason?: string;
   } | null = null;
-  const result = await generateJson<{ questions: unknown[] }>({
-    messages: [userMessage(parts)],
-    temperature: 0.25,
-    maxTokens: Math.min(4096, questionCount * 320),
-    timeoutMs: AI_QUESTION_TIMEOUT_MS,
-    modelRole: "document",
-  });
-  if (!result.ok) {
-    return NextResponse.json({
-      error: "Failed to generate questions.",
-      ai: { provider: result.provider, model: result.model, error: result.error },
-    }, { status: 500 });
-  }
-  rawText = JSON.stringify(result.data);
-  aiMeta = {
-    provider: result.provider,
-    model: result.model,
-    fallbackProvider: result.fallbackProvider,
-    fallbackReason: result.fallbackReason,
-    modelFallbackFrom: result.modelFallbackFrom,
-    modelFallbackReason: result.modelFallbackReason,
-    inputMode: extracted.every((item) => item.content.kind === "text") ? "extracted-text" : "inline-file",
-  };
-  if (!rawText) {
-    return NextResponse.json({ error: "Failed to generate questions." }, { status: 500 });
-  }
-  type MCQ = {
-    question: string;
-    options: { A: string; B: string; C: string; D: string };
-    answer: "A" | "B" | "C" | "D";
-    explanation: string;
-  };
 
-  let questions: MCQ[];
-  try {
-    const clean = rawText
-      .replace(/^```json\s*/i, "")
-      .replace(/^```\s*/i, "")
-      .replace(/```\s*$/i, "")
-      .trim();
-    const parsed = JSON.parse(clean) as { questions: MCQ[] };
-    if (!Array.isArray(parsed.questions) || parsed.questions.length === 0) throw new Error("empty");
-    questions = parsed.questions;
-  } catch (e: unknown) {
-    console.error(
-      "[generate-questions-course] JSON parse error:",
-      e instanceof Error ? e.message : e,
-      rawText.slice(0, 300)
-    );
-    // Some providers return a refusal in plain text instead of JSON.
-    const isRefusal = /i (am|'m) sorry|cannot fulfill|i cannot|not able to/i.test(rawText);
+  for (let i = 0; i < indexedCandidates.length && questions.length < questionCount; i++) {
+    const material = indexedCandidates[i];
+    const remainingMaterials = indexedCandidates.length - i;
+    const remainingQuestions = questionCount - questions.length;
+    const countForMaterial = Math.max(1, Math.ceil(remainingQuestions / remainingMaterials));
+
+    try {
+      const generation = await generateCoverageAwareQuestions({
+        materialId: material.id,
+        materialTitle: material.title ?? "Untitled material",
+        count: countForMaterial,
+        difficulty: "mixed",
+        coveredQuestions: questions.map((question) => question.question),
+      });
+
+      if (!generation?.questions.length) continue;
+
+      const grounded = await validateSourceBackedQuestions(material.id, generation.questions);
+      questions.push(
+        ...grounded.map((question) => ({
+          ...question,
+          sourceMaterialId: material.id,
+        }))
+      );
+
+      if (!sources.some((source) => source.id === material.id)) {
+        sources.push({
+          id: material.id,
+          title: material.title,
+          material_type: material.material_type,
+        });
+      }
+
+      if (generation.ai) {
+        aiMeta = {
+          provider: generation.ai.provider,
+          model: generation.ai.model,
+          fallbackProvider: generation.ai.fallbackProvider,
+          fallbackReason: generation.ai.fallbackReason,
+          modelFallbackFrom: generation.ai.modelFallbackFrom,
+          modelFallbackReason: generation.ai.modelFallbackReason,
+          inputMode: "coverage-aware",
+          reason: `Generated source-backed questions from indexed chunks across ${indexedCandidates.length} material(s).`,
+        };
+      }
+    } catch (error) {
+      console.warn(
+        `[generate-questions-course] source-backed generation failed for material ${material.id}:`,
+        error instanceof Error ? error.message : error
+      );
+    }
+  }
+
+  const finalQuestions = questions.slice(0, questionCount);
+  if (finalQuestions.length === 0) {
     return NextResponse.json(
       {
-        error: isRefusal
-          ? "The AI couldn't generate questions from these materials. Try uploading more relevant course documents."
-          : "Failed to generate questions.",
+        error: "Failed to generate source-backed questions from indexed course materials.",
+        code: "QUESTIONS_MISSING_SOURCE",
       },
-      { status: 500 }
+      { status: 422 }
     );
   }
 
-  // ── Save quiz set ──────────────────────────────────────────────────────────
+
   const { data: quizSet, error: setErr } = await admin
     .from("study_quiz_sets")
     .insert({
@@ -389,7 +297,7 @@ Return ONLY a valid JSON object — no markdown, no backticks, no preamble, no e
       created_by: user.id,
       published: true,
       visibility: "public",
-      questions_count: questions.length,
+      questions_count: finalQuestions.length,
       source_material_ids: sources,
     } satisfies Record<string, unknown>)
     .select("id")
@@ -404,11 +312,21 @@ Return ONLY a valid JSON object — no markdown, no backticks, no preamble, no e
   const { data: insertedQs, error: qErr } = await admin
     .from("study_quiz_questions")
     .insert(
-      questions.map((q, i) => ({
+      finalQuestions.map((q, i) => ({
         set_id: quizSet.id,
         prompt: q.question,
         explanation: q.explanation,
         position: i,
+        ai_generated: true,
+        source_material_id: q.sourceMaterialId,
+        source_chunk_id: q.sourceChunkId,
+        study_ref: q.studyRef,
+        source_topic: q.sourceTopic ?? q.studyRef?.topic ?? null,
+        question_kind: q.questionKind ?? null,
+        difficulty_level: q.difficultyLevel ?? null,
+        cognitive_level: q.cognitiveLevel ?? null,
+        question_fingerprint: q.questionFingerprint ?? null,
+        generation_meta: q.generationMeta ?? null,
       }))
     )
     .select("id,position");
@@ -423,7 +341,7 @@ Return ONLY a valid JSON object — no markdown, no backticks, no preamble, no e
   const sortedQs = [...insertedQs].sort((a, b) => (a.position ?? 0) - (b.position ?? 0));
 
   const optionRows = sortedQs.flatMap((row) => {
-    const q = questions[row.position ?? 0];
+    const q = finalQuestions[row.position ?? 0];
     if (!q) return [];
     return (["A", "B", "C", "D"] as const).map((letter, idx) => ({
       question_id: row.id,

@@ -4,10 +4,8 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
   BookOpen,
-  Brain,
   Calculator,
   Home,
-  HelpCircle,
   MessageCircleQuestion,
   Moon,
   Sun,
@@ -35,9 +33,7 @@ const NAV_ITEMS: NavItem[] = [
 ];
 
 const TOOL_ITEMS: NavItem[] = [
-  { href: "/study/gpa",     label: "GPA Tools", icon: Calculator, match: "prefix" },
-  { href: "/study/ai-plan", label: "AI Plan",   icon: Brain,      match: "prefix" },
-  { href: "/study/tutors",  label: "Tutors",    icon: HelpCircle, match: "prefix" },
+  { href: "/study/gpa", label: "GPA Tools", icon: Calculator, match: "prefix" },
 ];
 
 function isActive(pathname: string, item: NavItem) {
