@@ -36,10 +36,15 @@ import { toggleSaved } from "@/lib/studySaved";
 import { supabase } from "@/lib/supabase";
 import { GuidedSourceModal, type GuidedStudyRef } from "@/app/study/_components/GuidedSourceModal";
 
-type GeneratedQuestion = {
+type QuestionType = "mcq" | "short_answer" | "theory";
+type QuestionFormat = "mcq" | "mixed" | "written";
+type OptionKey = "A" | "B" | "C" | "D";
+
+type GeneratedMcqQuestion = {
+  question_type?: "mcq" | null;
   question: string;
-  options: { A: string; B: string; C: string; D: string };
-  answer: "A" | "B" | "C" | "D";
+  options: Record<OptionKey, string>;
+  answer: OptionKey;
   explanation: string;
   hint?: string;
   questionKind?: string;
@@ -56,6 +61,30 @@ type GeneratedQuestion = {
     page?: number;
   };
 };
+
+type GeneratedWrittenQuestion = {
+  question_type: "short_answer" | "theory";
+  question: string;
+  model_answer: string;
+  marking_points: string[];
+  explanation?: string;
+  hint?: string;
+  questionKind?: string;
+  difficultyLevel?: string;
+  cognitiveLevel?: string;
+  sourceTopic?: string;
+  questionFingerprint?: string;
+  generationMeta?: Record<string, unknown> | null;
+  studyRef?: {
+    chunkId?: string;
+    topic?: string;
+    instruction?: string;
+    quote?: string;
+    page?: number;
+  };
+};
+
+type GeneratedQuestion = GeneratedMcqQuestion | GeneratedWrittenQuestion;
 
 type GenerationIntent = "weak_areas" | "untested_sections" | "application" | "hard" | "topic";
 
@@ -92,6 +121,12 @@ const STUDENT_GENERATION_MODES: Array<{ value: GenerationIntent; label: string; 
   { value: "application", label: "More application questions", sub: "Practice using ideas, not just recalling them." },
   { value: "hard", label: "Harder questions", sub: "Make it closer to exam difficulty." },
   { value: "topic", label: "Focus on a topic", sub: "Use the focus area you type below." },
+];
+
+const QUESTION_FORMATS: Array<{ value: QuestionFormat; label: string; sub: string }> = [
+  { value: "mixed", label: "Mixed", sub: "Objective, short-answer, and theory" },
+  { value: "mcq", label: "Objective", sub: "A-D questions only" },
+  { value: "written", label: "Written/Theory", sub: "Typed answers and marking points" },
 ];
 
 type ChatMessage = {
@@ -208,6 +243,32 @@ function normalizedPage(page: unknown): number | undefined {
   if (typeof page !== "number" || !Number.isFinite(page)) return undefined;
   const rounded = Math.floor(page);
   return rounded >= 1 && rounded <= 2000 ? rounded : undefined;
+}
+
+function questionTypeOf(question: Pick<GeneratedQuestion, "question_type"> | null | undefined): QuestionType {
+  return question?.question_type === "short_answer" || question?.question_type === "theory"
+    ? question.question_type
+    : "mcq";
+}
+
+function isMcqQuestion(question: GeneratedQuestion): question is GeneratedMcqQuestion {
+  return questionTypeOf(question) === "mcq";
+}
+
+function isWrittenQuestion(question: GeneratedQuestion): question is GeneratedWrittenQuestion {
+  return questionTypeOf(question) !== "mcq";
+}
+
+function questionTypeLabel(type: QuestionType) {
+  if (type === "short_answer") return "Short answer";
+  if (type === "theory") return "Theory";
+  return "Objective";
+}
+
+function formatQuestionFormat(format: QuestionFormat) {
+  if (format === "mcq") return "objective";
+  if (format === "written") return "written/theory";
+  return "mixed";
 }
 
 function withPdfPage(url: string, page?: number) {
@@ -680,9 +741,16 @@ export default function MaterialDetailClient({
 
   // Quiz state machine
   const [quizState, setQuizState] = useState<"idle" | "config" | "loading" | "quiz" | "results">("idle");
-  const [quizConfig, setQuizConfig] = useState<{ count: number; difficulty: "easy" | "mixed" | "hard"; focus: string }>({ count: 10, difficulty: "mixed", focus: "" });
+  const [quizConfig, setQuizConfig] = useState<{ count: number; difficulty: "easy" | "mixed" | "hard"; focus: string; questionFormat: QuestionFormat }>({
+    count: 10,
+    difficulty: "mixed",
+    focus: "",
+    questionFormat: "mixed",
+  });
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
   const [answers, setAnswers] = useState<Record<number, { chosen: string; correct: boolean; skipped: boolean }>>({});
+  const [writtenAnswers, setWrittenAnswers] = useState<Record<number, string>>({});
+  const [writtenCompared, setWrittenCompared] = useState<Record<number, boolean>>({});
   const [retryPool, setRetryPool] = useState<GeneratedQuestion[] | null>(null);
   const syncedQuizMissesRef = useRef<string | null>(null);
 
@@ -733,11 +801,15 @@ export default function MaterialDetailClient({
 
   const qs = generatedQuestions ?? [];
   const currentAnswer = answers[currentQuestionIndex];
+  const mcqCount = qs.filter(isMcqQuestion).length;
+  const writtenCount = qs.filter(isWrittenQuestion).length;
   const correctCount = Object.values(answers).filter((a) => a.correct).length;
-  const skippedCount = Object.values(answers).filter((a) => a.skipped).length;
+  const writtenAnsweredCount = qs.filter((q, i) => isWrittenQuestion(q) && (writtenAnswers[i] ?? "").trim().length > 0).length;
   const missedList = qs
     .map((q, i) => ({ q, i, ans: answers[i] }))
-    .filter(({ ans }) => ans && !ans.correct && !ans.skipped);
+    .filter((item): item is { q: GeneratedMcqQuestion; i: number; ans: { chosen: string; correct: boolean; skipped: boolean } } =>
+      isMcqQuestion(item.q) && Boolean(item.ans) && !item.ans.correct && !item.ans.skipped
+    );
 
   useEffect(() => {
     if (quizState !== "results" || !savedSetId || missedList.length === 0) return;
@@ -862,6 +934,7 @@ export default function MaterialDetailClient({
           count: quizConfig.count,
           difficulty: quizConfig.difficulty,
           focus: quizConfig.focus || undefined,
+          questionFormat: quizConfig.questionFormat,
           generationIntent,
         }),
       });
@@ -889,6 +962,8 @@ export default function MaterialDetailClient({
       setGeneratedQuestions(data.questions);
       setGenerationAi(data.ai ?? null);
       setAnswers({});
+      setWrittenAnswers({});
+      setWrittenCompared({});
       setCurrentQuestionIndex(0);
       setRetryPool(null);
       setHintShown({});
@@ -911,6 +986,7 @@ export default function MaterialDetailClient({
           count: quizConfig.count,
           difficulty: quizConfig.difficulty,
           focus: quizConfig.focus || undefined,
+          questionFormat: quizConfig.questionFormat,
           coveredQuestions: generatedQuestions?.map((q) => q.question) ?? [],
           generationIntent: intent,
         }),
@@ -939,6 +1015,8 @@ export default function MaterialDetailClient({
       setGeneratedQuestions(data.questions);
       setGenerationAi(data.ai ?? null);
       setAnswers({});
+      setWrittenAnswers({});
+      setWrittenCompared({});
       setCurrentQuestionIndex(0);
       setRetryPool(null);
       setHintShown({});
@@ -1350,11 +1428,18 @@ export default function MaterialDetailClient({
       {/* Practice Questions Sheet — config / loading / quiz / results */}
       {quizState !== "idle" && (() => {
         const currentQ = qs[currentQuestionIndex];
-        const answered = currentAnswer !== undefined;
+        const currentQuestionType = currentQ ? questionTypeOf(currentQ) : "mcq";
+        const currentWrittenAnswer = writtenAnswers[currentQuestionIndex] ?? "";
+        const currentWrittenCompared = Boolean(writtenCompared[currentQuestionIndex]);
+        const answered = currentQ
+          ? currentQuestionType === "mcq"
+            ? currentAnswer !== undefined
+            : currentWrittenAnswer.trim().length > 0
+          : false;
         const scoreRingR = 40;
         const scoreRingCx = 50;
         const scoreRingCirc = 2 * Math.PI * scoreRingR;
-        const scoreRingPct = qs.length === 0 ? 0 : Math.round((correctCount / qs.length) * 100);
+        const scoreRingPct = mcqCount === 0 ? 0 : Math.round((correctCount / mcqCount) * 100);
         const scoreRingOffset = scoreRingCirc * (1 - scoreRingPct / 100);
         const scoreRingColor = scoreRingPct >= 80 ? "#22c55e" : scoreRingPct >= 60 ? "#f59e0b" : "#ef4444";
 
@@ -1372,7 +1457,10 @@ export default function MaterialDetailClient({
                      "Results"}
                   </p>
                   {quizState === "quiz" && (
-                    <p className="text-xs text-primary font-semibold">{correctCount}/{currentQuestionIndex} correct</p>
+                    <p className="text-xs text-primary font-semibold">
+                      MCQ {correctCount}/{mcqCount || 0} correct
+                      {writtenCount > 0 ? ` · Written ${writtenAnsweredCount}/${writtenCount}` : ""}
+                    </p>
                   )}
                   {generationAi && (quizState === "quiz" || quizState === "results") && (
                     <p
@@ -1420,6 +1508,28 @@ export default function MaterialDetailClient({
                               : "border-border bg-background text-foreground hover:bg-secondary/50"
                           )}>
                           {n}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div>
+                    <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-muted-brand">Format</p>
+                    <div className="grid gap-2 sm:grid-cols-3">
+                      {QUESTION_FORMATS.map(({ value, label, sub }) => (
+                        <button
+                          key={value}
+                          type="button"
+                          onClick={() => setQuizConfig((c) => ({ ...c, questionFormat: value }))}
+                          className={cn(
+                            "rounded-xl border px-3 py-3 text-left transition focus-visible:outline-none",
+                            quizConfig.questionFormat === value
+                              ? "border-primary bg-primary-light"
+                              : "border-border bg-background hover:bg-secondary/40"
+                          )}
+                        >
+                          <p className={cn("text-sm font-semibold", quizConfig.questionFormat === value ? "text-primary-text" : "text-foreground")}>{label}</p>
+                          <p className="mt-0.5 text-[11px] leading-snug text-muted-brand">{sub}</p>
                         </button>
                       ))}
                     </div>
@@ -1487,7 +1597,7 @@ export default function MaterialDetailClient({
                     <button type="button" onClick={handleGenerateQuestions}
                       className="inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-primary px-4 py-3.5 text-sm font-semibold text-white transition hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary">
                       <Sparkles className="h-4 w-4" />
-                      Generate {quizConfig.count} questions
+                      Generate {quizConfig.count} {formatQuestionFormat(quizConfig.questionFormat)} questions
                     </button>
                   </div>
                 </div>
@@ -1497,7 +1607,7 @@ export default function MaterialDetailClient({
               {quizState === "loading" && (
                 <div className="flex flex-1 flex-col items-center justify-center gap-3 py-16">
                   <Loader2 className="h-8 w-8 animate-spin text-primary" />
-                  <p className="text-sm text-muted-brand">Generating {quizConfig.count} questions…</p>
+                  <p className="text-sm text-muted-brand">Generating {quizConfig.count} {formatQuestionFormat(quizConfig.questionFormat)} questions...</p>
                 </div>
               )}
 
@@ -1556,42 +1666,100 @@ export default function MaterialDetailClient({
                       </div>
                     )}
 
-                    <div className="space-y-2.5">
-                      {(["A", "B", "C", "D"] as const).map((key) => {
-                        const isCorrect = currentQ.answer === key;
-                        const isChosen = currentAnswer?.chosen === key;
-                        return (
-                          <button key={key} type="button"
-                            disabled={answered}
-                            onClick={() => {
-                              if (answered) return;
-                              setAnswers((prev) => ({ ...prev, [currentQuestionIndex]: { chosen: key, correct: isCorrect, skipped: false } }));
-                            }}
-                            className={cn(
-                              "flex w-full items-start gap-2.5 rounded-xl border px-3.5 py-2.5 text-sm text-left transition focus-visible:outline-none",
-                              !answered && "hover:bg-secondary/50 border-border/60 text-foreground",
-                              answered && isCorrect && "border-primary bg-primary-light font-semibold text-primary-text",
-                              answered && isChosen && !isCorrect && "border-red-400 bg-red-50 font-semibold text-red-700",
-                              answered && !isCorrect && !isChosen && "border-border/40 text-muted-brand opacity-60",
-                            )}>
-                            <span className="shrink-0 font-bold">{key}.</span>
-                            <span>{currentQ.options[key]}</span>
-                          </button>
-                        );
-                      })}
-                    </div>
-                    {answered && (
-                      <div className="mt-4 rounded-xl border border-primary/20 bg-primary-light/60 px-4 py-3">
-                        <p className="text-xs leading-relaxed text-primary-text/85">
-                          <span className="font-semibold">Explanation: </span>{currentQ.explanation}
-                        </p>
+                    {isMcqQuestion(currentQ) ? (
+                      <>
+                        <div className="space-y-2.5">
+                          {(["A", "B", "C", "D"] as const).map((key) => {
+                            const isCorrect = currentQ.answer === key;
+                            const isChosen = currentAnswer?.chosen === key;
+                            return (
+                              <button key={key} type="button"
+                                disabled={answered}
+                                onClick={() => {
+                                  if (answered) return;
+                                  setAnswers((prev) => ({ ...prev, [currentQuestionIndex]: { chosen: key, correct: isCorrect, skipped: false } }));
+                                }}
+                                className={cn(
+                                  "flex w-full items-start gap-2.5 rounded-xl border px-3.5 py-2.5 text-sm text-left transition focus-visible:outline-none",
+                                  !answered && "hover:bg-secondary/50 border-border/60 text-foreground",
+                                  answered && isCorrect && "border-primary bg-primary-light font-semibold text-primary-text",
+                                  answered && isChosen && !isCorrect && "border-red-400 bg-red-50 font-semibold text-red-700",
+                                  answered && !isCorrect && !isChosen && "border-border/40 text-muted-brand opacity-60",
+                                )}>
+                                <span className="shrink-0 font-bold">{key}.</span>
+                                <span>{currentQ.options[key]}</span>
+                              </button>
+                            );
+                          })}
+                        </div>
+                        {answered && (
+                          <div className="mt-4 rounded-xl border border-primary/20 bg-primary-light/60 px-4 py-3">
+                            <p className="text-xs leading-relaxed text-primary-text/85">
+                              <span className="font-semibold">Explanation: </span>{currentQ.explanation}
+                            </p>
+                          </div>
+                        )}
+                      </>
+                    ) : (
+                      <div className="space-y-4">
+                        <div className="flex items-center gap-2">
+                          <span className="rounded-full border border-primary/30 bg-primary-light px-2.5 py-1 text-[10px] font-extrabold uppercase tracking-wide text-primary-text">
+                            {questionTypeLabel(currentQuestionType)}
+                          </span>
+                        </div>
+                        <textarea
+                          value={currentWrittenAnswer}
+                          onChange={(e) => {
+                            const value = e.target.value;
+                            setWrittenAnswers((prev) => ({ ...prev, [currentQuestionIndex]: value }));
+                            if (!value.trim()) {
+                              setWrittenCompared((prev) => ({ ...prev, [currentQuestionIndex]: false }));
+                            }
+                          }}
+                          placeholder="Type your answer here..."
+                          rows={currentQuestionType === "theory" ? 8 : 5}
+                          className="w-full resize-none rounded-2xl border border-border bg-background px-4 py-3 text-sm leading-relaxed outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/20"
+                        />
+                        <button
+                          type="button"
+                          disabled={!currentWrittenAnswer.trim()}
+                          onClick={() => setWrittenCompared((prev) => ({ ...prev, [currentQuestionIndex]: true }))}
+                          className="inline-flex items-center justify-center rounded-2xl border border-primary bg-primary-light px-4 py-2.5 text-sm font-semibold text-primary-text transition hover:opacity-90 disabled:opacity-40 focus-visible:outline-none"
+                        >
+                          Compare answer
+                        </button>
+                        {currentWrittenCompared && (
+                          <div className="space-y-3 rounded-2xl border border-primary/20 bg-primary-light/60 px-4 py-3">
+                            <div>
+                              <p className="text-xs font-extrabold uppercase tracking-wide text-primary-text/80">Model answer</p>
+                              <p className="mt-1 text-sm leading-relaxed text-primary-text">{currentQ.model_answer}</p>
+                            </div>
+                            {currentQ.marking_points.length > 0 && (
+                              <div>
+                                <p className="text-xs font-extrabold uppercase tracking-wide text-primary-text/80">Marking points</p>
+                                <ul className="mt-1 space-y-1 text-sm leading-relaxed text-primary-text">
+                                  {currentQ.marking_points.map((point, index) => (
+                                    <li key={`${point}-${index}`}>• {point}</li>
+                                  ))}
+                                </ul>
+                              </div>
+                            )}
+                            {currentQ.explanation?.trim() && (
+                              <p className="text-xs leading-relaxed text-primary-text/85">
+                                <span className="font-semibold">Note: </span>{currentQ.explanation}
+                              </p>
+                            )}
+                          </div>
+                        )}
                       </div>
                     )}
                   </div>
                   <div className="absolute inset-x-0 bottom-0 flex gap-2 border-t border-border bg-card px-4 py-4 pb-[max(1rem,env(safe-area-inset-bottom))]">
                     <button type="button"
                       onClick={() => {
-                        if (!answered) setAnswers((prev) => ({ ...prev, [currentQuestionIndex]: { chosen: "", correct: false, skipped: true } }));
+                        if (!answered && currentQuestionType === "mcq") {
+                          setAnswers((prev) => ({ ...prev, [currentQuestionIndex]: { chosen: "", correct: false, skipped: true } }));
+                        }
                         if (currentQuestionIndex + 1 >= qs.length) {
                           setQuizState("results");
                         } else {
@@ -1630,26 +1798,30 @@ export default function MaterialDetailClient({
                         strokeLinecap="round"
                         transform={`rotate(-90 ${scoreRingCx} ${scoreRingCx})`} />
                       <text x={scoreRingCx} y={scoreRingCx} textAnchor="middle" dominantBaseline="central"
-                        fontSize={18} fontWeight={700} fill="currentColor" fontFamily="var(--font-bricolage)">{correctCount}/{qs.length}</text>
+                        fontSize={18} fontWeight={700} fill="currentColor" fontFamily="var(--font-bricolage)">
+                        {mcqCount > 0 ? `${correctCount}/${mcqCount}` : `${writtenAnsweredCount}/${writtenCount}`}
+                      </text>
                     </svg>
                     <p className="text-sm font-semibold text-foreground">
-                      {scoreRingPct >= 80 ? "Excellent!" : scoreRingPct >= 60 ? "Good effort" : "Keep practising"}
+                      {mcqCount > 0
+                        ? scoreRingPct >= 80 ? "Excellent!" : scoreRingPct >= 60 ? "Good effort" : "Keep practising"
+                        : "Written practice complete"}
                     </p>
                   </div>
 
                   {/* Stat pills */}
                   <div className="flex gap-2">
                     <div className="flex-1 rounded-xl border border-border bg-background py-3 text-center">
-                      <p className="text-lg font-bold text-primary">{correctCount}</p>
-                      <p className="text-[10px] text-muted-brand uppercase tracking-wide">Correct</p>
+                      <p className="text-lg font-bold text-primary">{correctCount}/{mcqCount}</p>
+                      <p className="text-[10px] text-muted-brand uppercase tracking-wide">MCQ score</p>
                     </div>
                     <div className="flex-1 rounded-xl border border-border bg-background py-3 text-center">
                       <p className="text-lg font-bold text-red-500">{missedList.length}</p>
                       <p className="text-[10px] text-muted-brand uppercase tracking-wide">Missed</p>
                     </div>
                     <div className="flex-1 rounded-xl border border-border bg-background py-3 text-center">
-                      <p className="text-lg font-bold text-muted-brand">{skippedCount}</p>
-                      <p className="text-[10px] text-muted-brand uppercase tracking-wide">Skipped</p>
+                      <p className="text-lg font-bold text-muted-brand">{writtenAnsweredCount}/{writtenCount}</p>
+                      <p className="text-[10px] text-muted-brand uppercase tracking-wide">Written</p>
                     </div>
                   </div>
 
@@ -1711,7 +1883,7 @@ export default function MaterialDetailClient({
                     className="inline-flex w-full items-center justify-center gap-2 rounded-2xl border border-primary bg-primary-light px-4 py-3 text-sm font-semibold text-primary-text transition hover:opacity-90 disabled:opacity-50 focus-visible:outline-none">
                     {generatingMore
                       ? <><Loader2 className="h-4 w-4 animate-spin" /> Generating…</>
-                      : <><Sparkles className="h-4 w-4" /> Generate {quizConfig.count} more questions</>
+                      : <><Sparkles className="h-4 w-4" /> Generate {quizConfig.count} more {formatQuestionFormat(quizConfig.questionFormat)} questions</>
                     }
                   </button>
                   {missedList.length > 0 && (
@@ -1721,6 +1893,8 @@ export default function MaterialDetailClient({
                         setGeneratedQuestions(missed);
                         setRetryPool(missed);
                         setAnswers({});
+                        setWrittenAnswers({});
+                        setWrittenCompared({});
                         setCurrentQuestionIndex(0);
                         setHintShown({});
                         syncedQuizMissesRef.current = null;

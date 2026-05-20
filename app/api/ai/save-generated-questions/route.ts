@@ -1,6 +1,6 @@
 // app/api/ai/save-generated-questions/route.ts
 // POST /api/ai/save-generated-questions
-// Saves AI-generated MCQ questions to study_quiz_sets and linked tables.
+// Saves AI-generated typed questions to study_quiz_sets and linked tables.
 //
 // ── Run this in the Supabase SQL editor before deploying ─────────────────────
 // ALTER TABLE public.study_quiz_sets
@@ -27,11 +27,19 @@ import {
   validateSourceBackedQuestions,
 } from "@/lib/studyQuestionGrounding";
 
-type MCQ = {
+type QuestionType = "mcq" | "short_answer" | "theory";
+type OptionKey = "A" | "B" | "C" | "D";
+
+type GeneratedQuestion = {
+  question_type?: QuestionType | null;
   question: string;
-  options: { A: string; B: string; C: string; D: string };
-  answer: "A" | "B" | "C" | "D";
-  explanation: string;
+  options?: { A?: string; B?: string; C?: string; D?: string };
+  answer?: OptionKey;
+  explanation?: string;
+  model_answer?: string;
+  modelAnswer?: string;
+  marking_points?: string[];
+  markingPoints?: string[];
   hint?: string;
   questionKind?: string;
   difficultyLevel?: string;
@@ -46,6 +54,16 @@ type MCQ = {
     quote?: string;
     page?: number;
   };
+};
+
+type NormalizedQuestion = Omit<GeneratedQuestion, "question_type" | "options" | "answer" | "modelAnswer" | "markingPoints"> & {
+  question_type: QuestionType;
+  question: string;
+  explanation: string;
+  options?: { A: string; B: string; C: string; D: string };
+  answer?: OptionKey;
+  model_answer?: string;
+  marking_points: string[];
 };
 
 type MaterialTitleRow = {
@@ -65,6 +83,71 @@ type InsertedQuestionRow = {
 
 function cleanString(value: unknown): string | undefined {
   return typeof value === "string" && value.trim().length > 0 ? value.trim() : undefined;
+}
+
+function cleanStringArray(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  return value
+    .map((item) => cleanString(item))
+    .filter((item): item is string => Boolean(item))
+    .slice(0, 8);
+}
+
+function questionTypeOf(value: unknown): QuestionType {
+  return value === "short_answer" || value === "theory" ? value : "mcq";
+}
+
+function normalizeQuestions(questions: GeneratedQuestion[]): NormalizedQuestion[] {
+  const optionKeys = ["A", "B", "C", "D"] as const;
+  const normalized: NormalizedQuestion[] = [];
+
+  for (const question of questions) {
+    const prompt = cleanString(question.question);
+    if (!prompt) continue;
+
+    const questionType = questionTypeOf(question.question_type);
+    const base = {
+      ...question,
+      question_type: questionType,
+      question: prompt,
+      explanation: cleanString(question.explanation) ?? "",
+      marking_points: cleanStringArray(question.marking_points ?? question.markingPoints),
+    };
+
+    if (questionType === "mcq") {
+      const options = question.options ?? {};
+      const normalizedOptions = {
+        A: cleanString(options.A) ?? "",
+        B: cleanString(options.B) ?? "",
+        C: cleanString(options.C) ?? "",
+        D: cleanString(options.D) ?? "",
+      };
+      const validAnswer = optionKeys.includes(question.answer as OptionKey);
+      if (!validAnswer || optionKeys.some((key) => !normalizedOptions[key])) continue;
+      normalized.push({
+        ...base,
+        question_type: "mcq",
+        options: normalizedOptions,
+        answer: question.answer as OptionKey,
+        model_answer: undefined,
+        marking_points: [],
+      });
+      continue;
+    }
+
+    const modelAnswer = cleanString(question.model_answer) ?? cleanString(question.modelAnswer);
+    if (!modelAnswer) continue;
+    normalized.push({
+      ...base,
+      question_type: questionType,
+      options: undefined,
+      answer: undefined,
+      model_answer: modelAnswer,
+      marking_points: base.marking_points,
+    });
+  }
+
+  return normalized;
 }
 
 function cleanLabel(value: unknown, maxLength = 80): string | null {
@@ -90,7 +173,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Unauthorised" }, { status: 401 });
   }
 
-  let body: { materialId?: string; questions?: MCQ[] };
+  let body: { materialId?: string; questions?: GeneratedQuestion[] };
   try {
     body = await req.json();
   } catch {
@@ -102,19 +185,12 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Missing required fields." }, { status: 400 });
   }
 
-  for (const question of questions) {
-    const optionKeys = ["A", "B", "C", "D"] as const;
-    const hasAllOptions = optionKeys.every((key) => {
-      const value = question.options?.[key];
-      return typeof value === "string" && value.trim().length > 0;
-    });
-    const validAnswer = optionKeys.includes(question.answer);
-    if (!hasAllOptions || !validAnswer) {
-      return NextResponse.json(
-        { error: "AI returned malformed questions. Please try generating again." },
-        { status: 422 }
-      );
-    }
+  const normalizedQuestions = normalizeQuestions(questions);
+  if (!normalizedQuestions || normalizedQuestions.length !== questions.length) {
+    return NextResponse.json(
+      { error: "AI returned malformed questions. Please try generating again." },
+      { status: 422 }
+    );
   }
 
   const admin = adminSupabase;
@@ -129,30 +205,34 @@ export async function POST(req: NextRequest) {
   }
 
   const material = mat as MaterialTitleRow;
-  let groundedQuestions: Array<MCQ & GroundedQuestionMeta>;
-  try {
-    groundedQuestions = await validateSourceBackedQuestions(materialId, questions);
-  } catch (error: unknown) {
-    const groundingError = error as {
-      message?: string;
-      code?: string;
-      invalidCount?: number;
-      status?: number;
-    };
-    return NextResponse.json(
-      {
-        error: groundingError.message || SOURCE_GROUNDING_ERROR_MESSAGE,
-        code: groundingError.code || "QUESTIONS_MISSING_SOURCE",
-        invalidCount: groundingError.invalidCount,
-      },
-      { status: Number(groundingError.status) || 422 }
-    );
+  let questionsToSave: Array<NormalizedQuestion & Partial<GroundedQuestionMeta>> = normalizedQuestions;
+  const mcqQuestions = normalizedQuestions.filter((question) => question.question_type === "mcq");
+  const allMcq = mcqQuestions.length === normalizedQuestions.length;
+  if (allMcq) {
+    try {
+      questionsToSave = await validateSourceBackedQuestions(materialId, normalizedQuestions);
+    } catch (error: unknown) {
+      const groundingError = error as {
+        message?: string;
+        code?: string;
+        invalidCount?: number;
+        status?: number;
+      };
+      return NextResponse.json(
+        {
+          error: groundingError.message || SOURCE_GROUNDING_ERROR_MESSAGE,
+          code: groundingError.code || "QUESTIONS_MISSING_SOURCE",
+          invalidCount: groundingError.invalidCount,
+        },
+        { status: Number(groundingError.status) || 422 }
+      );
+    }
   }
 
   try {
     await assertQuestionsNotDuplicateForCourse({
       materialId,
-      questions: groundedQuestions,
+      questions: allMcq ? questionsToSave : mcqQuestions,
     });
   } catch (error: unknown) {
     const duplicateError = error as { status?: number };
@@ -173,7 +253,7 @@ export async function POST(req: NextRequest) {
       created_by: user.id,
       published: true,
       visibility: "private",
-      questions_count: questions.length,
+      questions_count: questionsToSave.length,
       source_material_id: materialId,
       due_at: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
     })
@@ -190,12 +270,14 @@ export async function POST(req: NextRequest) {
 
   const quizSet = set as QuizSetRow;
 
-  const questionPayload = groundedQuestions.map((question, index) => ({
+  const questionPayload = questionsToSave.map((question, index) => ({
     set_id: quizSet.id,
     prompt: question.question,
     position: index,
-    explanation: question.explanation,
-    question_type: "mcq",
+    explanation: question.explanation || (question.question_type === "mcq" ? null : question.model_answer ?? null),
+    question_type: question.question_type,
+    model_answer: question.question_type === "mcq" ? null : question.model_answer ?? null,
+    marking_points: question.question_type === "mcq" ? [] : question.marking_points,
     ai_generated: true,
     source_material_id: materialId,
     study_ref: question.studyRef,
@@ -234,20 +316,22 @@ export async function POST(req: NextRequest) {
       return [];
     }
 
-    const question = groundedQuestions[questionRow.position];
-    if (!question) {
+    const question = questionsToSave[questionRow.position];
+    if (!question || question.question_type !== "mcq" || !question.options || !question.answer) {
       return [];
     }
+    const options = question.options;
+    const answer = question.answer;
 
     return (["A", "B", "C", "D"] as const).map((key, index) => ({
       question_id: questionRow.id,
-      text: question.options[key],
-      is_correct: question.answer === key,
+      text: options[key],
+      is_correct: answer === key,
       position: index,
     }));
   });
 
-  if (optionPayload.length !== questions.length * 4) {
+  if (optionPayload.length !== mcqQuestions.length * 4) {
     console.error("[save-generated-questions] option payload build error");
     const { error: questionRollbackError } = await admin
       .from("study_quiz_questions")
@@ -266,9 +350,11 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Failed to save questions." }, { status: 500 });
   }
 
-  const { error: optionsError } = await admin
-    .from("study_quiz_options")
-    .insert(optionPayload);
+  const { error: optionsError } = optionPayload.length > 0
+    ? await admin
+      .from("study_quiz_options")
+      .insert(optionPayload)
+    : { error: null };
 
   if (optionsError) {
     console.error("[save-generated-questions] options insert error:", optionsError);

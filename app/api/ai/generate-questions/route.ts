@@ -1,6 +1,6 @@
 // app/api/ai/generate-questions/route.ts
 // POST /api/ai/generate-questions
-// Generates MCQ practice questions from a study material using the configured AI provider.
+// Generates typed practice questions from a study material using the configured AI provider.
 // Supports: PDF, JPG/PNG/WEBP images, DOCX, PPTX.
 
 export const maxDuration = 180;
@@ -45,6 +45,8 @@ type StudyRef = {
   page?: number;
 };
 
+type OptionKey = "A" | "B" | "C" | "D";
+
 type MaterialChunk = {
   id: string;
   page_number: number | null;
@@ -53,13 +55,32 @@ type MaterialChunk = {
 };
 
 type GeneratedQuestion = {
+  question_type: "mcq";
   question: string;
   options: { A: string; B: string; C: string; D: string };
-  answer: "A" | "B" | "C" | "D";
+  answer: OptionKey;
   explanation: string;
   hint?: string;
+  questionKind?: string;
+  difficultyLevel?: string;
+  cognitiveLevel?: string;
+  sourceTopic?: string;
+  studyRef?: StudyRef;
+} | {
+  question_type: "short_answer" | "theory";
+  question: string;
+  model_answer: string;
+  marking_points: string[];
+  explanation: string;
+  hint?: string;
+  questionKind?: string;
+  difficultyLevel?: string;
+  cognitiveLevel?: string;
+  sourceTopic?: string;
   studyRef?: StudyRef;
 };
+
+type QuestionFormat = "mcq" | "mixed" | "written";
 
 const GENERATION_INTENTS = new Set<StudyGenerationIntent>([
   "weak_areas",
@@ -74,6 +95,10 @@ function normalizeGenerationIntent(value: unknown): StudyGenerationIntent | null
   return typeof value === "string" && GENERATION_INTENTS.has(value as StudyGenerationIntent)
     ? (value as StudyGenerationIntent)
     : null;
+}
+
+function normalizeQuestionFormat(value: unknown): QuestionFormat {
+  return value === "mcq" || value === "written" || value === "mixed" ? value : "mixed";
 }
 
 function generationIntentInstruction(intent: StudyGenerationIntent | null) {
@@ -104,6 +129,22 @@ function routeErrorMessage(error: unknown) {
 
 function optionalString(value: unknown): string | undefined {
   return typeof value === "string" && value.trim().length > 0 ? value.trim() : undefined;
+}
+
+function optionalStringArray(value: unknown): string[] {
+  if (Array.isArray(value)) {
+    return value
+      .map((item) => optionalString(item))
+      .filter((item): item is string => Boolean(item))
+      .slice(0, 8);
+  }
+  const text = optionalString(value);
+  if (!text) return [];
+  return text
+    .split(/\r?\n|;/)
+    .map((item) => item.replace(/^[-*\d.)\s]+/, "").trim())
+    .filter(Boolean)
+    .slice(0, 8);
 }
 
 function optionalPage(value: unknown): number | undefined {
@@ -144,12 +185,43 @@ function normalizeStudyRef(
   return { chunkId, topic, instruction, quote: quote ?? (chunk ? sourceSnippet(chunk.text) : undefined), page };
 }
 
+function normalizeQuestionType(value: unknown): GeneratedQuestion["question_type"] {
+  return value === "short_answer" || value === "theory" ? value : "mcq";
+}
+
 function normalizeGeneratedQuestions(questions: unknown[], chunksById?: Map<string, MaterialChunk>): GeneratedQuestion[] {
   const optionKeys = ["A", "B", "C", "D"] as const;
 
-  return questions.flatMap((item) => {
+  return questions.flatMap<GeneratedQuestion>((item): GeneratedQuestion[] => {
     if (!item || typeof item !== "object") return [];
     const raw = item as Record<string, unknown>;
+    const questionType = normalizeQuestionType(raw.question_type ?? raw.questionType);
+    const questionText = optionalString(raw.question);
+    if (!questionText) return [];
+
+    const hint = optionalString(raw.hint);
+    const common = {
+      question: questionText,
+      explanation: optionalString(raw.explanation) ?? "",
+      hint,
+      questionKind: optionalString(raw.questionKind) ?? optionalString(raw.question_kind),
+      difficultyLevel: optionalString(raw.difficultyLevel) ?? optionalString(raw.difficulty_level),
+      cognitiveLevel: optionalString(raw.cognitiveLevel) ?? optionalString(raw.cognitive_level),
+      sourceTopic: optionalString(raw.sourceTopic) ?? optionalString(raw.source_topic),
+      studyRef: normalizeStudyRef(raw.studyRef, hint, chunksById),
+    };
+
+    if (questionType === "short_answer" || questionType === "theory") {
+      const modelAnswer = optionalString(raw.model_answer) ?? optionalString(raw.modelAnswer);
+      if (!modelAnswer) return [];
+      return [{
+        ...common,
+        question_type: questionType,
+        model_answer: modelAnswer,
+        marking_points: optionalStringArray(raw.marking_points ?? raw.markingPoints),
+      }];
+    }
+
     const options = raw.options && typeof raw.options === "object"
       ? raw.options as Record<string, unknown>
       : {};
@@ -162,21 +234,54 @@ function normalizeGeneratedQuestions(questions: unknown[], chunksById?: Map<stri
       D: optionalString(options.D) ?? "",
     };
 
-    const questionText = optionalString(raw.question);
-    if (!questionText) return [];
     if (answer !== "A" && answer !== "B" && answer !== "C" && answer !== "D") return [];
     if (optionKeys.some((key) => !normalizedOptions[key])) return [];
 
-    const hint = optionalString(raw.hint);
     return [{
-      question: questionText,
+      ...common,
+      question_type: "mcq",
       options: normalizedOptions,
-      answer: answer as GeneratedQuestion["answer"],
-      explanation: optionalString(raw.explanation) ?? "",
-      hint,
-      studyRef: normalizeStudyRef(raw.studyRef, hint, chunksById),
+      answer: answer as OptionKey,
     }];
   });
+}
+
+function questionFormatInstruction(questionFormat: QuestionFormat, questionCount: number) {
+  if (questionFormat === "mcq") {
+    return {
+      label: "objective multiple choice",
+      maxTokens: Math.min(6000, questionCount * 380),
+      text: `Generate exactly ${questionCount} multiple choice questions strictly from the provided document content.
+Each item must use question_type "mcq".
+Each question must have 4 options (A, B, C, D) with exactly one correct answer.`,
+    };
+  }
+
+  if (questionFormat === "written") {
+    return {
+      label: "written/theory",
+      maxTokens: Math.min(8000, questionCount * 560),
+      text: `Generate exactly ${questionCount} written-answer questions strictly from the provided document content.
+Use only question_type "short_answer" or "theory".
+Use short_answer for focused answers that fit in a few sentences.
+Use theory for longer explain/describe/discuss answers.
+Do not include options or answer letters for written questions.
+Each written question must include a model_answer and marking_points array.`,
+    };
+  }
+
+  const theoryCount = questionCount >= 10 ? Math.max(1, Math.round(questionCount * 0.1)) : Math.max(1, Math.floor(questionCount / 5));
+  const shortAnswerCount = questionCount >= 5 ? Math.max(1, Math.round(questionCount * 0.2)) : 1;
+  const writtenCount = Math.min(questionCount, shortAnswerCount + theoryCount);
+  const mcqCount = Math.max(0, questionCount - writtenCount);
+  return {
+    label: "mixed objective and written",
+    maxTokens: Math.min(8500, questionCount * 560),
+    text: `Generate exactly ${questionCount} practice questions strictly from the provided document content.
+Target this mix: ${mcqCount} mcq, ${shortAnswerCount} short_answer, ${theoryCount} theory. If the total needs adjustment, keep the final array length exactly ${questionCount}.
+For mcq items, include question_type "mcq", 4 options (A, B, C, D), and exactly one correct answer.
+For short_answer and theory items, do not include options or answer letters; include a model_answer and marking_points array.`,
+  };
 }
 
 export async function POST(req: NextRequest) {
@@ -200,6 +305,7 @@ async function handleGenerateQuestionsRequest(req: NextRequest) {
     count?: number;
     difficulty?: "easy" | "mixed" | "hard";
     focus?: string;
+    questionFormat?: string;
     coveredQuestions?: string[];
     generationIntent?: string;
     topicId?: string | null;
@@ -212,6 +318,7 @@ async function handleGenerateQuestionsRequest(req: NextRequest) {
   }
 
   const { materialId, count = 10, difficulty = "mixed", focus, coveredQuestions = [] } = body;
+  const questionFormat = normalizeQuestionFormat(body.questionFormat);
   const generationIntent = normalizeGenerationIntent(body.generationIntent);
   const topicId = typeof body.topicId === "string" && body.topicId.trim() ? body.topicId.trim() : null;
   const subtopicId = typeof body.subtopicId === "string" && body.subtopicId.trim() ? body.subtopicId.trim() : null;
@@ -246,64 +353,67 @@ async function handleGenerateQuestionsRequest(req: NextRequest) {
   const coveredInstruction = coveredQuestions.length > 0
     ? `\n\nThe following questions have ALREADY been generated from this document. Do NOT repeat these topics or ask similar questions. Identify sections or concepts in the document that are NOT covered by these questions and generate new questions from those parts:\n${coveredQuestions.map((q, i) => `${i + 1}. ${q}`).join("\n")}`
     : "";
+  const formatInstruction = questionFormatInstruction(questionFormat, questionCount);
 
-  try {
-    const coverageResult = await generateCoverageAwareQuestions({
-      materialId,
-      materialTitle: material.title ?? "Untitled material",
-      count: questionCount,
-      difficulty: effectiveDifficulty,
-      focus,
-      coveredQuestions,
-      generationIntent,
-      topicId,
-      subtopicId,
-    });
+  if (questionFormat === "mcq") {
+    try {
+      const coverageResult = await generateCoverageAwareQuestions({
+        materialId,
+        materialTitle: material.title ?? "Untitled material",
+        count: questionCount,
+        difficulty: effectiveDifficulty,
+        focus,
+        coveredQuestions,
+        generationIntent,
+        topicId,
+        subtopicId,
+      });
 
-    if (coverageResult?.questions.length) {
-      const missingChunkRefs = coverageResult.questions.filter((question) => !question.studyRef?.chunkId).length;
-      if (missingChunkRefs > 0) {
-        console.warn("[generate-questions] coverage-aware result included best-effort refs for indexed material:", {
-          materialId,
-          missingChunkRefs,
+      if (coverageResult?.questions.length) {
+        const missingChunkRefs = coverageResult.questions.filter((question) => !question.studyRef?.chunkId).length;
+        if (missingChunkRefs > 0) {
+          console.warn("[generate-questions] coverage-aware result included best-effort refs for indexed material:", {
+            materialId,
+            missingChunkRefs,
+          });
+        }
+        const kindSummary = Object.entries(coverageResult.questionKindCounts)
+          .map(([kind, value]) => `${value} ${kind.replace(/_/g, " ")}`)
+          .join(", ");
+        return NextResponse.json({
+          questions: coverageResult.questions,
+          ai: {
+            provider: coverageResult.ai?.provider ?? "gemini",
+            model: coverageResult.ai?.model ?? process.env.GEMINI_MODEL_GENERATION?.trim() ?? process.env.GEMINI_MODEL?.trim() ?? "gemini-2.5-flash",
+            fallbackProvider: coverageResult.ai?.fallbackProvider,
+            fallbackReason: coverageResult.ai?.fallbackReason,
+            modelFallbackFrom: coverageResult.ai?.modelFallbackFrom,
+            modelFallbackReason: coverageResult.ai?.modelFallbackReason,
+            inputMode: "coverage-aware",
+            reason: `Coverage-aware generation covered ${coverageResult.topicsCovered} topic(s)${kindSummary ? `: ${kindSummary}` : ""}.`,
+            coverage: {
+              topicsCovered: coverageResult.topicsCovered,
+              questionKindCounts: coverageResult.questionKindCounts,
+              cognitiveLevelCounts: coverageResult.cognitiveLevelCounts,
+              chunksLoaded: coverageResult.chunksLoaded,
+              chunksCatalogued: coverageResult.chunksCatalogued,
+              courseMap: coverageResult.coverage,
+              intent: coverageResult.coverage?.intent ?? generationIntent,
+              intentLabel: coverageResult.coverage?.intentLabel,
+              targetedTopic: coverageResult.coverage?.targetedTopic,
+              reason: coverageResult.coverage?.reason,
+            },
+          },
         });
       }
-      const kindSummary = Object.entries(coverageResult.questionKindCounts)
-        .map(([kind, value]) => `${value} ${kind.replace(/_/g, " ")}`)
-        .join(", ");
-      return NextResponse.json({
-        questions: coverageResult.questions,
-        ai: {
-          provider: coverageResult.ai?.provider ?? "gemini",
-          model: coverageResult.ai?.model ?? process.env.GEMINI_MODEL_GENERATION?.trim() ?? process.env.GEMINI_MODEL?.trim() ?? "gemini-2.5-flash",
-          fallbackProvider: coverageResult.ai?.fallbackProvider,
-          fallbackReason: coverageResult.ai?.fallbackReason,
-          modelFallbackFrom: coverageResult.ai?.modelFallbackFrom,
-          modelFallbackReason: coverageResult.ai?.modelFallbackReason,
-          inputMode: "coverage-aware",
-          reason: `Coverage-aware generation covered ${coverageResult.topicsCovered} topic(s)${kindSummary ? `: ${kindSummary}` : ""}.`,
-          coverage: {
-            topicsCovered: coverageResult.topicsCovered,
-            questionKindCounts: coverageResult.questionKindCounts,
-            cognitiveLevelCounts: coverageResult.cognitiveLevelCounts,
-            chunksLoaded: coverageResult.chunksLoaded,
-            chunksCatalogued: coverageResult.chunksCatalogued,
-            courseMap: coverageResult.coverage,
-            intent: coverageResult.coverage?.intent ?? generationIntent,
-            intentLabel: coverageResult.coverage?.intentLabel,
-            targetedTopic: coverageResult.coverage?.targetedTopic,
-            reason: coverageResult.coverage?.reason,
-          },
-        },
-      });
-    }
-  } catch (error) {
-    console.warn("[generate-questions] coverage-aware generation fell back:", error instanceof Error ? error.message : error);
-    if (material.index_status === "ready") {
-      console.warn("[generate-questions] indexed material is using best-effort generation fallback:", {
-        materialId,
-        indexStatus: material.index_status,
-      });
+    } catch (error) {
+      console.warn("[generate-questions] coverage-aware generation fell back:", error instanceof Error ? error.message : error);
+      if (material.index_status === "ready") {
+        console.warn("[generate-questions] indexed material is using best-effort generation fallback:", {
+          materialId,
+          indexStatus: material.index_status,
+        });
+      }
     }
   }
 
@@ -339,12 +449,11 @@ async function handleGenerateQuestionsRequest(req: NextRequest) {
 
   // ── Build AI request ───────────────────────────────────────────────────────
   const systemPrompt = `You are an exam question generator for Nigerian university students.
-Generate exactly ${questionCount} multiple choice questions strictly from the provided document content.
+${formatInstruction.text}
 Do not add any knowledge from outside the document.
 ${difficultyInstruction}${focusInstruction ? `\n${focusInstruction}` : ""}${coveredInstruction}
-Each question must have 4 options (A, B, C, D) with exactly one correct answer.
-Include a short explanation (1-2 sentences) for each correct answer, citing the part of the document it came from.
-Include a hint (1 sentence) that nudges the student toward the right concept without naming the correct option or giving away the answer directly.
+Include a short explanation (1-2 sentences) for each question, citing the part of the document it came from.
+Include a hint (1 sentence) that nudges the student toward the right concept without naming the answer directly.
 For each question, include studyRef to guide the student back to the source before answering:
 - topic: the concept or section to review.
 - instruction: a short student-facing reading instruction.
@@ -355,9 +464,24 @@ Return ONLY a valid JSON object with no markdown, no backticks, no preamble:
 {
   "questions": [
     {
+      "question_type": "mcq",
       "question": "string",
       "options": { "A": "string", "B": "string", "C": "string", "D": "string" },
       "answer": "A" | "B" | "C" | "D",
+      "explanation": "string",
+      "hint": "string",
+      "studyRef": {
+        "topic": "string",
+        "instruction": "string",
+        "quote": "string",
+        "page": 1
+      }
+    },
+    {
+      "question_type": "short_answer" | "theory",
+      "question": "string",
+      "model_answer": "string",
+      "marking_points": ["string"],
       "explanation": "string",
       "hint": "string",
       "studyRef": {
@@ -375,7 +499,7 @@ Return ONLY a valid JSON object with no markdown, no backticks, no preamble:
     const result = await generateJson<{ questions: unknown[] }>({
       messages: [userMessage(`DOCUMENT CONTENT:\n\n${truncated}\n\n${systemPrompt}`)],
       temperature: 0.3,
-      maxTokens: Math.min(6000, questionCount * 380),
+      maxTokens: formatInstruction.maxTokens,
       timeoutMs: AI_QUESTION_TIMEOUT_MS,
       modelRole: "generation",
     });
@@ -406,6 +530,7 @@ Return ONLY a valid JSON object with no markdown, no backticks, no preamble:
         repairProvider: result.repairProvider,
         repairModel: result.repairModel,
         inputMode: "extracted-text",
+        reason: `Generated ${formatInstruction.label} questions from extracted document text.`,
       },
     });
   }
@@ -426,7 +551,7 @@ Return ONLY a valid JSON object with no markdown, no backticks, no preamble:
   const result = await generateJson<{ questions: unknown[] }>({
     messages: [userMessage(parts)],
     temperature: 0.3,
-    maxTokens: Math.min(6000, questionCount * 380),
+    maxTokens: formatInstruction.maxTokens,
     timeoutMs: AI_QUESTION_TIMEOUT_MS,
     modelRole: "document",
   });
@@ -461,7 +586,7 @@ Return ONLY a valid JSON object with no markdown, no backticks, no preamble:
         repairProvider: result.repairProvider,
         repairModel: result.repairModel,
         inputMode: "inline-file",
-        reason: content.reason ?? "Inline files are handled by the configured AI provider.",
+        reason: content.reason ?? `Generated ${formatInstruction.label} questions from the inline file.`,
       },
     });
   } catch (e: unknown) {
