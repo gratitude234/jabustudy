@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import type { ReactNode } from "react";
 import { AlertTriangle, Check, Loader2, RotateCcw, Sparkles, ThumbsDown, ThumbsUp } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -50,7 +51,7 @@ function hasSourceContext(studyRef: BetterExplanationStudyRef, sourceTopic?: str
   return Boolean(studyRef?.quote || studyRef?.topic || studyRef?.page || sourceTopic);
 }
 
-function Section({ title, children }: { title: string; children: React.ReactNode }) {
+function Section({ title, children }: { title: string; children: ReactNode }) {
   return (
     <div className="rounded-xl border border-primary/15 bg-background/70 px-3 py-2.5 dark:border-primary/20 dark:bg-background/30">
       <p className="text-[11px] font-extrabold uppercase tracking-wide text-primary-text/75 dark:text-indigo-300">

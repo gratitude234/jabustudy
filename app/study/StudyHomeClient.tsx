@@ -6,7 +6,6 @@ import Link from "next/link";
 import { supabase } from "@/lib/supabase";
 import { trackHomeView, type StudyHomeHeroState } from "@/lib/studyAnalytics";
 import { currentAcademicSessionFallback } from "@/lib/utils";
-import StudyTabs from "./_components/StudyTabs";
 import { StudyPrefsProvider, useStudyPrefs } from "./_components/StudyPrefsContext";
 import { ForYouSection, type Chips } from "./_components/ForYouSection";
 import CourseSearch from "./_components/CourseSearch";
@@ -237,7 +236,6 @@ function StudyHomeInner() {
   return (
     <div className="pb-28 md:pb-6 lg:flex lg:items-start lg:gap-6">
       <div className="min-w-0 flex-1 space-y-4">
-      <StudyTabs contributorStatus={rep.status} />
 
       {!loading && !isProfileComplete && !browseWithoutSetup ? (
         <SetupFirstPanel
@@ -280,7 +278,9 @@ function StudyHomeInner() {
         onDismissSetupNudge={() => setNudgeDismissed(true)}
       />
 
-      <CourseSearch />
+      <div className="hidden md:block">
+        <CourseSearch />
+      </div>
 
       <HeroCard
         displayName={displayName}

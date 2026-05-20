@@ -114,8 +114,8 @@ export default function DayOneHero({
         <div className="mt-4 rounded-2xl border border-[#5B35D5]/20 bg-[#EEEDFE] p-4 dark:bg-[#5B35D5]/15">
           <p className="text-sm font-semibold text-foreground">
             {department
-              ? `We don't have a starter set for ${department} yet.`
-              : "We don't have a starter set for your department yet."}
+              ? `Explore what's available for ${department}.`
+              : "Explore what's available for your department."}
           </p>
 
           <div className="mt-3 grid grid-cols-2 gap-2">

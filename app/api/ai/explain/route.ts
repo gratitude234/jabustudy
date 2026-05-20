@@ -30,6 +30,7 @@ type BetterExplanation = {
 type ExplainCache = Record<string, BetterExplanation | string | undefined>;
 
 const OPTION_KEYS = ["A", "B", "C", "D"] as const;
+const EXPLAIN_MODEL = process.env.GEMINI_MODEL_FAST_FALLBACK?.trim() || "gemini-2.5-flash-lite";
 
 function cleanString(value: unknown, maxLength = 1800): string | undefined {
   if (typeof value !== "string") return undefined;
@@ -284,6 +285,7 @@ export async function POST(req: NextRequest) {
     maxTokens: 900,
     timeoutMs: 45_000,
     modelRole: "fast",
+    model: EXPLAIN_MODEL,
   });
 
   if (!result.ok) {

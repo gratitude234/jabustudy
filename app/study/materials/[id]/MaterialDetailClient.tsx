@@ -34,6 +34,7 @@ import {
 import { cn, timeAgo } from "@/lib/utils";
 import { toggleSaved } from "@/lib/studySaved";
 import { supabase } from "@/lib/supabase";
+import { BetterExplanationInline, type BetterExplanationOptionKey } from "@/app/study/_components/BetterExplanationInline";
 import { GuidedSourceModal, type GuidedStudyRef } from "@/app/study/_components/GuidedSourceModal";
 
 type QuestionType = "mcq" | "short_answer" | "theory";
@@ -62,6 +63,7 @@ type GeneratedMcqQuestion = {
   };
 };
 
+<<<<<<< HEAD
 type GeneratedWrittenQuestion = {
   question_type: "short_answer" | "theory";
   question: string;
@@ -85,8 +87,14 @@ type GeneratedWrittenQuestion = {
 };
 
 type GeneratedQuestion = GeneratedMcqQuestion | GeneratedWrittenQuestion;
+=======
+function isBetterExplanationOptionKey(value: string | undefined): value is BetterExplanationOptionKey {
+  return value === "A" || value === "B" || value === "C" || value === "D";
+}
+>>>>>>> 0b6b4b7e0f46702e317cef0d7539a9f58b4814c2
 
 type GenerationIntent = "weak_areas" | "untested_sections" | "application" | "hard" | "topic";
+type GenerationMode = "auto" | GenerationIntent;
 
 type AiGenerationMeta = {
   provider: "bedrock" | "gemini";
@@ -115,7 +123,8 @@ type GenerateQuestionsResponse = {
   error?: string;
 };
 
-const STUDENT_GENERATION_MODES: Array<{ value: GenerationIntent; label: string; sub: string }> = [
+const STUDENT_GENERATION_MODES: Array<{ value: GenerationMode; label: string; sub: string }> = [
+  { value: "auto", label: "Auto", sub: "Let Jabu choose the best next set." },
   { value: "weak_areas", label: "Cover weak areas", sub: "Prioritize topics with fewer questions." },
   { value: "untested_sections", label: "Use untested sections", sub: "Pull from parts not covered well yet." },
   { value: "application", label: "More application questions", sub: "Practice using ideas, not just recalling them." },
@@ -123,11 +132,27 @@ const STUDENT_GENERATION_MODES: Array<{ value: GenerationIntent; label: string; 
   { value: "topic", label: "Focus on a topic", sub: "Use the focus area you type below." },
 ];
 
+<<<<<<< HEAD
 const QUESTION_FORMATS: Array<{ value: QuestionFormat; label: string; sub: string }> = [
   { value: "mixed", label: "Mixed", sub: "Objective, short-answer, and theory" },
   { value: "mcq", label: "Objective", sub: "A-D questions only" },
   { value: "written", label: "Written/Theory", sub: "Typed answers and marking points" },
 ];
+=======
+function resolveGenerationIntent(mode: GenerationMode, config: { difficulty: "easy" | "mixed" | "hard"; focus: string }): GenerationIntent {
+  if (mode !== "auto") return mode;
+  if (config.focus.trim()) return "topic";
+  if (config.difficulty === "hard") return "hard";
+  return "weak_areas";
+}
+
+function generationModeCopy(mode: GenerationMode, config: { difficulty: "easy" | "mixed" | "hard"; focus: string }) {
+  if (mode !== "auto") return STUDENT_GENERATION_MODES.find((item) => item.value === mode)?.sub ?? "";
+  if (config.focus.trim()) return "Auto will focus on the topic you typed.";
+  if (config.difficulty === "hard") return "Auto will generate harder exam-style questions.";
+  return "Auto will cover weak areas first.";
+}
+>>>>>>> 0b6b4b7e0f46702e317cef0d7539a9f58b4814c2
 
 type ChatMessage = {
   id: string;
@@ -737,7 +762,7 @@ export default function MaterialDetailClient({
   const [generateMoreError, setGenerateMoreError] = useState<string | null>(null);
   const [hintShown, setHintShown] = useState<Record<number, boolean>>({});
   const [generationAi, setGenerationAi] = useState<AiGenerationMeta | null>(null);
-  const [generationIntent, setGenerationIntent] = useState<GenerationIntent>("weak_areas");
+  const [generationMode, setGenerationMode] = useState<GenerationMode>("auto");
 
   // Quiz state machine
   const [quizState, setQuizState] = useState<"idle" | "config" | "loading" | "quiz" | "results">("idle");
@@ -934,8 +959,12 @@ export default function MaterialDetailClient({
           count: quizConfig.count,
           difficulty: quizConfig.difficulty,
           focus: quizConfig.focus || undefined,
+<<<<<<< HEAD
           questionFormat: quizConfig.questionFormat,
           generationIntent,
+=======
+          generationIntent: resolveGenerationIntent(generationMode, quizConfig),
+>>>>>>> 0b6b4b7e0f46702e317cef0d7539a9f58b4814c2
         }),
       });
       const data = await readGenerateQuestionsResponse(res);
@@ -974,10 +1003,11 @@ export default function MaterialDetailClient({
     }
   }
 
-  async function handleGenerateMore(intent: GenerationIntent = generationIntent) {
+  async function handleGenerateMore(mode: GenerationMode = generationMode) {
+    const intent = resolveGenerationIntent(mode, quizConfig);
     setGeneratingMore(true);
     setGenerateMoreError(null);
-    setGenerationIntent(intent);
+    setGenerationMode(mode);
     try {
       const res = await fetch("/api/ai/generate-questions", {
         method: "POST", headers: { "Content-Type": "application/json" },
@@ -1562,24 +1592,23 @@ export default function MaterialDetailClient({
                   </div>
 
                   <div>
-                    <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-muted-brand">Question mode</p>
-                    <div className="grid gap-2 sm:grid-cols-2">
-                      {STUDENT_GENERATION_MODES.map(({ value, label, sub }) => (
-                        <button
-                          key={value}
-                          type="button"
-                          onClick={() => setGenerationIntent(value)}
-                          className={cn(
-                            "rounded-xl border px-3 py-2.5 text-left transition focus-visible:outline-none",
-                            generationIntent === value
-                              ? "border-primary bg-primary-light"
-                              : "border-border bg-background hover:bg-secondary/40"
-                          )}
+                    <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-muted-brand">Smart targeting</p>
+                    <div className="rounded-xl border border-border bg-background px-3 py-3">
+                      <div className="flex items-center gap-3">
+                        <Sparkles className="h-4 w-4 shrink-0 text-primary" />
+                        <select
+                          value={generationMode}
+                          onChange={(e) => setGenerationMode(e.target.value as GenerationMode)}
+                          className="min-w-0 flex-1 bg-transparent text-sm font-semibold text-foreground outline-none"
                         >
-                          <p className={cn("text-xs font-extrabold", generationIntent === value ? "text-primary-text" : "text-foreground")}>{label}</p>
-                          <p className="mt-0.5 text-[11px] leading-snug text-muted-brand">{sub}</p>
-                        </button>
-                      ))}
+                          {STUDENT_GENERATION_MODES.map(({ value, label }) => (
+                            <option key={value} value={value}>{label}</option>
+                          ))}
+                        </select>
+                      </div>
+                      <p className="mt-2 text-xs leading-snug text-muted-brand">
+                        {generationModeCopy(generationMode, quizConfig)}
+                      </p>
                     </div>
                   </div>
 
@@ -1666,6 +1695,7 @@ export default function MaterialDetailClient({
                       </div>
                     )}
 
+<<<<<<< HEAD
                     {isMcqQuestion(currentQ) ? (
                       <>
                         <div className="space-y-2.5">
@@ -1751,6 +1781,53 @@ export default function MaterialDetailClient({
                             )}
                           </div>
                         )}
+=======
+                    <div className="space-y-2.5">
+                      {(["A", "B", "C", "D"] as const).map((key) => {
+                        const isCorrect = currentQ.answer === key;
+                        const isChosen = currentAnswer?.chosen === key;
+                        return (
+                          <button key={key} type="button"
+                            disabled={answered}
+                            onClick={() => {
+                              if (answered) return;
+                              setAnswers((prev) => ({ ...prev, [currentQuestionIndex]: { chosen: key, correct: isCorrect, skipped: false } }));
+                            }}
+                            className={cn(
+                              "flex w-full items-start gap-2.5 rounded-xl border px-3.5 py-2.5 text-sm text-left transition focus-visible:outline-none",
+                              !answered && "hover:bg-secondary/50 border-border/60 text-foreground",
+                              answered && isCorrect && "border-primary bg-primary-light font-semibold text-primary-text",
+                              answered && isChosen && !isCorrect && "border-red-400 bg-red-50 font-semibold text-red-700",
+                              answered && !isCorrect && !isChosen && "border-border/40 text-muted-brand opacity-60",
+                            )}>
+                            <span className="shrink-0 font-bold">{key}.</span>
+                            <span>{currentQ.options[key]}</span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                    {answered && (
+                      <div className="mt-4 space-y-2">
+                        <div className="rounded-xl border border-primary/20 bg-primary-light/60 px-4 py-3">
+                          <p className="text-xs leading-relaxed text-primary-text/85">
+                            <span className="font-semibold">Explanation: </span>{currentQ.explanation}
+                          </p>
+                        </div>
+                        {isBetterExplanationOptionKey(currentAnswer?.chosen) ? (
+                          <BetterExplanationInline
+                            questionPrompt={currentQ.question}
+                            options={currentQ.options}
+                            chosenOptionKey={currentAnswer.chosen}
+                            chosenOptionText={currentQ.options[currentAnswer.chosen]}
+                            correctOptionKey={currentQ.answer}
+                            correctOptionText={currentQ.options[currentQ.answer]}
+                            isCorrect={currentAnswer.correct}
+                            basicExplanation={currentQ.explanation}
+                            studyRef={currentQ.studyRef}
+                            sourceTopic={currentQ.sourceTopic}
+                          />
+                        ) : null}
+>>>>>>> 0b6b4b7e0f46702e317cef0d7539a9f58b4814c2
                       </div>
                     )}
                   </div>
@@ -1858,27 +1935,21 @@ export default function MaterialDetailClient({
                   {saveQsError && (
                     <p className="text-center text-xs font-semibold text-rose-600">{saveQsError}</p>
                   )}
-                  {/* Generate more */}
-                  <div className="grid grid-cols-2 gap-2">
-                    {STUDENT_GENERATION_MODES.slice(0, 4).map(({ value, label }) => (
-                      <button
-                        key={value}
-                        type="button"
-                        onClick={() => handleGenerateMore(value)}
-                        disabled={generatingMore}
-                        className={cn(
-                          "inline-flex min-h-10 items-center justify-center rounded-xl border px-2 py-2 text-center text-[11px] font-extrabold transition disabled:opacity-50 focus-visible:outline-none",
-                          generationIntent === value
-                            ? "border-primary bg-primary-light text-primary-text"
-                            : "border-border bg-background text-foreground hover:bg-secondary/40"
-                        )}
-                      >
-                        {label}
-                      </button>
-                    ))}
+                  <div className="flex items-center gap-2 rounded-2xl border border-border bg-background px-3 py-2">
+                    <span className="shrink-0 text-[11px] font-extrabold uppercase tracking-wide text-muted-brand">Next set</span>
+                    <select
+                      value={generationMode}
+                      onChange={(e) => setGenerationMode(e.target.value as GenerationMode)}
+                      disabled={generatingMore}
+                      className="min-w-0 flex-1 bg-transparent text-xs font-semibold text-foreground outline-none disabled:opacity-60"
+                    >
+                      {STUDENT_GENERATION_MODES.map(({ value, label }) => (
+                        <option key={value} value={value}>{label}</option>
+                      ))}
+                    </select>
                   </div>
                   <button type="button"
-                    onClick={() => handleGenerateMore(generationIntent)}
+                    onClick={() => handleGenerateMore(generationMode)}
                     disabled={generatingMore}
                     className="inline-flex w-full items-center justify-center gap-2 rounded-2xl border border-primary bg-primary-light px-4 py-3 text-sm font-semibold text-primary-text transition hover:opacity-90 disabled:opacity-50 focus-visible:outline-none">
                     {generatingMore

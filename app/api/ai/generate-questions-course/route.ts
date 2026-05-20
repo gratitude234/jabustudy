@@ -120,7 +120,7 @@ export async function POST(req: NextRequest) {
   if (!user) return NextResponse.json({ error: "Unauthorised" }, { status: 401 });
 
   // ── Body ───────────────────────────────────────────────────────────────────
-  let body: { courseId?: string; count?: number };
+  let body: { courseId?: string; count?: number; generationIntent?: string; topicId?: string | null; subtopicId?: string | null };
   try {
     body = await req.json();
   } catch {
@@ -133,6 +133,9 @@ export async function POST(req: NextRequest) {
       ? Math.floor(body.count)
       : DEFAULT_QUESTION_COUNT;
   const questionCount = Math.max(5, Math.min(MAX_QUESTION_COUNT, requestedCount));
+  const generationIntent = normalizeGenerationIntent(body.generationIntent);
+  const topicId = typeof body.topicId === "string" && body.topicId.trim() ? body.topicId.trim() : null;
+  const subtopicId = typeof body.subtopicId === "string" && body.subtopicId.trim() ? body.subtopicId.trim() : null;
 
   const admin = adminSupabase;
 
@@ -255,7 +258,10 @@ export async function POST(req: NextRequest) {
         materialId: material.id,
         materialTitle: material.title ?? "Untitled material",
         count: countForMaterial,
-        difficulty: "mixed",
+        difficulty: generationIntent === "hard" || generationIntent === "past_question_style" ? "hard" : "mixed",
+        generationIntent,
+        topicId,
+        subtopicId,
         coveredQuestions: questions.map((question) => question.question),
       });
 
@@ -287,7 +293,15 @@ export async function POST(req: NextRequest) {
           modelFallbackReason: generation.ai.modelFallbackReason,
           inputMode: "coverage-aware",
           reason: `Generated source-backed questions from indexed chunks across ${indexedCandidates.length} material(s).`,
-          coverage: generation.coverage,
+          coverage: generation.coverage
+            ? {
+                ...generation.coverage,
+                intent: generation.coverage.intent ?? generationIntent,
+                intentLabel: generation.coverage.intentLabel,
+                targetedTopic: generation.coverage.targetedTopic,
+                reason: generation.coverage.reason,
+              }
+            : undefined,
         };
       }
     } catch (error) {

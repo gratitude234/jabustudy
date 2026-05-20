@@ -90,7 +90,7 @@ export function geminiModelName(modelRole: AiModelRole = "generation", explicitM
 
 export function geminiFallbackModelName(modelRole: AiModelRole = "generation", primaryModel?: string) {
   const fallback = modelRole === "fast"
-    ? process.env.GEMINI_MODEL_FAST_FALLBACK?.trim()
+    ? process.env.GEMINI_MODEL_FAST_FALLBACK?.trim() || DEFAULT_FAST_MODEL
     : modelRole === "document"
       ? process.env.GEMINI_MODEL_DOCUMENT_FALLBACK?.trim() || DEFAULT_FAST_MODEL
       : process.env.GEMINI_MODEL_GENERATION_FALLBACK?.trim() || DEFAULT_FAST_MODEL;

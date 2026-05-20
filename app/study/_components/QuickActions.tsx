@@ -35,12 +35,12 @@ type QuickActionMoreTile = {
 
 const TILES: readonly (QuickActionLinkTile | QuickActionMoreTile)[] = [
   {
-    href: "/study/library",
-    label: "PDF → Qs",
-    sublabel: "AI-generated",
+    href: "/study/practice",
+    label: "Practice",
+    sublabel: "AI-generated Qs",
     icon: Sparkles,
     primary: true,
-    isNew: true,
+    isNew: false,
   },
   {
     href: "/study/library",
