@@ -34,6 +34,7 @@ import {
 import { cn, timeAgo } from "@/lib/utils";
 import { toggleSaved } from "@/lib/studySaved";
 import { supabase } from "@/lib/supabase";
+import { BetterExplanationInline, type BetterExplanationOptionKey } from "@/app/study/_components/BetterExplanationInline";
 import { GuidedSourceModal, type GuidedStudyRef } from "@/app/study/_components/GuidedSourceModal";
 
 type GeneratedQuestion = {
@@ -56,6 +57,10 @@ type GeneratedQuestion = {
     page?: number;
   };
 };
+
+function isBetterExplanationOptionKey(value: string | undefined): value is BetterExplanationOptionKey {
+  return value === "A" || value === "B" || value === "C" || value === "D";
+}
 
 type GenerationIntent = "weak_areas" | "untested_sections" | "application" | "hard" | "topic";
 
@@ -1581,10 +1586,26 @@ export default function MaterialDetailClient({
                       })}
                     </div>
                     {answered && (
-                      <div className="mt-4 rounded-xl border border-primary/20 bg-primary-light/60 px-4 py-3">
-                        <p className="text-xs leading-relaxed text-primary-text/85">
-                          <span className="font-semibold">Explanation: </span>{currentQ.explanation}
-                        </p>
+                      <div className="mt-4 space-y-2">
+                        <div className="rounded-xl border border-primary/20 bg-primary-light/60 px-4 py-3">
+                          <p className="text-xs leading-relaxed text-primary-text/85">
+                            <span className="font-semibold">Explanation: </span>{currentQ.explanation}
+                          </p>
+                        </div>
+                        {isBetterExplanationOptionKey(currentAnswer?.chosen) ? (
+                          <BetterExplanationInline
+                            questionPrompt={currentQ.question}
+                            options={currentQ.options}
+                            chosenOptionKey={currentAnswer.chosen}
+                            chosenOptionText={currentQ.options[currentAnswer.chosen]}
+                            correctOptionKey={currentQ.answer}
+                            correctOptionText={currentQ.options[currentQ.answer]}
+                            isCorrect={currentAnswer.correct}
+                            basicExplanation={currentQ.explanation}
+                            studyRef={currentQ.studyRef}
+                            sourceTopic={currentQ.sourceTopic}
+                          />
+                        ) : null}
                       </div>
                     )}
                   </div>
@@ -1692,7 +1713,7 @@ export default function MaterialDetailClient({
                       <button
                         key={value}
                         type="button"
-                        onClick={() => handleGenerateMore(value)}
+                        onClick={() => setGenerationIntent(value)}
                         disabled={generatingMore}
                         className={cn(
                           "inline-flex min-h-10 items-center justify-center rounded-xl border px-2 py-2 text-center text-[11px] font-extrabold transition disabled:opacity-50 focus-visible:outline-none",
