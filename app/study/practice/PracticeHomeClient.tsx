@@ -1,5 +1,6 @@
-"use client";
+﻿"use client";
 import { cn, formatWhen, normalizeQuery, buildHref, pctToColor } from "@/lib/utils";
+import { getPracticeStreak } from "@/lib/studyPractice";
 
 import Link from "next/link";
 import React, { useEffect, useMemo, useRef, useState } from "react";
@@ -25,7 +26,6 @@ import {
   SortDesc,
   Play,
   History,
-  Info,
   Flame,
   Layers,
   Plus,
@@ -105,7 +105,7 @@ type LatestAttempt = {
   } | null;
 };
 
-// Per-set attempt summary â€” injected into QuizSetCard for personal context
+// Per-set attempt summary â€" injected into QuizSetCard for personal context
 type SetAttemptSummary = {
   attemptCount: number;         // total submitted attempts on this set
   bestPct: number | null;       // highest score % across submitted attempts
@@ -432,211 +432,168 @@ function MiniTabs({ value, onChange }: { value: ViewKey; onChange: (v: ViewKey) 
   );
 }
 
-// â”€â”€â”€ Score ring â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// â"€â"€â"€ Score ring â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€
 
-function PracticeHeroAction({
-  icon,
-  eyebrow,
-  title,
-  description,
-  meta,
-  actionLabel,
-  onClick,
-  disabled,
-  loading,
-  primary,
-}: {
-  icon: React.ReactNode;
-  eyebrow: string;
-  title: string;
-  description: string;
-  meta?: string;
-  actionLabel: string;
-  onClick?: () => void;
-  disabled?: boolean;
-  loading?: boolean;
-  primary?: boolean;
-}) {
-  return (
-    <Card
-      className={cn(
-        "flex min-h-[190px] flex-col justify-between overflow-hidden rounded-3xl p-4",
-        primary && "border-primary/25 bg-primary-light/60 dark:bg-primary/10"
-      )}
-    >
-      <div className="space-y-3">
-        <div className="flex items-start justify-between gap-3">
-          <div
-            className={cn(
-              "grid h-10 w-10 shrink-0 place-items-center rounded-2xl",
-              primary ? "bg-primary text-white" : "bg-secondary text-foreground"
-            )}
-          >
-            {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : icon}
-          </div>
-          {meta ? (
-            <span className="max-w-[52%] truncate rounded-full border border-border bg-background px-2.5 py-1 text-[11px] font-extrabold text-muted-foreground">
-              {meta}
-            </span>
-          ) : null}
-        </div>
-
-        <div className="min-w-0">
-          <p className="text-[11px] font-extrabold uppercase tracking-[0.12em] text-muted-foreground">
-            {eyebrow}
-          </p>
-          <h2 className="mt-1 line-clamp-2 text-lg font-extrabold leading-tight text-foreground">
-            {title}
-          </h2>
-          <p className="mt-2 line-clamp-2 text-sm leading-5 text-muted-foreground">
-            {description}
-          </p>
-        </div>
-      </div>
-
-      <button
-        type="button"
-        onClick={onClick}
-        disabled={disabled || loading}
-        className={cn(
-          "mt-4 inline-flex w-full items-center justify-center gap-2 rounded-2xl px-4 py-3 text-sm font-bold transition",
-          "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background",
-          primary
-            ? "bg-primary text-white hover:opacity-90"
-            : "border border-border bg-background text-foreground hover:bg-secondary/50",
-          (disabled || loading) && "cursor-not-allowed opacity-60"
-        )}
-      >
-        {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
-        {actionLabel}
-        {!loading ? <ArrowRight className="h-4 w-4" /> : null}
-      </button>
-    </Card>
-  );
-}
-
-function PracticeHero({
+function PracticeHeroV2({
   dueLoading,
   dueData,
-  resumeAttempt,
-  timedExamSet,
+  streak,
+  avgScore,
+  totalSessions,
   quickLoading,
+  displayName,
   onReviewDue,
-  onResume,
-  onStartTimed,
   onQuickSession,
 }: {
   dueLoading: boolean;
   dueData: DuePracticeData | null;
-  resumeAttempt: LatestAttempt | null;
-  timedExamSet: QuizSetRow | null;
+  streak: number;
+  avgScore: number | null;
+  totalSessions: number;
   quickLoading: boolean;
+  displayName: string | null;
   onReviewDue: (setId: string) => void;
-  onResume: (setId: string) => void;
-  onStartTimed: (setId: string) => void;
   onQuickSession: () => void;
 }) {
+  const hour = new Date().getHours();
+  const timeLabel = hour < 12 ? "morning" : hour < 17 ? "afternoon" : "evening";
+  const firstName = displayName?.split(" ")[0] ?? "there";
   const primaryDueSet = dueData?.sets?.[0] ?? null;
-  const dueCourse = primaryDueSet?.course_code ?? primaryDueSet?.set_title ?? null;
-  const dueMeta = dueLoading
-    ? "Checking"
-    : dueData && dueData.total > 0
-    ? `${dueData.total} Q`
-    : "Clear";
-
-  const resumeTitle = resumeAttempt?.study_quiz_sets?.title?.trim() || "No saved session";
-  const resumeCourse = resumeAttempt?.study_quiz_sets?.course_code?.trim() || null;
-  const timedTitle = timedExamSet?.title?.trim() || "No timed exam yet";
-  const timedMeta = timedExamSet?.time_limit_minutes
-    ? `${timedExamSet.time_limit_minutes} min`
-    : undefined;
+  const dueCount = dueData?.total ?? 0;
+  const dueCourses = dueData?.sets?.slice(0, 2).map((s) => s.course_code ?? s.set_title).filter(Boolean).join(" / ") ?? null;
 
   return (
-    <section className="space-y-4 overflow-hidden rounded-[26px] bg-primary p-4 shadow-[0_8px_32px_rgba(91,53,213,0.35)] md:p-5">
-      <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
+    <section className="overflow-hidden rounded-[26px] border border-border bg-card p-5 shadow-sm">
+      {/* Top row: greeting + streak */}
+      <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
-          <p className="text-xs font-extrabold uppercase tracking-[0.14em] text-white/70">
-            Practice command center
+          <p className="text-xs font-semibold text-muted-brand">
+            Good {timeLabel}, {firstName}
           </p>
-          <h1 className="mt-1 font-[family-name:var(--font-bricolage)] text-2xl font-extrabold leading-tight text-white md:text-3xl">
-            What should I practice now?
+          <h1 className="mt-0.5 font-[family-name:var(--font-bricolage)] text-[30px] font-extrabold leading-none tracking-tight text-foreground">
+            Practice
           </h1>
-          <p className="mt-2 max-w-2xl text-sm leading-6 text-white/70">
-            Start with spaced review, continue an unfinished set, or jump into a timed exam.
-          </p>
         </div>
+        {streak > 0 && (
+          <div className="flex shrink-0 items-center gap-1.5 rounded-full border border-orange-200/60 bg-orange-50 px-3 py-2 dark:border-orange-800/40 dark:bg-orange-950/30">
+            <Flame className="h-4 w-4 text-orange-500" />
+            <span className="text-sm font-extrabold text-orange-700 dark:text-orange-400">{streak}</span>
+            <span className="text-[11px] font-bold text-orange-600 dark:text-orange-500">streak</span>
+          </div>
+        )}
+      </div>
+
+      {/* Stat pills */}
+      <div className="mt-4 flex gap-2 overflow-x-auto pb-0.5 [scrollbar-width:none]">
+        <div className={cn(
+          "flex shrink-0 items-center gap-1.5 rounded-full border px-3 py-1.5",
+          dueCount > 0
+            ? "border-primary/20 bg-primary-light text-primary-text"
+            : "border-border bg-background text-muted-brand"
+        )}>
+          <CalendarClock className="h-3.5 w-3.5" />
+          <span className="text-xs font-extrabold">
+            {dueLoading ? "..." : dueCount + " due"}
+          </span>
+        </div>
+        {avgScore !== null && (
+          <div className="flex shrink-0 items-center gap-1.5 rounded-full border border-emerald-200/60 bg-emerald-50/80 px-3 py-1.5 dark:border-emerald-800/40 dark:bg-emerald-950/30">
+            <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
+            <span className="text-xs font-extrabold text-emerald-700 dark:text-emerald-400">{avgScore}% avg score</span>
+          </div>
+        )}
+        {totalSessions > 0 && (
+          <div className="flex shrink-0 items-center gap-1.5 rounded-full border border-border bg-background px-3 py-1.5 text-muted-brand">
+            <History className="h-3.5 w-3.5" />
+            <span className="text-xs font-extrabold">{totalSessions} sessions</span>
+          </div>
+        )}
+      </div>
+
+      {/* CTAs */}
+      <div className="mt-4 flex flex-col gap-2">
+        {dueCount > 0 && (
+          <button
+            type="button"
+            onClick={primaryDueSet ? () => onReviewDue(primaryDueSet.set_id) : undefined}
+            disabled={!primaryDueSet || dueLoading}
+            className={cn(
+              "flex w-full items-center justify-between gap-3 rounded-[18px] bg-primary px-5 py-3.5 text-left transition",
+              "hover:opacity-90 disabled:opacity-60",
+              "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-card",
+              "shadow-[0_4px_18px_rgba(91,53,213,0.28)]"
+            )}
+          >
+            <div className="flex items-center gap-3">
+              <div className="grid h-9 w-9 shrink-0 place-items-center rounded-[11px] bg-white/20">
+                <CalendarClock className="h-4 w-4 text-white" />
+              </div>
+              <div>
+                <p className="text-sm font-extrabold text-white">Review {dueCount} due card{dueCount !== 1 ? "s" : ""}</p>
+                {dueCourses && (
+                  <p className="text-[11px] text-white/60">{dueCourses}</p>
+                )}
+              </div>
+            </div>
+            <ArrowRight className="h-4 w-4 shrink-0 text-white/80" />
+          </button>
+        )}
         <button
           type="button"
           onClick={onQuickSession}
           disabled={quickLoading}
           className={cn(
-            "inline-flex w-full items-center justify-center gap-2 rounded-[14px] bg-white/16 px-4 py-3 text-sm font-bold text-white transition md:w-auto",
-            "hover:bg-white/22 disabled:cursor-not-allowed disabled:opacity-60",
-            "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/40"
+            "flex w-full items-center justify-center gap-2 rounded-[18px] border border-border px-5 py-3 transition",
+            "hover:bg-secondary/60 disabled:opacity-60",
+            "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-card"
           )}
         >
-          {quickLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Zap className="h-4 w-4 text-white" />}
-          Quick session
+          {quickLoading ? (
+            <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+          ) : (
+            <Zap className="h-4 w-4 text-primary" />
+          )}
+          <span className="text-sm font-bold text-foreground">Quick session</span>
         </button>
       </div>
-
-      <div className="grid gap-3 md:grid-cols-3">
-        <PracticeHeroAction
-          primary={Boolean(primaryDueSet)}
-          icon={<CalendarClock className="h-5 w-5" />}
-          eyebrow="Due today"
-          title={
-            dueLoading
-              ? "Checking your reviews"
-              : primaryDueSet
-              ? dueCourse ?? "Review questions"
-              : "No reviews due"
-          }
-          description={
-            dueLoading
-              ? "Looking for questions scheduled for today."
-              : primaryDueSet
-              ? `${primaryDueSet.question_count} question${primaryDueSet.question_count === 1 ? "" : "s"} from your spaced review queue.`
-              : "You are clear for now. Use quick session if you still want a short drill."
-          }
-          meta={dueMeta}
-          actionLabel={primaryDueSet ? "Review now" : "All caught up"}
-          onClick={primaryDueSet ? () => onReviewDue(primaryDueSet.set_id) : undefined}
-          disabled={!primaryDueSet}
-          loading={dueLoading}
-        />
-
-        <PracticeHeroAction
-          icon={<Play className="h-5 w-5" />}
-          eyebrow="Resume"
-          title={resumeTitle}
-          description={
-            resumeAttempt?.set_id
-              ? `Continue${resumeCourse ? ` ${resumeCourse}` : ""} from where you stopped.`
-              : "No unfinished session right now. Start a quick one when you want momentum."
-          }
-          meta={resumeCourse ?? "Ready"}
-          actionLabel={resumeAttempt?.set_id ? "Resume" : "Start quick"}
-          onClick={resumeAttempt?.set_id ? () => onResume(resumeAttempt.set_id as string) : onQuickSession}
-          loading={!resumeAttempt?.set_id && quickLoading}
-        />
-
-        <PracticeHeroAction
-          icon={<Clock className="h-5 w-5" />}
-          eyebrow="Timed exam"
-          title={timedTitle}
-          description={
-            timedExamSet
-              ? `${timedExamSet.course_code ?? "Practice"} in exam mode with the timer on.`
-              : "No timed set is available in the current list yet."
-          }
-          meta={timedMeta ?? timedExamSet?.course_code ?? "Exam mode"}
-          actionLabel={timedExamSet ? "Start timed" : "Unavailable"}
-          onClick={timedExamSet ? () => onStartTimed(timedExamSet.id) : undefined}
-          disabled={!timedExamSet}
-        />
-      </div>
     </section>
+  );
+}
+
+function CourseChipsBar({
+  courseCodes,
+  activeCourse,
+  onSelect,
+}: {
+  courseCodes: string[];
+  activeCourse: string;
+  onSelect: (code: string) => void;
+}) {
+  const codes = ["", ...Array.from(new Set(courseCodes.map((c) => c.toUpperCase()))).sort()];
+  if (codes.length <= 1) return null;
+  return (
+    <div className="flex gap-2 overflow-x-auto pb-0.5 [scrollbar-width:none]">
+      {codes.map((code) => {
+        const isActive = code === activeCourse.toUpperCase();
+        return (
+          <button
+            key={code || "all"}
+            type="button"
+            onClick={() => onSelect(code)}
+            className={cn(
+              "inline-flex shrink-0 items-center gap-1.5 rounded-full border px-3.5 py-1.5 text-xs font-bold transition",
+              "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
+              isActive
+                ? "border-primary bg-primary text-white"
+                : "border-border bg-card text-foreground hover:bg-secondary/60"
+            )}
+          >
+            {code ? <Hash className="h-3 w-3" /> : null}
+            {code || "All"}
+          </button>
+        );
+      })}
+    </div>
   );
 }
 
@@ -658,41 +615,33 @@ function ScoreRingSmall({ pct }: { pct: number | null }) {
       )}
       <text x={cx} y={cx} textAnchor="middle" dominantBaseline="central"
         fontSize={10} fontWeight={500} fill="currentColor">
-        {pct != null ? `${pct}%` : "â€”"}
+        {pct != null ? `${pct}%` : "—"}
       </text>
     </svg>
   );
 }
 
-// â”€â”€â”€ Quiz set card â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// â"€â"€â"€ Quiz set card â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€
 
 function QuizSetCard({
   s,
   onStart,
-  onPreview,
   summary,
   currentUserId,
 }: {
   s: QuizSetRow;
   onStart: () => void;
-  onPreview: () => void;
   summary?: SetAttemptSummary | null;
   currentUserId?: string | null;
 }) {
   const title = (s.title ?? "Untitled set").trim() || "Untitled set";
   const code = (s.course_code ?? "").toString().trim().toUpperCase();
-  const sem = safeSemesterLabel(s.semester);
-  const level = typeof s.level === "number" ? `${s.level}L` : "";
   const qCount =
     typeof s.questions_count === "number"
       ? s.questions_count
       : typeof s.total_questions === "number"
       ? s.total_questions
       : null;
-  const time =
-    typeof s.time_limit_minutes === "number" && Number.isFinite(s.time_limit_minutes)
-      ? `${s.time_limit_minutes} min`
-      : "";
 
   const hasInProgress = Boolean(summary?.inProgressId);
   const hasSubmitted  = (summary?.attemptCount ?? 0) > 0;
@@ -706,109 +655,102 @@ function QuizSetCard({
       "w-full max-w-full overflow-hidden rounded-3xl p-4",
       isMastered && "border-emerald-300/40 dark:border-emerald-700/30"
     )}>
-      <div className="flex min-w-0 items-start gap-3">
+      <div className="flex min-w-0 items-center gap-3">
         {/* Score ring or fallback icon */}
-        <div className="mt-0.5 shrink-0">
+        <div className="shrink-0">
           {hasSubmitted || hasInProgress ? (
             <ScoreRingSmall pct={bestPct} />
           ) : (
-            <div className="grid h-12 w-12 place-items-center rounded-2xl border border-border bg-background">
-              <BookOpen className="h-5 w-5 text-foreground" />
+            <div className="grid h-12 w-12 place-items-center rounded-2xl bg-primary-light">
+              <BookOpen className="h-5 w-5 text-primary" />
             </div>
           )}
         </div>
 
+        {/* Middle: title + meta + context */}
         <div className="min-w-0 flex-1">
-          {/* Title + mastered badge */}
-          <div className="flex min-w-0 items-start justify-between gap-2">
-            <p className="truncate text-base font-semibold text-foreground">{title}</p>
-            <div className="flex shrink-0 items-center gap-1.5">
-              {isPrivate && (
-                <span className="inline-flex items-center rounded-full border border-amber-300/40 bg-amber-100/30 px-2 py-0.5 text-[10px] font-extrabold text-amber-800 dark:bg-amber-950/20 dark:text-amber-300">
-                  Private
-                </span>
-              )}
-              {isOfficialAi && (
-                <span className="inline-flex items-center rounded-full border border-primary/30 bg-primary-light px-2 py-0.5 text-[10px] font-extrabold text-primary-text">
-                  Official AI-built
-                </span>
-              )}
-              {isMastered && (
-                <span className="inline-flex items-center rounded-full border border-emerald-300/40 bg-emerald-100/30 px-2 py-0.5 text-[10px] font-extrabold text-emerald-800 dark:bg-emerald-950/20 dark:text-emerald-300">
-                  âœ“ Mastered
-                </span>
-              )}
-            </div>
-          </div>
+          <p className="truncate text-sm font-bold text-foreground">{title}</p>
 
-          <p className="mt-1 line-clamp-2 text-sm text-muted-foreground">
-            {s.description ? s.description : "Practice past questions and test yourself."}
-          </p>
-
-          {/* Meta pills */}
-          <div className="mt-2.5 flex max-w-full flex-wrap items-center gap-2">
-            {code ? pill(code, <Hash className="h-3.5 w-3.5" />) : null}
-            {level ? pill(level) : null}
-            {sem ? pill(`${sem} sem`, <Clock className="h-3.5 w-3.5" />) : null}
-            {qCount !== null ? pill(`${qCount} Q`) : null}
-            {time ? pill(time) : null}
+          <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+            {code ? (
+              <span className="inline-block rounded-md bg-primary-light px-1.5 py-0.5 text-[10px] font-extrabold text-primary-text">
+                {code}
+              </span>
+            ) : null}
+            {qCount !== null ? (
+              <span className="text-[11px] font-semibold text-muted-brand">{qCount} Q</span>
+            ) : null}
             {s.difficulty ? <DifficultyBadge difficulty={s.difficulty} /> : null}
+            {isPrivate && (
+              <span className="rounded-full border border-amber-300/40 bg-amber-100/30 px-1.5 py-0.5 text-[10px] font-extrabold text-amber-800 dark:bg-amber-950/20 dark:text-amber-300">
+                Private
+              </span>
+            )}
+            {isOfficialAi && (
+              <span className="rounded-full border border-primary/30 bg-primary-light px-1.5 py-0.5 text-[10px] font-extrabold text-primary-text">
+                AI-built
+              </span>
+            )}
           </div>
 
-          {/* Personal context line */}
-          {hasInProgress && !hasSubmitted ? (
-            <div className="mt-2 flex items-center gap-1.5">
-              <span className="inline-flex items-center rounded-full border border-amber-300/40 bg-amber-100/30 px-2 py-0.5 text-[11px] font-extrabold text-amber-800 dark:bg-amber-950/20 dark:text-amber-300">
-                In progress
-              </span>
-              {summary?.inProgressPct != null && (
-                <span className="text-[11px] font-semibold text-muted-foreground">
-                  {summary.inProgressPct}% answered
-                </span>
-              )}
-            </div>
-          ) : hasSubmitted ? (
-            <div className="mt-2 flex flex-wrap items-center gap-2">
-              <span className="text-[11px] font-semibold text-muted-foreground">
-                {summary!.attemptCount}Ã— attempted
-              </span>
-              {bestPct != null && (
-                <span className="text-[11px] font-extrabold"
-                  style={{ color: pctToColor(bestPct) }}>
-                  Best {bestPct}%
-                </span>
-              )}
-              {hasInProgress && (
+          <div className="mt-1 flex flex-wrap items-center gap-2">
+            {hasInProgress && !hasSubmitted ? (
+              <>
                 <span className="inline-flex items-center rounded-full border border-amber-300/40 bg-amber-100/30 px-2 py-0.5 text-[11px] font-extrabold text-amber-800 dark:bg-amber-950/20 dark:text-amber-300">
-                  Resume available
+                  In progress
                 </span>
-              )}
-            </div>
-          ) : (
-            <p className="mt-2 text-[11px] font-semibold text-muted-foreground">
-              Not attempted yet
-            </p>
-          )}
+                {summary?.inProgressPct != null && (
+                  <span className="text-[11px] font-semibold text-muted-foreground">
+                    {summary.inProgressPct}% answered
+                  </span>
+                )}
+              </>
+            ) : hasSubmitted ? (
+              <>
+                <span className="text-[11px] font-semibold text-muted-foreground">
+                  {summary!.attemptCount}&times; tried
+                </span>
+                {bestPct != null && (
+                  <span className="text-[11px] font-extrabold" style={{ color: pctToColor(bestPct) }}>
+                    Best {bestPct}%
+                  </span>
+                )}
+                {isMastered && (
+                  <span className="inline-flex items-center gap-1 text-[11px] font-extrabold text-emerald-700 dark:text-emerald-400">
+                    <CheckCircle2 className="h-3 w-3" /> Mastered
+                  </span>
+                )}
+                {hasInProgress && (
+                  <span className="inline-flex items-center rounded-full border border-amber-300/40 bg-amber-100/30 px-2 py-0.5 text-[11px] font-extrabold text-amber-800 dark:bg-amber-950/20 dark:text-amber-300">
+                    Resume available
+                  </span>
+                )}
+              </>
+            ) : (
+              <span className="text-[11px] font-semibold text-muted-foreground">Not attempted yet</span>
+            )}
+          </div>
         </div>
-      </div>
 
-      {/* Action buttons */}
-      <div className="mt-4 grid min-w-0 gap-2 sm:grid-cols-2">
-        <PrimaryButton onClick={onStart}>
-          <Play className="h-4 w-4" />
-          {hasInProgress ? "Continue" : hasSubmitted ? "Retry" : "Start"}
-          <ArrowRight className="h-4 w-4" />
-        </PrimaryButton>
-        <SecondaryButton onClick={onPreview}>
-          <Info className="h-4 w-4" />
-          Preview
-        </SecondaryButton>
+        {/* Arrow button */}
+        <button
+          type="button"
+          onClick={onStart}
+          className={cn(
+            "grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-primary transition",
+            "hover:opacity-90",
+            "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-card"
+          )}
+          aria-label={hasInProgress ? "Continue" : hasSubmitted ? "Retry" : "Start"}
+        >
+          <ArrowRight className="h-4 w-4 text-white" />
+        </button>
       </div>
     </Card>
   );
 }
 
-// â”€â”€â”€ Rep status â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// â"€â"€â"€ Rep status â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€
 
 type RepStatus = "loading" | "not_applied" | "pending" | "rejected" | "approved";
 
@@ -819,7 +761,7 @@ type RepScope = {
   all_levels: boolean;
 } | null;
 
-// â”€â”€â”€ Create Set Drawer â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// â"€â"€â"€ Create Set Drawer â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€
 
 const SEMESTERS_OPT = ["1st", "2nd", "summer"] as const;
 const LEVELS_OPT    = [100, 200, 300, 400, 500, 600] as const;
@@ -954,8 +896,8 @@ function CreateSetDrawer({
           <ShieldCheck className="h-4 w-4 shrink-0 text-muted-foreground" />
           <p className="text-xs font-semibold text-muted-foreground">
             {repScope?.all_levels
-              ? "Rep access â€” all levels"
-              : `Rep access â€” level${(repScope?.levels?.length ?? 0) > 1 ? "s" : ""} ${(repScope?.levels ?? []).join(", ")}`}
+              ? "Rep access â€" all levels"
+              : `Rep access â€" level${(repScope?.levels?.length ?? 0) > 1 ? "s" : ""} ${(repScope?.levels ?? []).join(", ")}`}
           </p>
         </div>
 
@@ -1066,12 +1008,12 @@ function CreateSetDrawer({
             })}
           </div>
           <p className="mt-1.5 text-[10px] text-muted-foreground">
-            Easy = warm-up / â‰¤10 Qs Â· Medium = 11â€“30 Qs Â· Hard = exam sim / 30+ Qs
+            Easy = warm-up / â‰¤10 Qs Â· Medium = 11â€"30 Qs Â· Hard = exam sim / 30+ Qs
           </p>
         </div>
 
         <p className="text-xs text-muted-foreground">
-          After creating the set you'll be taken to the editor to add questions. The set starts unpublished â€” submit it
+          After creating the set you'll be taken to the editor to add questions. The set starts unpublished â€" submit it
           for review when ready.
         </p>
       </div>
@@ -1079,7 +1021,7 @@ function CreateSetDrawer({
   );
 }
 
-// â”€â”€â”€ "Suggested for today" widget â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// â"€â"€â"€ "Suggested for today" widget â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€
 
 function SuggestedTodayWidget() {
   const [suggestion, setSuggestion] = React.useState<{
@@ -1192,6 +1134,7 @@ function PracticeHomeInner() {
   const {
     isProfileComplete,
     userId: authedUserId,
+    displayName,
     courseCodes,
     prefs: contextPrefs,
   } = useStudyPrefs();
@@ -1244,6 +1187,13 @@ function PracticeHomeInner() {
   const [loadError, setLoadError] = useState<string | null>(null);
   const [schemaHint, setSchemaHint] = useState<string | null>(null);
 
+  // Streak
+  const [streak, setStreak] = useState(0);
+  useEffect(() => {
+    if (!authedUserId) return;
+    getPracticeStreak().then(({ streak: s }) => setStreak(s)).catch(() => {});
+  }, [authedUserId]);
+
   // Due Today (SRS)
   const [dueData, setDueData] = useState<DuePracticeData | null>(null);
   const [dueLoading, setDueLoading] = useState(true);
@@ -1252,7 +1202,7 @@ function PracticeHomeInner() {
   // Attempts
   const [recentAttempts, setRecentAttempts] = useState<LatestAttempt[]>([]);
 
-  // User prefs â€” used to personalize the "For you" tab without requiring URL params
+  // User prefs â€" used to personalize the "For you" tab without requiring URL params
   const [userPrefs, setUserPrefs] = useState<{
     course_code?: string | null;
     level?: number | null;
@@ -1275,7 +1225,7 @@ function PracticeHomeInner() {
           .maybeSingle();
         if (data) setUserPrefs(data as any);
       } catch {
-        // non-fatal â€” for_you falls back to URL params only
+        // non-fatal â€" for_you falls back to URL params only
       }
     })();
   }, []);
@@ -1288,7 +1238,7 @@ function PracticeHomeInner() {
     return () => window.clearTimeout(t);
   }, [toast]);
 
-  // â”€â”€ Rep status (gates "Create set" button) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // â"€â"€ Rep status (gates "Create set" button) â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€
   const [repStatus, setRepStatus]   = useState<RepStatus>("loading");
   const [repScope, setRepScope]     = useState<RepScope>(null);
   const [createOpen, setCreateOpen] = useState(false);
@@ -1439,7 +1389,7 @@ function PracticeHomeInner() {
           setDueData(json);
         }
       } catch {
-        // non-fatal â€” Due Today card just stays hidden
+        // non-fatal â€" Due Today card just stays hidden
       } finally {
         if (mounted) setDueLoading(false);
       }
@@ -1520,7 +1470,7 @@ function PracticeHomeInner() {
     return () => { mounted = false; };
   }, []);
 
-  // â”€â”€ Per-set attempt summaries â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // â"€â"€ Per-set attempt summaries â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€
   // Loaded whenever the visible set list changes. Gives each card personal
   // context: best score, attempt count, in-progress state.
   const [setAttemptMap, setSetAttemptMap] = useState<Record<string, SetAttemptSummary>>({});
@@ -1596,7 +1546,7 @@ function PracticeHomeInner() {
 
         if (!cancelled) setSetAttemptMap(map);
       } catch {
-        // Non-fatal â€” cards just show without personal context
+        // Non-fatal â€" cards just show without personal context
       }
     })();
 
@@ -1620,7 +1570,7 @@ function PracticeHomeInner() {
 
       let query = supabase.from("study_quiz_sets").select(selectFields, { count: "exact" });
 
-      // Always filter to published sets â€” unpublished sets are not accessible to students
+      // Always filter to published sets â€" unpublished sets are not accessible to students
       query = query.eq("published", true);
 
       const qNorm = normalizeQuery(qParam);
@@ -1697,7 +1647,7 @@ function PracticeHomeInner() {
           msg.includes("semester")
         ) {
           setSchemaHint(
-            "Some optional columns are missing (e.g., semester/time_limit/questions_count/published). The page still works â€” add them later for richer UX."
+            "Some optional columns are missing (e.g., semester/time_limit/questions_count/published). The page still works â€" add them later for richer UX."
           );
         }
 
@@ -1883,6 +1833,12 @@ function PracticeHomeInner() {
 
   const showRecentEmpty = viewParam === "recent" && recentAttempts.length === 0;
 
+  const attemptedSummaries = Object.values(setAttemptMap).filter((s) => s.bestPct !== null);
+  const avgScore = attemptedSummaries.length
+    ? Math.round(attemptedSummaries.reduce((sum, s) => sum + s.bestPct!, 0) / attemptedSummaries.length)
+    : null;
+  const totalSessions = Object.values(setAttemptMap).reduce((sum, s) => sum + s.attemptCount, 0);
+
   function openPreview(s: QuizSetRow) {
     setPreviewSet(s);
     setPreviewMode("exam"); // reset to default each time
@@ -1944,7 +1900,7 @@ function PracticeHomeInner() {
       navigated = true;
       startSet(pick.id, "study");
     } catch {
-      // non-fatal â€” button simply stops loading
+      // non-fatal â€" button simply stops loading
     } finally {
       if (!navigated) setQuickLoading(false);
     }
@@ -1978,37 +1934,46 @@ function PracticeHomeInner() {
         </div>
       ) : null}
 
-      <PracticeHero
+      <PracticeHeroV2
         dueLoading={dueLoading}
         dueData={dueData}
-        resumeAttempt={resumeAttempt}
-        timedExamSet={timedExamSet}
+        streak={streak}
+        avgScore={avgScore}
+        totalSessions={totalSessions}
         quickLoading={quickLoading}
+        displayName={displayName}
         onReviewDue={(setId) => router.push(`/study/practice/${setId}?mode=study&due=1`)}
-        onResume={(setId) => startSet(setId)}
-        onStartTimed={(setId) => startSet(setId, "exam")}
         onQuickSession={handleQuickSession}
       />
 
-      <div className="pt-2">
-        <p className="text-xs font-extrabold uppercase tracking-[0.12em] text-muted-foreground">
-          Browse practice sets
-        </p>
-        <p className="mt-1 text-sm text-muted-foreground">
-          Search, filter, or review your recent activity when you want something specific.
-        </p>
-      </div>
+      {/* Course chips filter */}
+      <CourseChipsBar
+        courseCodes={courseCodes}
+        activeCourse={courseParam}
+        onSelect={(code) =>
+          router.replace(
+            buildHref(pathname, {
+              q: qParam || null,
+              course: code || null,
+              level: levelParam || null,
+              semester: semesterParam || null,
+              sort: sortParam !== "newest" ? sortParam : null,
+              published: publishedOnly ? "1" : null,
+              view: viewParam !== "for_you" ? viewParam : null,
+            })
+          )
+        }
+      />
 
       {/* Tabs: For you / Recent / All */}
-      <MiniTabs value={viewParam} onChange={setView} />
-
-      {repStatus === "approved" && (
-        <div className="flex justify-end">
+      <div className="flex items-center justify-between gap-3">
+        <MiniTabs value={viewParam} onChange={setView} />
+        {repStatus === "approved" && (
           <button
             type="button"
             onClick={() => setCreateOpen(true)}
             className={cn(
-              "inline-flex items-center gap-2 rounded-2xl border border-primary/20 bg-primary-light px-3 py-2 text-sm font-semibold text-primary-text",
+              "inline-flex shrink-0 items-center gap-2 rounded-2xl border border-primary/20 bg-primary-light px-3 py-2 text-sm font-semibold text-primary-text",
               "hover:bg-primary/10",
               "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
             )}
@@ -2016,8 +1981,8 @@ function PracticeHomeInner() {
             <Plus className="h-4 w-4" />
             Create set
           </button>
-        </div>
-      )}
+        )}
+      </div>
 
       {/* Suggested for today widget */}
       <SuggestedTodayWidget />
@@ -2064,7 +2029,7 @@ function PracticeHomeInner() {
         {hasAnyFilters ? (
           <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
             <p className="text-xs font-semibold text-muted-foreground">
-              Showing <span className="text-foreground">{total === 0 ? 0 : 1}</span>â€“
+              Showing <span className="text-foreground">{total === 0 ? 0 : 1}</span>â€"
               <span className="text-foreground">{Math.min(total, sets.length)}</span> of{" "}
               <span className="text-foreground">{total}</span>
             </p>
@@ -2239,7 +2204,7 @@ function PracticeHomeInner() {
       ) : (
         <>
           {/* RESULTS */}
-          <div className="grid min-w-0 gap-3 sm:grid-cols-2">
+          <div className="flex min-w-0 flex-col gap-3">
             {loading ? (
               <>
                 {Array.from({ length: 6 }).map((_, i) => (
@@ -2247,7 +2212,7 @@ function PracticeHomeInner() {
                 ))}
               </>
             ) : visibleSets.length === 0 ? (
-              <div className="sm:col-span-2 pl-14">
+              <div className="pl-14">
                 <EmptyState
                   icon={<BookOpen className="h-5 w-5" />}
                   title={
@@ -2296,7 +2261,6 @@ function PracticeHomeInner() {
                   key={s.id}
                   s={s}
                   onStart={() => startSet(s.id)}
-                  onPreview={() => openPreview(s)}
                   summary={setAttemptMap[s.id] ?? null}
                   currentUserId={authedUserId}
                 />
@@ -2616,7 +2580,7 @@ function PracticeHomeInner() {
         open={createOpen}
         onClose={() => setCreateOpen(false)}
         repScope={repScope}
-        onCreated={(id) => setToast(`Set created â€” redirecting to editorâ€¦`)}
+        onCreated={(id) => setToast(`Set created â€" redirecting to editorâ€¦`)}
       />
 
       {/* Request course modal */}

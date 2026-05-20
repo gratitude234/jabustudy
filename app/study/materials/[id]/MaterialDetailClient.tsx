@@ -57,6 +57,8 @@ type GeneratedQuestion = {
   };
 };
 
+type GenerationIntent = "weak_areas" | "untested_sections" | "application" | "hard" | "topic";
+
 type AiGenerationMeta = {
   provider: "bedrock" | "gemini";
   model: string;
@@ -71,6 +73,10 @@ type AiGenerationMeta = {
     cognitiveLevelCounts?: Record<string, number>;
     chunksLoaded?: number;
     chunksCatalogued?: number;
+    intent?: GenerationIntent | null;
+    intentLabel?: string;
+    targetedTopic?: string | null;
+    reason?: string;
   };
 };
 
@@ -79,6 +85,14 @@ type GenerateQuestionsResponse = {
   ai?: AiGenerationMeta;
   error?: string;
 };
+
+const STUDENT_GENERATION_MODES: Array<{ value: GenerationIntent; label: string; sub: string }> = [
+  { value: "weak_areas", label: "Cover weak areas", sub: "Prioritize topics with fewer questions." },
+  { value: "untested_sections", label: "Use untested sections", sub: "Pull from parts not covered well yet." },
+  { value: "application", label: "More application questions", sub: "Practice using ideas, not just recalling them." },
+  { value: "hard", label: "Harder questions", sub: "Make it closer to exam difficulty." },
+  { value: "topic", label: "Focus on a topic", sub: "Use the focus area you type below." },
+];
 
 type ChatMessage = {
   id: string;
@@ -662,6 +676,7 @@ export default function MaterialDetailClient({
   const [generateMoreError, setGenerateMoreError] = useState<string | null>(null);
   const [hintShown, setHintShown] = useState<Record<number, boolean>>({});
   const [generationAi, setGenerationAi] = useState<AiGenerationMeta | null>(null);
+  const [generationIntent, setGenerationIntent] = useState<GenerationIntent>("weak_areas");
 
   // Quiz state machine
   const [quizState, setQuizState] = useState<"idle" | "config" | "loading" | "quiz" | "results">("idle");
@@ -847,6 +862,7 @@ export default function MaterialDetailClient({
           count: quizConfig.count,
           difficulty: quizConfig.difficulty,
           focus: quizConfig.focus || undefined,
+          generationIntent,
         }),
       });
       const data = await readGenerateQuestionsResponse(res);
@@ -883,9 +899,10 @@ export default function MaterialDetailClient({
     }
   }
 
-  async function handleGenerateMore() {
+  async function handleGenerateMore(intent: GenerationIntent = generationIntent) {
     setGeneratingMore(true);
     setGenerateMoreError(null);
+    setGenerationIntent(intent);
     try {
       const res = await fetch("/api/ai/generate-questions", {
         method: "POST", headers: { "Content-Type": "application/json" },
@@ -895,6 +912,7 @@ export default function MaterialDetailClient({
           difficulty: quizConfig.difficulty,
           focus: quizConfig.focus || undefined,
           coveredQuestions: generatedQuestions?.map((q) => q.question) ?? [],
+          generationIntent: intent,
         }),
       });
       const data = await readGenerateQuestionsResponse(res);
@@ -1434,6 +1452,28 @@ export default function MaterialDetailClient({
                   </div>
 
                   <div>
+                    <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-muted-brand">Question mode</p>
+                    <div className="grid gap-2 sm:grid-cols-2">
+                      {STUDENT_GENERATION_MODES.map(({ value, label, sub }) => (
+                        <button
+                          key={value}
+                          type="button"
+                          onClick={() => setGenerationIntent(value)}
+                          className={cn(
+                            "rounded-xl border px-3 py-2.5 text-left transition focus-visible:outline-none",
+                            generationIntent === value
+                              ? "border-primary bg-primary-light"
+                              : "border-border bg-background hover:bg-secondary/40"
+                          )}
+                        >
+                          <p className={cn("text-xs font-extrabold", generationIntent === value ? "text-primary-text" : "text-foreground")}>{label}</p>
+                          <p className="mt-0.5 text-[11px] leading-snug text-muted-brand">{sub}</p>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div>
                     <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-muted-brand">Focus area <span className="normal-case font-normal text-muted-brand">(optional)</span></p>
                     <input type="text" value={quizConfig.focus}
                       onChange={(e) => setQuizConfig((c) => ({ ...c, focus: e.target.value }))}
@@ -1647,8 +1687,26 @@ export default function MaterialDetailClient({
                     <p className="text-center text-xs font-semibold text-rose-600">{saveQsError}</p>
                   )}
                   {/* Generate more */}
+                  <div className="grid grid-cols-2 gap-2">
+                    {STUDENT_GENERATION_MODES.slice(0, 4).map(({ value, label }) => (
+                      <button
+                        key={value}
+                        type="button"
+                        onClick={() => handleGenerateMore(value)}
+                        disabled={generatingMore}
+                        className={cn(
+                          "inline-flex min-h-10 items-center justify-center rounded-xl border px-2 py-2 text-center text-[11px] font-extrabold transition disabled:opacity-50 focus-visible:outline-none",
+                          generationIntent === value
+                            ? "border-primary bg-primary-light text-primary-text"
+                            : "border-border bg-background text-foreground hover:bg-secondary/40"
+                        )}
+                      >
+                        {label}
+                      </button>
+                    ))}
+                  </div>
                   <button type="button"
-                    onClick={handleGenerateMore}
+                    onClick={() => handleGenerateMore(generationIntent)}
                     disabled={generatingMore}
                     className="inline-flex w-full items-center justify-center gap-2 rounded-2xl border border-primary bg-primary-light px-4 py-3 text-sm font-semibold text-primary-text transition hover:opacity-90 disabled:opacity-50 focus-visible:outline-none">
                     {generatingMore

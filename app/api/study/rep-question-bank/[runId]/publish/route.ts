@@ -2,6 +2,10 @@ import { NextRequest, NextResponse } from "next/server";
 import { adminSupabase } from "@/lib/supabase/admin";
 import { requireStudyModeratorFromRequest } from "@/lib/studyAdmin/requireStudyModeratorFromRequest";
 import { getBankState, jsonError, requireScopedCourse } from "@/lib/repQuestionBank";
+import {
+  assertQuizSetNotDuplicateForCourse,
+  duplicateGateErrorResponse,
+} from "@/lib/studyDuplicateGate";
 import { assertQuizSetQuestionsSourceBacked } from "@/lib/studyQuestionGrounding";
 
 type BankRunRow = {
@@ -14,6 +18,8 @@ type RouteError = {
   status?: number;
   code?: string;
   invalidCount?: number;
+  duplicateCount?: number;
+  duplicates?: unknown;
 };
 
 export async function POST(
@@ -59,6 +65,16 @@ export async function POST(
           invalidCount: sourceError.invalidCount,
         },
         { status: Number(sourceError.status) || 422 }
+      );
+    }
+
+    try {
+      await assertQuizSetNotDuplicateForCourse(String(bankRun.quiz_set_id));
+    } catch (error: unknown) {
+      const duplicateError = error as RouteError;
+      return NextResponse.json(
+        duplicateGateErrorResponse(error),
+        { status: Number(duplicateError.status) || 422 }
       );
     }
 

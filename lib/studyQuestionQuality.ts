@@ -1,6 +1,11 @@
 import "server-only";
 
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
+import {
+  getCoverageForMaterials,
+  type CoverageSummary,
+  type CoverageTopicMetric,
+} from "@/lib/studyCoverageEngine";
 import type { StudyModeratorScope } from "@/lib/studyAdmin/requireStudyModerator";
 
 export type QuestionQualityIssue =
@@ -57,6 +62,72 @@ type MaterialInfo = {
   material_type: string | null;
   file_path: string | null;
   courseCode: string | null;
+};
+
+type CourseJoin = {
+  id?: string | null;
+  course_code?: string | null;
+  course_title?: string | null;
+  level?: number | null;
+  faculty_id?: string | null;
+  department_id?: string | null;
+};
+
+type ScopedMaterialRow = {
+  id: string;
+  title: string | null;
+  material_type: string | null;
+  file_path: string | null;
+  study_courses?: CourseJoin | CourseJoin[] | null;
+};
+
+type QuizSetJoin = {
+  id?: string | null;
+  title?: string | null;
+  course_code?: string | null;
+  source?: string | null;
+  source_material_id?: string | null;
+};
+
+type QualityOptionRow = {
+  id: string;
+  text: string | null;
+  is_correct: boolean | null;
+  position: number | null;
+};
+
+type QualityQuestionRow = {
+  id: string;
+  set_id: string | null;
+  prompt: string | null;
+  explanation: string | null;
+  position: number | null;
+  study_ref: unknown;
+  source_chunk_id: string | null;
+  source_material_id: string | null;
+  source_topic: string | null;
+  question_kind: string | null;
+  difficulty_level: string | null;
+  cognitive_level: string | null;
+  question_fingerprint: string | null;
+  generation_meta: unknown;
+  ai_generated: boolean | null;
+  study_quiz_sets?: QuizSetJoin | QuizSetJoin[] | null;
+  study_quiz_options?: QualityOptionRow[] | null;
+};
+
+type MaterialLookupRow = {
+  id: string;
+  title: string | null;
+  material_type: string | null;
+  file_path: string | null;
+  study_courses?: { course_code?: string | null } | Array<{ course_code?: string | null }> | null;
+};
+
+type ChunkLookupRow = {
+  id: string;
+  page_number: number | null;
+  chunk_index: number | null;
 };
 
 type QueryParams = {
@@ -120,7 +191,7 @@ async function loadScopedMaterials(scope: StudyModeratorScope | null, courseCode
   const { data, error } = await query;
   if (error) throw error;
 
-  const rows = (data ?? []) as any[];
+  const rows = (data ?? []) as ScopedMaterialRow[];
   const allowed = rows.filter((row) => {
     const course = Array.isArray(row.study_courses) ? row.study_courses[0] : row.study_courses;
     return isWithinModeratorScope(scope, {
@@ -228,7 +299,7 @@ export async function getQuestionQuality(req: Request, scope: StudyModeratorScop
   const { data, error } = await query;
   if (error) throw error;
 
-  let rows = (data ?? []) as any[];
+  let rows = (data ?? []) as unknown as QualityQuestionRow[];
   rows = rows.filter((row) => {
     const quizSet = Array.isArray(row.study_quiz_sets) ? row.study_quiz_sets[0] : row.study_quiz_sets;
     const effectiveMaterialId = row.source_material_id ?? quizSet?.source_material_id ?? null;
@@ -257,12 +328,13 @@ export async function getQuestionQuality(req: Request, scope: StudyModeratorScop
       .eq("id", id)
       .maybeSingle();
     if (mat) {
-      const course = Array.isArray((mat as any).study_courses) ? (mat as any).study_courses[0] : (mat as any).study_courses;
+      const material = mat as MaterialLookupRow;
+      const course = Array.isArray(material.study_courses) ? material.study_courses[0] : material.study_courses;
       materialMap.set(id, {
         id,
-        title: (mat as any).title ?? null,
-        material_type: (mat as any).material_type ?? null,
-        file_path: (mat as any).file_path ?? null,
+        title: material.title ?? null,
+        material_type: material.material_type ?? null,
+        file_path: material.file_path ?? null,
         courseCode: course?.course_code ?? null,
       });
     }
@@ -275,10 +347,10 @@ export async function getQuestionQuality(req: Request, scope: StudyModeratorScop
       .from("study_material_chunks")
       .select("id,page_number,chunk_index")
       .in("id", chunkIds);
-    for (const chunk of chunks ?? []) {
-      chunkMap.set(String((chunk as any).id), {
-        page_number: typeof (chunk as any).page_number === "number" ? (chunk as any).page_number : null,
-        chunk_index: typeof (chunk as any).chunk_index === "number" ? (chunk as any).chunk_index : null,
+    for (const chunk of (chunks ?? []) as ChunkLookupRow[]) {
+      chunkMap.set(String(chunk.id), {
+        page_number: typeof chunk.page_number === "number" ? chunk.page_number : null,
+        chunk_index: typeof chunk.chunk_index === "number" ? chunk.chunk_index : null,
       });
     }
   }
@@ -308,7 +380,7 @@ export async function getQuestionQuality(req: Request, scope: StudyModeratorScop
 
   let items = rows.map((row): QuestionQualityItem => {
     const options: QuestionQualityItem["options"] = (Array.isArray(row.study_quiz_options) ? row.study_quiz_options : [])
-      .map((option: any) => ({
+      .map((option: QualityOptionRow) => ({
         id: String(option.id),
         text: String(option.text ?? ""),
         isCorrect: Boolean(option.is_correct),
@@ -376,6 +448,7 @@ export async function getQuestionQuality(req: Request, scope: StudyModeratorScop
 
   const total = items.length;
   const summary = buildSummary(items);
+  const coverage = await getCoverageForMaterials(scopedMaterialIds);
   const start = (params.page - 1) * params.per;
   const paged = items.slice(start, start + params.per);
 
@@ -383,6 +456,8 @@ export async function getQuestionQuality(req: Request, scope: StudyModeratorScop
     ok: true,
     items: paged,
     summary,
+    coverageSummary: coverage.summary,
+    coverageTopics: coverage.topics,
     page: params.page,
     per: params.per,
     total,
@@ -421,6 +496,8 @@ function emptyResult(params: QueryParams) {
     ok: true,
     items: [],
     summary: buildSummary([]),
+    coverageSummary: null as CoverageSummary | null,
+    coverageTopics: [] as CoverageTopicMetric[],
     page: params.page,
     per: params.per,
     total: 0,

@@ -2,6 +2,13 @@ import "server-only";
 
 import { generateJson, userMessage } from "@/lib/ai";
 import { adminSupabase } from "@/lib/supabase/admin";
+import {
+  buildCoveragePlanForMaterial,
+  coverageEngineVersion,
+  type CoveragePlan,
+  type CoveragePlanItem,
+  type StudyGenerationIntent,
+} from "@/lib/studyCoverageEngine";
 
 const OUTLINE_CHUNK_LIMIT = 140;
 const OUTLINE_TEXT_BUDGET = 58_000;
@@ -14,6 +21,7 @@ const OUTLINE_TIMEOUT_MS = parsePositiveInt(process.env.GEMINI_OUTLINE_TIMEOUT_M
 type Difficulty = "easy" | "mixed" | "hard";
 type QuestionKind = "recall" | "definition" | "application" | "comparison" | "exception" | "structure_function" | "clinical" | "analysis";
 type CognitiveLevel = "recall" | "understanding" | "application" | "analysis";
+export type { StudyGenerationIntent };
 
 export type MaterialChunk = {
   id: string;
@@ -36,6 +44,7 @@ type PlannedQuestion = {
   questionKind: QuestionKind;
   difficultyLevel: Difficulty;
   cognitiveLevel: CognitiveLevel;
+  coverage?: CoveragePlanItem;
 };
 
 export type CoverageGeneratedQuestion = {
@@ -66,6 +75,22 @@ export type CoverageGenerationResult = {
   cognitiveLevelCounts: Record<string, number>;
   chunksLoaded: number;
   chunksCatalogued: number;
+  coverage?: {
+    courseMapId: string;
+    courseCode: string | null;
+    coveragePercent: number;
+    topicsTotal: number;
+    topicsStrongGap: number;
+    topicsModerateGap: number;
+    topicsWeakGap: number;
+    duplicateRiskHigh: number;
+    sourceConfidenceAverage: number;
+    plannedItems: number;
+    intent?: StudyGenerationIntent | null;
+    intentLabel?: string;
+    targetedTopic?: string | null;
+    reason?: string;
+  };
   ai?: {
     provider: "bedrock" | "gemini";
     model: string;
@@ -297,7 +322,54 @@ function fallbackOutline(chunks: MaterialChunk[], count: number): OutlineTopic[]
   }));
 }
 
-function questionKindCycle(difficulty: Difficulty): QuestionKind[] {
+export function generationIntentLabel(intent?: StudyGenerationIntent | null) {
+  switch (intent) {
+    case "weak_areas":
+      return "Cover weak areas";
+    case "untested_sections":
+      return "Untested sections";
+    case "application":
+      return "More application questions";
+    case "hard":
+      return "Harder questions";
+    case "topic":
+      return "Focus on a topic";
+    case "past_question_style":
+      return "Past-question style";
+    default:
+      return "Balanced coverage";
+  }
+}
+
+function generationIntentReason(intent?: StudyGenerationIntent | null) {
+  switch (intent) {
+    case "weak_areas":
+      return "Prioritized low-coverage topics before better-tested areas.";
+    case "untested_sections":
+      return "Prioritized sections with little or no saved question coverage.";
+    case "application":
+      return "Prioritized application and understanding questions.";
+    case "hard":
+      return "Prioritized harder exam-style questions.";
+    case "topic":
+      return "Prioritized the requested topic.";
+    case "past_question_style":
+      return "Prioritized exam-style questions from selected source material.";
+    default:
+      return "Balanced coverage-aware generation.";
+  }
+}
+
+function questionKindCycle(difficulty: Difficulty, intent?: StudyGenerationIntent | null): QuestionKind[] {
+  if (intent === "application") {
+    return ["application", "structure_function", "clinical", "application", "comparison", "analysis"];
+  }
+  if (intent === "hard") {
+    return ["analysis", "clinical", "exception", "comparison", "application"];
+  }
+  if (intent === "past_question_style") {
+    return ["application", "comparison", "exception", "analysis", "clinical"];
+  }
   if (difficulty === "easy") {
     return ["recall", "definition", "recall", "structure_function", "definition"];
   }
@@ -314,20 +386,53 @@ function cognitiveLevelFor(kind: QuestionKind): CognitiveLevel {
   return "analysis";
 }
 
+function difficultyLevelFor(kind: QuestionKind, requested: Difficulty): Difficulty {
+  if (requested !== "mixed") return requested;
+  if (kind === "recall" || kind === "definition") return "easy";
+  if (kind === "analysis" || kind === "exception" || kind === "clinical") return "hard";
+  return "mixed";
+}
+
 function buildCoveragePlan(args: {
   topics: OutlineTopic[];
   chunksById: Map<string, MaterialChunk>;
   count: number;
   difficulty: Difficulty;
   focus?: string;
+  coverageItems?: CoveragePlanItem[];
+  generationIntent?: StudyGenerationIntent | null;
 }) {
+  const effectiveDifficulty = args.generationIntent === "hard" || args.generationIntent === "past_question_style"
+    ? "hard"
+    : args.difficulty;
+  const kinds = questionKindCycle(effectiveDifficulty, args.generationIntent);
+  if (args.coverageItems?.length) {
+    const plan: PlannedQuestion[] = [];
+    let cursor = 0;
+    while (plan.length < args.count + 4 && cursor < args.coverageItems.length * 3) {
+      const item = args.coverageItems[cursor % args.coverageItems.length];
+      if (args.chunksById.has(item.chunkId)) {
+        const questionKind = kinds[plan.length % kinds.length];
+        plan.push({
+          topic: item.subtopicTitle || item.topicTitle,
+          chunkId: item.chunkId,
+          questionKind,
+          difficultyLevel: difficultyLevelFor(questionKind, effectiveDifficulty),
+          cognitiveLevel: cognitiveLevelFor(questionKind),
+          coverage: item,
+        });
+      }
+      cursor++;
+    }
+    if (plan.length) return plan;
+  }
+
   const focus = normalizeForCompare(args.focus ?? "");
   const topics = [...args.topics].sort((a, b) => {
     const aBoost = focus && normalizeForCompare(`${a.title} ${a.examAngles.join(" ")}`).includes(focus) ? 4 : 0;
     const bBoost = focus && normalizeForCompare(`${b.title} ${b.examAngles.join(" ")}`).includes(focus) ? 4 : 0;
     return b.importance + bBoost - (a.importance + aBoost);
   });
-  const kinds = questionKindCycle(args.difficulty);
   const plan: PlannedQuestion[] = [];
   let topicCursor = 0;
 
@@ -341,7 +446,7 @@ function buildCoveragePlan(args: {
         topic: topic.title,
         chunkId,
         questionKind,
-        difficultyLevel: args.difficulty,
+        difficultyLevel: difficultyLevelFor(questionKind, effectiveDifficulty),
         cognitiveLevel: cognitiveLevelFor(questionKind),
       });
     }
@@ -357,8 +462,12 @@ async function generatePlannedQuestion(args: {
   plan: PlannedQuestion;
   chunk: MaterialChunk;
   avoidPrompts: string[];
+  generationIntent?: StudyGenerationIntent | null;
 }) {
   const page = typeof args.chunk.page_number === "number" ? `Page ${args.chunk.page_number}` : "Unknown page";
+  const intentInstruction = args.generationIntent
+    ? `Generation mode: ${generationIntentLabel(args.generationIntent)}. ${generationIntentReason(args.generationIntent)}`
+    : "";
   const prompt = `You are writing one high-quality Nigerian university exam MCQ from the source chunk.
 Material: ${args.materialTitle}
 Topic: ${args.plan.topic}
@@ -366,6 +475,7 @@ Question kind: ${args.plan.questionKind}
 Difficulty: ${args.plan.difficultyLevel}
 Cognitive level: ${args.plan.cognitiveLevel}
 Source: ${page}
+${intentInstruction}
 
 Avoid repeating or closely paraphrasing these questions:
 ${args.avoidPrompts.slice(-35).map((q, i) => `${i + 1}. ${q}`).join("\n") || "None"}
@@ -426,7 +536,12 @@ Return ONLY JSON:
   };
 }
 
-function normalizeGeneratedQuestion(raw: GeneratedShape, plan: PlannedQuestion, chunk: MaterialChunk): CoverageGeneratedQuestion | null {
+function normalizeGeneratedQuestion(
+  raw: GeneratedShape,
+  plan: PlannedQuestion,
+  chunk: MaterialChunk,
+  generationIntent?: StudyGenerationIntent | null
+): CoverageGeneratedQuestion | null {
   const optionKeys = ["A", "B", "C", "D"] as const;
   const question = typeof raw.question === "string" ? raw.question.trim() : "";
   const answer = raw.answer;
@@ -471,6 +586,22 @@ function normalizeGeneratedQuestion(raw: GeneratedShape, plan: PlannedQuestion, 
       questionKind: plan.questionKind,
       cognitiveLevel: plan.cognitiveLevel,
       difficultyLevel: plan.difficultyLevel,
+      intent: generationIntent ?? null,
+      intentLabel: generationIntentLabel(generationIntent),
+      coverageEngineVersion: plan.coverage ? coverageEngineVersion() : undefined,
+      courseMapId: plan.coverage?.courseMapId,
+      topicId: plan.coverage?.topicId,
+      subtopicId: plan.coverage?.subtopicId,
+      coverageBefore: plan.coverage
+        ? {
+            coveragePercent: plan.coverage.coveragePercent,
+            questionCount: plan.coverage.questionCount,
+            targetQuestionCount: plan.coverage.targetQuestionCount,
+          }
+        : undefined,
+      coverageGapStrength: plan.coverage?.gapStrength,
+      sourceConfidence: plan.coverage?.sourceConfidence,
+      duplicateRisk: plan.coverage?.duplicateRisk,
     },
   };
 }
@@ -506,20 +637,44 @@ export async function generateCoverageAwareQuestions(args: {
   difficulty: Difficulty;
   focus?: string;
   coveredQuestions?: string[];
+  generationIntent?: StudyGenerationIntent | null;
+  topicId?: string | null;
+  subtopicId?: string | null;
 }): Promise<CoverageGenerationResult | null> {
   const chunks = await loadIndexedChunks(args.materialId);
   if (chunks.length === 0) return null;
 
   const chunksById = new Map(chunks.map((chunk) => [chunk.id, chunk]));
-  const [{ topics, cataloguedChunks, ai: outlineAi }, existingMemory] = await Promise.all([
-    buildSourceOutline({
+  const [coveragePlan, existingMemory] = await Promise.all([
+    buildCoveragePlanForMaterial({
+      materialId: args.materialId,
+      count: args.count,
+      focus: args.focus,
+      coveredQuestions: args.coveredQuestions,
+      generationIntent: args.generationIntent,
+      topicId: args.topicId,
+      subtopicId: args.subtopicId,
+    }).catch((error) => {
+      console.warn("[question-v2] coverage plan unavailable:", error instanceof Error ? error.message : error);
+      return null;
+    }),
+    loadExistingQuestionMemory(args.materialId),
+  ]);
+
+  let topics: OutlineTopic[] = [];
+  let cataloguedChunks = selectCatalogChunks(chunks);
+  let outlineAi: CoverageGenerationResult["ai"] | undefined;
+  if (!coveragePlan?.items.length) {
+    const outline = await buildSourceOutline({
       materialTitle: args.materialTitle,
       count: args.count,
       focus: args.focus,
       chunks,
-    }),
-    loadExistingQuestionMemory(args.materialId),
-  ]);
+    });
+    topics = outline.topics;
+    cataloguedChunks = outline.cataloguedChunks;
+    outlineAi = outline.ai;
+  }
 
   const plan = buildCoveragePlan({
     topics,
@@ -527,6 +682,8 @@ export async function generateCoverageAwareQuestions(args: {
     count: args.count,
     difficulty: args.difficulty,
     focus: args.focus,
+    coverageItems: coveragePlan?.items,
+    generationIntent: args.generationIntent,
   });
 
   const accepted: CoverageGeneratedQuestion[] = [];
@@ -550,6 +707,7 @@ export async function generateCoverageAwareQuestions(args: {
         plan: planned,
         chunk,
         avoidPrompts: [...usedPrompts, ...accepted.map((question) => question.question)],
+        generationIntent: args.generationIntent,
       });
       const raw = generated?.question ?? null;
       if (generated?.ai) ai = generated.ai;
@@ -558,7 +716,7 @@ export async function generateCoverageAwareQuestions(args: {
         continue;
       }
 
-      const question = normalizeGeneratedQuestion(raw, planned, chunk);
+      const question = normalizeGeneratedQuestion(raw, planned, chunk, args.generationIntent);
       if (!question) {
         failures.malformed = (failures.malformed ?? 0) + 1;
         continue;
@@ -588,7 +746,31 @@ export async function generateCoverageAwareQuestions(args: {
     cognitiveLevelCounts: countBy(accepted.map((question) => question.cognitiveLevel ?? "unknown")),
     chunksLoaded: chunks.length,
     chunksCatalogued: cataloguedChunks.length,
+    coverage: coveragePlan ? coverageSummary(coveragePlan, args.generationIntent) : undefined,
     ai,
+  };
+}
+
+function coverageSummary(
+  plan: CoveragePlan,
+  generationIntent?: StudyGenerationIntent | null
+): NonNullable<CoverageGenerationResult["coverage"]> {
+  const firstItem = plan.items[0];
+  return {
+    courseMapId: plan.courseMapId,
+    courseCode: plan.courseCode,
+    coveragePercent: plan.summary.coveragePercent,
+    topicsTotal: plan.summary.topicsTotal,
+    topicsStrongGap: plan.summary.topicsStrongGap,
+    topicsModerateGap: plan.summary.topicsModerateGap,
+    topicsWeakGap: plan.summary.topicsWeakGap,
+    duplicateRiskHigh: plan.summary.duplicateRiskHigh,
+    sourceConfidenceAverage: plan.summary.sourceConfidenceAverage,
+    plannedItems: plan.items.length,
+    intent: generationIntent ?? null,
+    intentLabel: generationIntentLabel(generationIntent),
+    targetedTopic: firstItem ? `${firstItem.topicTitle} / ${firstItem.subtopicTitle}` : null,
+    reason: generationIntentReason(generationIntent),
   };
 }
 

@@ -14,7 +14,7 @@ import {
   extractMaterialContent,
   truncateText,
 } from "@/lib/extractMaterialContent";
-import { generateCoverageAwareQuestions } from "@/lib/studyQuestionGeneration";
+import { generateCoverageAwareQuestions, type StudyGenerationIntent } from "@/lib/studyQuestionGeneration";
 
 const QUESTION_GEN_TEXT_CHARS = 24_000;
 const AI_QUESTION_TIMEOUT_MS =
@@ -60,6 +60,40 @@ type GeneratedQuestion = {
   hint?: string;
   studyRef?: StudyRef;
 };
+
+const GENERATION_INTENTS = new Set<StudyGenerationIntent>([
+  "weak_areas",
+  "untested_sections",
+  "application",
+  "hard",
+  "topic",
+  "past_question_style",
+]);
+
+function normalizeGenerationIntent(value: unknown): StudyGenerationIntent | null {
+  return typeof value === "string" && GENERATION_INTENTS.has(value as StudyGenerationIntent)
+    ? (value as StudyGenerationIntent)
+    : null;
+}
+
+function generationIntentInstruction(intent: StudyGenerationIntent | null) {
+  switch (intent) {
+    case "weak_areas":
+      return "Prioritize weak areas that are not well represented by the already generated questions.";
+    case "untested_sections":
+      return "Prioritize sections of the material that have little or no question coverage yet.";
+    case "application":
+      return "Prioritize application and understanding questions over direct recall.";
+    case "hard":
+      return "Prioritize hard exam-style questions that require deeper reasoning.";
+    case "topic":
+      return "Prioritize the requested topic or focus area.";
+    case "past_question_style":
+      return "Write the questions in a past-question exam style.";
+    default:
+      return "";
+  }
+}
 
 function routeErrorMessage(error: unknown) {
   if (error instanceof Error && error.message) {
@@ -161,7 +195,16 @@ async function handleGenerateQuestionsRequest(req: NextRequest) {
   if (!user) return NextResponse.json({ error: "Unauthorised" }, { status: 401 });
 
   // ── Parse body ─────────────────────────────────────────────────────────────
-  let body: { materialId?: string; count?: number; difficulty?: "easy" | "mixed" | "hard"; focus?: string; coveredQuestions?: string[] };
+  let body: {
+    materialId?: string;
+    count?: number;
+    difficulty?: "easy" | "mixed" | "hard";
+    focus?: string;
+    coveredQuestions?: string[];
+    generationIntent?: string;
+    topicId?: string | null;
+    subtopicId?: string | null;
+  };
   try {
     body = await req.json();
   } catch {
@@ -169,8 +212,12 @@ async function handleGenerateQuestionsRequest(req: NextRequest) {
   }
 
   const { materialId, count = 10, difficulty = "mixed", focus, coveredQuestions = [] } = body;
+  const generationIntent = normalizeGenerationIntent(body.generationIntent);
+  const topicId = typeof body.topicId === "string" && body.topicId.trim() ? body.topicId.trim() : null;
+  const subtopicId = typeof body.subtopicId === "string" && body.subtopicId.trim() ? body.subtopicId.trim() : null;
   if (!materialId) return NextResponse.json({ error: "Missing materialId" }, { status: 400 });
   const questionCount = Math.max(1, Math.min(MAX_QUESTION_COUNT, Math.floor(Number(count) || 10)));
+  const effectiveDifficulty = generationIntent === "hard" || generationIntent === "past_question_style" ? "hard" : difficulty;
 
   // ── Fetch material ─────────────────────────────────────────────────────────
   const admin = adminSupabase;
@@ -190,9 +237,11 @@ async function handleGenerateQuestionsRequest(req: NextRequest) {
     easy: "Generate straightforward recall and definition questions.",
     mixed: "Mix of recall, application, and analysis questions.",
     hard: "Generate exam-style questions requiring deep understanding and application.",
-  }[difficulty] ?? "Mix of recall, application, and analysis questions.";
+  }[effectiveDifficulty] ?? "Mix of recall, application, and analysis questions.";
 
-  const focusInstruction = focus ? `Focus specifically on: ${focus}` : "";
+  const focusInstruction = [focus ? `Focus specifically on: ${focus}` : "", generationIntentInstruction(generationIntent)]
+    .filter(Boolean)
+    .join("\n");
 
   const coveredInstruction = coveredQuestions.length > 0
     ? `\n\nThe following questions have ALREADY been generated from this document. Do NOT repeat these topics or ask similar questions. Identify sections or concepts in the document that are NOT covered by these questions and generate new questions from those parts:\n${coveredQuestions.map((q, i) => `${i + 1}. ${q}`).join("\n")}`
@@ -203,9 +252,12 @@ async function handleGenerateQuestionsRequest(req: NextRequest) {
       materialId,
       materialTitle: material.title ?? "Untitled material",
       count: questionCount,
-      difficulty,
+      difficulty: effectiveDifficulty,
       focus,
       coveredQuestions,
+      generationIntent,
+      topicId,
+      subtopicId,
     });
 
     if (coverageResult?.questions.length) {
@@ -236,6 +288,11 @@ async function handleGenerateQuestionsRequest(req: NextRequest) {
             cognitiveLevelCounts: coverageResult.cognitiveLevelCounts,
             chunksLoaded: coverageResult.chunksLoaded,
             chunksCatalogued: coverageResult.chunksCatalogued,
+            courseMap: coverageResult.coverage,
+            intent: coverageResult.coverage?.intent ?? generationIntent,
+            intentLabel: coverageResult.coverage?.intentLabel,
+            targetedTopic: coverageResult.coverage?.targetedTopic,
+            reason: coverageResult.coverage?.reason,
           },
         },
       });

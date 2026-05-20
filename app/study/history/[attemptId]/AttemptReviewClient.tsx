@@ -6,6 +6,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import { Card, EmptyState } from "../../_components/StudyUI";
+import { BetterExplanationInline, type BetterExplanationOptionKey } from "../../_components/BetterExplanationInline";
 import {
   AlertTriangle,
   ArrowLeft,
@@ -19,7 +20,6 @@ import {
   LayoutGrid,
   Loader2,
   RefreshCcw,
-  Sparkles,
   TrendingDown,
   TrendingUp,
   XCircle,
@@ -77,6 +77,14 @@ type QuestionRow = {
   id: string;
   prompt: string;
   explanation: string | null;
+  source_topic?: string | null;
+  study_ref?: {
+    chunkId?: string;
+    topic?: string;
+    instruction?: string;
+    quote?: string;
+    page?: number;
+  } | null;
   position: number | null;
 };
 
@@ -90,6 +98,7 @@ type OptionRow = {
 
 type ReviewTab = "wrong" | "flagged" | "unanswered" | "all";
 
+/*
 type AiExplainState =
   | { status: "idle" }
   | { status: "loading" }
@@ -217,6 +226,8 @@ function AiExplainInline({
 // ─── Score Ring ───────────────────────────────────────────────────────────────
 // No grade label — just percentage. Less demoralizing, more informative.
 
+*/
+
 function ScoreRing({ pct }: { pct: number }) {
   const size = 56;
   const r = 22;
@@ -244,6 +255,12 @@ function ScoreRing({ pct }: { pct: number }) {
 }
 
 // ─── Question Palette (modal) ─────────────────────────────────────────────────
+
+const EXPLAIN_OPTION_KEYS = ["A", "B", "C", "D"] as const;
+
+function optionKeyAt(index: number): BetterExplanationOptionKey | null {
+  return EXPLAIN_OPTION_KEYS[index] ?? null;
+}
 
 function QuestionPalette({
   open, questions, answers, optionsByQ, flagged,
@@ -409,7 +426,7 @@ export default function AttemptReviewClient() {
             .maybeSingle(),
           supabase
             .from("study_quiz_questions")
-            .select("id,prompt,explanation,position")
+            .select("id,prompt,explanation,source_topic,study_ref,position")
             .eq("set_id", setId)
             .order("position", { ascending: true }),
           supabase
@@ -506,6 +523,8 @@ export default function AttemptReviewClient() {
             id: String(q.id),
             prompt: String(q.prompt ?? ""),
             explanation: q.explanation ? String(q.explanation) : null,
+            source_topic: q.source_topic ? String(q.source_topic) : null,
+            study_ref: q.study_ref && typeof q.study_ref === "object" ? q.study_ref : null,
             position: typeof q.position === "number" ? q.position : null,
           }));
 
@@ -586,6 +605,25 @@ export default function AttemptReviewClient() {
   const chosenId = selected ? answers[selected.id] : undefined;
   const chosenOpt = selected ? selectedOpts.find((o) => o.id === chosenId) ?? null : null;
   const correctOpt = selected ? selectedOpts.find((o) => o.is_correct) ?? null : null;
+  const explanationOptions = useMemo(() => {
+    if (selectedOpts.length < 4) return null;
+    const mapped = {} as Record<BetterExplanationOptionKey, string>;
+    for (let i = 0; i < 4; i += 1) {
+      const key = optionKeyAt(i);
+      const text = selectedOpts[i]?.text?.trim();
+      if (!key || !text) return null;
+      mapped[key] = text;
+    }
+    return mapped;
+  }, [selectedOpts]);
+  const chosenOptionKey = useMemo(() => {
+    const index = selectedOpts.findIndex((o) => o.id === chosenId);
+    return index >= 0 ? optionKeyAt(index) : null;
+  }, [chosenId, selectedOpts]);
+  const correctOptionKey = useMemo(() => {
+    const index = selectedOpts.findIndex((o) => o.is_correct);
+    return index >= 0 ? optionKeyAt(index) : null;
+  }, [selectedOpts]);
   const isWrong = Boolean(chosenId && chosenOpt && !chosenOpt.is_correct);
   const isUnanswered = Boolean(selected && !chosenId);
 
@@ -1075,13 +1113,21 @@ export default function AttemptReviewClient() {
                   </div>
 
                   <div className="mt-3">
-                    <AiExplainInline
-                      questionId={selected.id}
-                      questionPrompt={selected.prompt}
-                      chosenOptionText={chosenOpt?.text ?? null}
-                      correctOptionText={correctOpt?.text ?? null}
-                      isCorrect={false}
-                    />
+                    {explanationOptions && chosenOptionKey && correctOptionKey ? (
+                      <BetterExplanationInline
+                        questionId={selected.id}
+                        questionPrompt={selected.prompt}
+                        options={explanationOptions}
+                        chosenOptionKey={chosenOptionKey}
+                        chosenOptionText={chosenOpt?.text ?? null}
+                        correctOptionKey={correctOptionKey}
+                        correctOptionText={correctOpt?.text ?? null}
+                        isCorrect={false}
+                        basicExplanation={selected.explanation}
+                        studyRef={selected.study_ref}
+                        sourceTopic={selected.source_topic}
+                      />
+                    ) : null}
                   </div>
                 </>
               )}

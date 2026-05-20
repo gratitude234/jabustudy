@@ -6,12 +6,14 @@ import {
   jsonError,
   requireScopedCourse,
 } from "@/lib/repQuestionBank";
-import { generateCoverageAwareQuestions } from "@/lib/studyQuestionGeneration";
+import { assertQuestionsNotDuplicateForCourse } from "@/lib/studyDuplicateGate";
+import { generateCoverageAwareQuestions, type StudyGenerationIntent } from "@/lib/studyQuestionGeneration";
 import { validateSourceBackedQuestions } from "@/lib/studyQuestionGrounding";
 
 type BankRunRow = {
   status?: string | null;
   course_id: string;
+  course_code?: string | null;
   quiz_set_id: string;
   batch_size?: number | null;
 };
@@ -42,7 +44,22 @@ type RouteError = {
   message?: string;
   status?: number;
   code?: string;
+  duplicateCount?: number;
+  duplicates?: unknown;
 };
+
+const REP_GENERATION_INTENTS = new Set<StudyGenerationIntent>([
+  "weak_areas",
+  "untested_sections",
+  "hard",
+  "past_question_style",
+]);
+
+function normalizeGenerationIntent(value: unknown): StudyGenerationIntent {
+  return typeof value === "string" && REP_GENERATION_INTENTS.has(value as StudyGenerationIntent)
+    ? (value as StudyGenerationIntent)
+    : "weak_areas";
+}
 
 async function markRunReadyIfCovered(runId: string, quizSetId: string) {
   const { data: rows } = await adminSupabase
@@ -77,6 +94,8 @@ export async function POST(
     const { runId } = await params;
     runIdForError = runId ?? null;
     if (!runId) return jsonError("Missing runId.", 400, "MISSING_RUN_ID");
+    const requestBody = await req.json().catch(() => ({}));
+    const generationIntent = normalizeGenerationIntent((requestBody as { generationIntent?: unknown }).generationIntent);
 
     const { data: run, error: runErr } = await adminSupabase
       .from("study_question_bank_runs")
@@ -148,7 +167,8 @@ export async function POST(
       materialId,
       materialTitle: String(materialRow.title ?? "Untitled material"),
       count: requestedCount,
-      difficulty: "mixed",
+      difficulty: generationIntent === "hard" || generationIntent === "past_question_style" ? "hard" : "mixed",
+      generationIntent,
       coveredQuestions: ((existing ?? []) as ExistingQuestionRow[])
         .map((row) => String(row.prompt ?? ""))
         .filter(Boolean),
@@ -156,6 +176,12 @@ export async function POST(
 
     if (!generation?.questions.length) throw new Error("AI did not return usable source-backed questions for this batch.");
     const questions = await validateSourceBackedQuestions(materialId, generation.questions);
+
+    await assertQuestionsNotDuplicateForCourse({
+      courseId: bankRun.course_id,
+      courseCode: bankRun.course_code,
+      questions,
+    });
 
     const { count: existingCount } = await adminSupabase
       .from("study_quiz_questions")
@@ -258,6 +284,18 @@ export async function POST(
         .from("study_question_bank_runs")
         .update({ status: "failed", error_message: message, updated_at: updatedAt })
         .eq("id", runIdForError);
+    }
+    if (error.code === "DUPLICATE_QUESTION") {
+      return NextResponse.json(
+        {
+          ok: false,
+          code: error.code,
+          error: message,
+          duplicateCount: error.duplicateCount,
+          duplicates: error.duplicates,
+        },
+        { status: Number(error.status) || 422 }
+      );
     }
     return jsonError(message, Number(error.status) || 500, error.code);
   }

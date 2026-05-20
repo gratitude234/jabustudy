@@ -18,6 +18,10 @@ import { NextRequest, NextResponse } from "next/server";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { adminSupabase } from "@/lib/supabase/admin";
 import {
+  assertQuestionsNotDuplicateForCourse,
+  duplicateGateErrorResponse,
+} from "@/lib/studyDuplicateGate";
+import {
   type GroundedQuestionMeta,
   SOURCE_GROUNDING_ERROR_MESSAGE,
   validateSourceBackedQuestions,
@@ -142,6 +146,19 @@ export async function POST(req: NextRequest) {
         invalidCount: groundingError.invalidCount,
       },
       { status: Number(groundingError.status) || 422 }
+    );
+  }
+
+  try {
+    await assertQuestionsNotDuplicateForCourse({
+      materialId,
+      questions: groundedQuestions,
+    });
+  } catch (error: unknown) {
+    const duplicateError = error as { status?: number };
+    return NextResponse.json(
+      duplicateGateErrorResponse(error),
+      { status: Number(duplicateError.status) || 422 }
     );
   }
 

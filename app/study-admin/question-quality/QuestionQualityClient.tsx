@@ -53,10 +53,37 @@ type QualitySummary = {
   cognitiveMix: Record<string, number>;
 };
 
+type CoverageSummary = {
+  courseCode: string | null;
+  coveragePercent: number;
+  topicsTotal: number;
+  topicsStrongGap: number;
+  topicsModerateGap: number;
+  topicsWeakGap: number;
+  duplicateRiskHigh: number;
+  sourceConfidenceAverage: number;
+};
+
+type CoverageTopic = {
+  topicId: string;
+  subtopicId: string;
+  label: string;
+  questionCount: number;
+  targetQuestionCount: number;
+  coveragePercent: number;
+  gapStrength: "strong" | "moderate" | "weak";
+  difficultyMix: Record<string, number>;
+  cognitiveMix: Record<string, number>;
+  duplicateRisk: number;
+  sourceConfidence: number;
+};
+
 type ApiResponse = {
   ok: boolean;
   items: QualityItem[];
   summary: QualitySummary;
+  coverageSummary?: CoverageSummary | null;
+  coverageTopics?: CoverageTopic[];
   page: number;
   per: number;
   total: number;
@@ -109,6 +136,12 @@ function Badge({ children, tone = "zinc" }: { children: React.ReactNode; tone?: 
   return <span className={cn("inline-flex rounded-full border px-2 py-0.5 text-[11px] font-semibold", classes)}>{children}</span>;
 }
 
+function gapTone(value: CoverageTopic["gapStrength"]): "green" | "amber" | "red" {
+  if (value === "strong") return "red";
+  if (value === "moderate") return "amber";
+  return "green";
+}
+
 function JsonBlock({ value }: { value: unknown }) {
   return (
     <pre className="max-h-56 overflow-auto rounded-2xl border bg-zinc-950 p-3 text-xs leading-relaxed text-zinc-50">
@@ -146,7 +179,6 @@ export function QuestionQualityClient({
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [selected, setSelected] = useState<QualityItem | null>(null);
-  const [qDraft, setQDraft] = useState(q);
   const qTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const baseParams = useMemo(() => ({
@@ -163,10 +195,6 @@ export function QuestionQualityClient({
   function replace(next: Record<string, string | number | null | undefined>) {
     router.replace(buildHref(pathname, { ...baseParams, ...next }));
   }
-
-  useEffect(() => {
-    setQDraft(q);
-  }, [q]);
 
   useEffect(() => {
     let cancelled = false;
@@ -196,8 +224,9 @@ export function QuestionQualityClient({
         const json = await res.json().catch(() => null) as ApiResponse | null;
         if (!res.ok || !json?.ok) throw new Error(json?.error || "Failed to load question quality.");
         if (!cancelled) setData(json);
-      } catch (err: any) {
-        if (!cancelled) setError(err?.message || "Failed to load question quality.");
+      } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : "Failed to load question quality.";
+        if (!cancelled) setError(message);
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -209,6 +238,8 @@ export function QuestionQualityClient({
   }, [apiPath, authMode, cognitive, courseCode, issue, kind, page, per, q, source]);
 
   const summary = data?.summary;
+  const coverageSummary = data?.coverageSummary ?? null;
+  const coverageTopics = data?.coverageTopics ?? [];
 
   return (
     <div className="space-y-4 pb-10">
@@ -231,12 +262,12 @@ export function QuestionQualityClient({
           <div className="flex items-center gap-2 rounded-2xl border bg-white px-3 py-2">
             <Search className="h-4 w-4 text-zinc-500" />
             <input
-              value={qDraft}
+              key={q}
+              defaultValue={q}
               placeholder="Search prompt, topic, material..."
               className="w-full bg-transparent text-sm outline-none"
               onChange={(event) => {
                 const value = event.target.value;
-                setQDraft(value);
                 if (qTimerRef.current) clearTimeout(qTimerRef.current);
                 qTimerRef.current = setTimeout(() => {
                   replace({ q: normalize(value) || null, page: null });
@@ -287,6 +318,53 @@ export function QuestionQualityClient({
           <SummaryCard label="Source-backed" value={summary.sourceBacked} />
           <SummaryCard label="Missing metadata" value={summary.missingMetadata} />
           <SummaryCard label="Duplicate fingerprints" value={summary.duplicateFingerprints} />
+        </div>
+      ) : null}
+
+      {coverageSummary ? (
+        <div className="grid gap-3 sm:grid-cols-4">
+          <SummaryCard label="Course coverage" value={`${coverageSummary.coveragePercent}%`} />
+          <SummaryCard label="Strong gaps" value={coverageSummary.topicsStrongGap} />
+          <SummaryCard label="Moderate gaps" value={coverageSummary.topicsModerateGap} />
+          <SummaryCard label="High duplicate risk" value={coverageSummary.duplicateRiskHigh} />
+        </div>
+      ) : null}
+
+      {coverageTopics.length ? (
+        <div className="rounded-3xl border bg-white p-4 shadow-sm">
+          <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-wide text-zinc-500">Coverage gaps</p>
+              <p className="text-sm font-semibold text-zinc-900">{coverageSummary?.courseCode ?? "Mapped courses"}</p>
+            </div>
+            {coverageSummary ? (
+              <Badge tone="blue">{coverageSummary.topicsTotal} mapped subtopics</Badge>
+            ) : null}
+          </div>
+          <div className="mt-3 divide-y rounded-2xl border">
+            {coverageTopics.slice(0, 8).map((topic) => (
+              <div key={`${topic.topicId}:${topic.subtopicId}`} className="grid gap-3 p-3 md:grid-cols-[1fr_120px_140px] md:items-center">
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-semibold text-zinc-900">{topic.label}</p>
+                  <div className="mt-1 flex flex-wrap gap-1">
+                    <Badge tone={gapTone(topic.gapStrength)}>{topic.gapStrength} gap</Badge>
+                    <Badge>{topic.questionCount}/{topic.targetQuestionCount} questions</Badge>
+                    <Badge tone="blue">{Math.round(topic.sourceConfidence * 100)}% source confidence</Badge>
+                  </div>
+                </div>
+                <div className="text-sm font-bold text-zinc-900">{topic.coveragePercent}% covered</div>
+                <div className="h-2 overflow-hidden rounded-full bg-zinc-100">
+                  <div
+                    className={cn(
+                      "h-full rounded-full",
+                      topic.gapStrength === "strong" ? "bg-red-500" : topic.gapStrength === "moderate" ? "bg-amber-500" : "bg-emerald-500"
+                    )}
+                    style={{ width: `${Math.min(100, Math.max(0, topic.coveragePercent))}%` }}
+                  />
+                </div>
+              </div>
+            ))}
+          </div>
         </div>
       ) : null}
 
@@ -371,7 +449,7 @@ export function QuestionQualityClient({
   );
 }
 
-function SummaryCard({ label, value }: { label: string; value: number }) {
+function SummaryCard({ label, value }: { label: string; value: number | string }) {
   return (
     <div className="rounded-3xl border bg-white p-4 shadow-sm">
       <p className="text-xs font-semibold uppercase tracking-wide text-zinc-500">{label}</p>

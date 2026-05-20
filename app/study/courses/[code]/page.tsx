@@ -119,6 +119,15 @@ type BankState = {
   questionsCount: number;
 };
 
+type BankGenerationIntent = "weak_areas" | "untested_sections" | "hard" | "past_question_style";
+
+const BANK_GENERATION_MODES: Array<{ value: BankGenerationIntent; label: string; sub: string }> = [
+  { value: "weak_areas", label: "Cover weak areas", sub: "Start with topics that need more questions." },
+  { value: "untested_sections", label: "Use untested sections", sub: "Prefer parts with little question coverage." },
+  { value: "hard", label: "Harder questions", sub: "Make the batch more exam-demanding." },
+  { value: "past_question_style", label: "Past-question style", sub: "Use an exam-style pattern when possible." },
+];
+
 // â”€â”€ Helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 function norm(v: string) {
   return v.trim().replace(/\s+/g, " ");
@@ -264,6 +273,8 @@ function BankBuilderCard({
   onStart,
   onGenerate,
   onPublish,
+  generationIntent,
+  setGenerationIntent,
 }: {
   bank: BankState | null;
   compatibleMaterials: Material[];
@@ -274,6 +285,8 @@ function BankBuilderCard({
   onStart: () => void;
   onGenerate: () => void;
   onPublish: () => void;
+  generationIntent: BankGenerationIntent;
+  setGenerationIntent: (intent: BankGenerationIntent) => void;
 }) {
   const ready = bank?.run.status === "ready";
   const hasBank = Boolean(bank?.run.id);
@@ -354,6 +367,25 @@ function BankBuilderCard({
         </div>
       ) : (
         <div className="mt-3 space-y-3">
+          <div className="grid gap-2 sm:grid-cols-2">
+            {BANK_GENERATION_MODES.map(({ value, label, sub }) => (
+              <button
+                key={value}
+                type="button"
+                onClick={() => setGenerationIntent(value)}
+                disabled={busy || ready}
+                className={cn(
+                  "rounded-2xl border px-3 py-2.5 text-left transition disabled:opacity-60",
+                  generationIntent === value
+                    ? "border-primary/30 bg-primary-light text-primary-text"
+                    : "border-border bg-background text-foreground hover:bg-secondary/40"
+                )}
+              >
+                <p className="text-xs font-extrabold">{label}</p>
+                <p className="mt-0.5 text-[11px] leading-snug text-muted-brand">{sub}</p>
+              </button>
+            ))}
+          </div>
           <div className="space-y-2">
             {bank!.materials.map((row) => {
               const topics = Array.isArray(row.topic_outline) ? row.topic_outline : [];
@@ -450,6 +482,7 @@ export default function CourseHubPage() {
   const [bankLoading, setBankLoading] = useState(false);
   const [bankError, setBankError] = useState<string | null>(null);
   const [selectedBankMaterialIds, setSelectedBankMaterialIds] = useState<string[]>([]);
+  const [bankGenerationIntent, setBankGenerationIntent] = useState<BankGenerationIntent>("weak_areas");
 
   useEffect(() => {
     let mounted = true;
@@ -663,6 +696,7 @@ export default function CourseHubPage() {
       const res = await fetch(`/api/study/rep-question-bank/${encodeURIComponent(bank.run.id)}/generate-batch`, {
         method: "POST",
         headers,
+        body: JSON.stringify({ generationIntent: bankGenerationIntent }),
       });
       const json = await res.json().catch(() => null);
       if (!res.ok || !json?.ok) throw new Error(json?.error ?? "Failed to generate batch.");
@@ -861,6 +895,8 @@ export default function CourseHubPage() {
               onStart={handleStartBank}
               onGenerate={handleGenerateBatch}
               onPublish={handlePublishBank}
+              generationIntent={bankGenerationIntent}
+              setGenerationIntent={setBankGenerationIntent}
             />
           )}
 

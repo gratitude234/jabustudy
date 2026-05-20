@@ -17,7 +17,12 @@ import { adminSupabase } from "@/lib/supabase/admin";
 import {
   generateCoverageAwareQuestions,
   type CoverageGeneratedQuestion,
+  type StudyGenerationIntent,
 } from "@/lib/studyQuestionGeneration";
+import {
+  assertQuestionsNotDuplicateForCourse,
+  duplicateGateErrorResponse,
+} from "@/lib/studyDuplicateGate";
 import { validateSourceBackedQuestions } from "@/lib/studyQuestionGrounding";
 
 const DEFAULT_QUESTION_COUNT = 10;
@@ -46,6 +51,21 @@ type CandidateMaterial = {
   downloads?: number | null;
   index_status?: string | null;
 };
+
+const COURSE_GENERATION_INTENTS = new Set<StudyGenerationIntent>([
+  "weak_areas",
+  "untested_sections",
+  "application",
+  "hard",
+  "topic",
+  "past_question_style",
+]);
+
+function normalizeGenerationIntent(value: unknown): StudyGenerationIntent | null {
+  return typeof value === "string" && COURSE_GENERATION_INTENTS.has(value as StudyGenerationIntent)
+    ? (value as StudyGenerationIntent)
+    : null;
+}
 
 function isAiSupported(filePath: string | null): boolean {
   if (!filePath) return false;
@@ -221,6 +241,7 @@ export async function POST(req: NextRequest) {
     modelFallbackFrom?: string;
     modelFallbackReason?: string;
     reason?: string;
+    coverage?: Record<string, unknown>;
   } | null = null;
 
   for (let i = 0; i < indexedCandidates.length && questions.length < questionCount; i++) {
@@ -266,6 +287,7 @@ export async function POST(req: NextRequest) {
           modelFallbackReason: generation.ai.modelFallbackReason,
           inputMode: "coverage-aware",
           reason: `Generated source-backed questions from indexed chunks across ${indexedCandidates.length} material(s).`,
+          coverage: generation.coverage,
         };
       }
     } catch (error) {
@@ -287,6 +309,19 @@ export async function POST(req: NextRequest) {
     );
   }
 
+  try {
+    await assertQuestionsNotDuplicateForCourse({
+      courseId,
+      courseCode: code,
+      questions: finalQuestions,
+    });
+  } catch (error: unknown) {
+    const duplicateError = error as { status?: number };
+    return NextResponse.json(
+      duplicateGateErrorResponse(error),
+      { status: Number(duplicateError.status) || 422 }
+    );
+  }
 
   const { data: quizSet, error: setErr } = await admin
     .from("study_quiz_sets")

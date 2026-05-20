@@ -22,7 +22,6 @@ import {
   Trophy,
   Star,
   X,
-  Sparkles,
   RotateCcw,
   BookOpen,
   GraduationCap,
@@ -31,6 +30,7 @@ import {
   Share2,
 } from "lucide-react";
 import { Card, EmptyState } from "../../_components/StudyUI";
+import { BetterExplanationInline, type BetterExplanationOptionKey } from "../../_components/BetterExplanationInline";
 import { GuidedSourceModal, type GuidedStudyRef } from "../../_components/GuidedSourceModal";
 import { cn, msToClock, normalize } from "@/lib/utils";
 import { publicUrl } from "@/lib/publicUrl";
@@ -48,6 +48,12 @@ type AnyOption = {
 
 function getIsCorrect(o: AnyOption) {
   return Boolean(o.is_correct ?? o.correct ?? o.isCorrect ?? false);
+}
+
+const EXPLAIN_OPTION_KEYS = ["A", "B", "C", "D"] as const;
+
+function optionKeyAt(index: number): BetterExplanationOptionKey | null {
+  return EXPLAIN_OPTION_KEYS[index] ?? null;
 }
 
 // ── Milestone toast ───────────────────────────────────────────────────────────
@@ -100,77 +106,9 @@ const MILESTONE_STYLES: Record<MilestoneLevel, string> = {
   done:      "border-border bg-card text-foreground",
 };
 
+/*
+
 // ── AI Explain Inline ─────────────────────────────────────────────────────────
-
-type AiState =
-  | { status: "idle" }
-  | { status: "loading" }
-  | { status: "done"; text: string; cached: boolean }
-  | { status: "error"; message: string };
-
-function AiExplainInline({
-  questionId,
-  questionPrompt,
-  chosenOptionText,
-  correctOptionText,
-  isCorrect,
-}: {
-  questionId: string;
-  questionPrompt: string;
-  chosenOptionText: string | null | undefined;
-  correctOptionText: string | null | undefined;
-  isCorrect: boolean;
-}) {
-  const [state, setState] = useState<AiState>({ status: "idle" });
-
-  async function fetchExplanation() {
-    setState({ status: "loading" });
-    try {
-      const res = await fetch("/api/ai/explain", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          questionId,
-          questionPrompt,
-          chosenOptionText,
-          correctOptionText,
-          isCorrect,
-        }),
-      });
-      const json = await res.json();
-      if (!res.ok || json.error) {
-        setState({ status: "error", message: json.error ?? "Something went wrong." });
-      } else {
-        setState({ status: "done", text: json.explanation, cached: json.cached });
-      }
-    } catch {
-      setState({ status: "error", message: "Network error. Please try again." });
-    }
-  }
-
-  if (state.status === "idle") {
-    return (
-      <button
-        type="button"
-        onClick={fetchExplanation}
-        className={cn(
-          "flex w-full items-center gap-3 rounded-2xl border px-3 py-2.5 text-left transition-all",
-          "border-[#5B35D5]/20 bg-[#EEEDFE] hover:bg-[#EEEDFE]",
-          "dark:border-[#5B35D5]/30 dark:bg-[#5B35D5]/10 dark:hover:bg-[#5B35D5]/15",
-          "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#5B35D5] focus-visible:ring-offset-2"
-        )}
-      >
-        <span className="grid h-8 w-8 shrink-0 place-items-center rounded-xl bg-[#5B35D5]/[0.10] text-[#5B35D5] dark:text-indigo-300">
-          <Sparkles className="h-4 w-4" />
-        </span>
-        <div className="min-w-0 flex-1">
-          <p className="text-xs font-extrabold text-[#3B24A8] dark:text-indigo-300">Ask AI to go deeper</p>
-          <p className="text-[11px] text-[#5B35D5]/70 dark:text-[#5B35D5]/60">Expanded explanation powered by Gemini</p>
-        </div>
-        <Sparkles className="h-3.5 w-3.5 shrink-0 text-[#5B35D5]" />
-      </button>
-    );
-  }
 
   if (state.status === "loading") {
     return (
@@ -223,6 +161,8 @@ function AiExplainInline({
     </div>
   );
 }
+
+*/
 
 type PracticeStudyRef = {
   chunkId?: string;
@@ -520,6 +460,25 @@ export default function PracticeTakeClient() {
   const correctOptionId = useMemo(() => {
     const c = currentOptions.find((o) => getIsCorrect(o));
     return c?.id ?? null;
+  }, [currentOptions]);
+  const explanationOptions = useMemo(() => {
+    if (currentOptions.length < 4) return null;
+    const mapped = {} as Record<BetterExplanationOptionKey, string>;
+    for (let i = 0; i < 4; i += 1) {
+      const key = optionKeyAt(i);
+      const text = currentOptions[i]?.text?.trim();
+      if (!key || !text) return null;
+      mapped[key] = text;
+    }
+    return mapped;
+  }, [currentOptions]);
+  const chosenOptionKey = useMemo(() => {
+    const index = currentOptions.findIndex((o) => o.id === chosenId);
+    return index >= 0 ? optionKeyAt(index) : null;
+  }, [chosenId, currentOptions]);
+  const correctOptionKey = useMemo(() => {
+    const index = currentOptions.findIndex((o) => getIsCorrect(o));
+    return index >= 0 ? optionKeyAt(index) : null;
   }, [currentOptions]);
 
   const isRevealed = current ? !!revealed[current.id] : false;
@@ -1484,17 +1443,21 @@ if (err || !meta) {
                   </p>
                 </div>
               ) : null}
-              <AiExplainInline
-                questionId={current.id}
-                questionPrompt={String(current.prompt ?? "")}
-                chosenOptionText={
-                  currentOptions.find((o) => o.id === chosenId)?.text ?? null
-                }
-                correctOptionText={
-                  currentOptions.find((o) => getIsCorrect(o))?.text ?? null
-                }
-                isCorrect={chosenId === correctOptionId}
-              />
+              {explanationOptions && chosenOptionKey && correctOptionKey ? (
+                <BetterExplanationInline
+                  questionId={current.id}
+                  questionPrompt={String(current.prompt ?? "")}
+                  options={explanationOptions}
+                  chosenOptionKey={chosenOptionKey}
+                  chosenOptionText={currentOptions.find((o) => o.id === chosenId)?.text ?? null}
+                  correctOptionKey={correctOptionKey}
+                  correctOptionText={currentOptions.find((o) => getIsCorrect(o))?.text ?? null}
+                  isCorrect={chosenId === correctOptionId}
+                  basicExplanation={current.explanation}
+                  studyRef={current.study_ref}
+                  sourceTopic={current.source_topic}
+                />
+              ) : null}
             </div>
           ) : null}
 
