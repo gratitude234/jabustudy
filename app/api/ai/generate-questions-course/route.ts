@@ -351,6 +351,7 @@ export async function POST(req: NextRequest) {
         set_id: quizSet.id,
         prompt: q.question,
         explanation: q.explanation,
+        question_type: "mcq",
         position: i,
         ai_generated: true,
         source_material_id: q.sourceMaterialId,

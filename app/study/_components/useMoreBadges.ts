@@ -44,6 +44,7 @@ type State =
 
 let cache: CachedPayload | null = null;
 const TTL_MS = 60_000;
+const REQUEST_TIMEOUT_MS = 8_000;
 
 function getCached(userId: string | null) {
   if (!userId || !cache) return null;
@@ -99,9 +100,13 @@ export function useMoreBadges(enabled: boolean) {
       setState({ status: "loading", userId });
 
       try {
+        const controller = new AbortController();
+        const timeoutId = window.setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
         const response = await fetch("/api/study/more-badges", {
           credentials: "same-origin",
+          signal: controller.signal,
         });
+        window.clearTimeout(timeoutId);
         const payload = (await response.json().catch(() => null)) as
           | MoreBadgesPayload
           | { ok?: false }

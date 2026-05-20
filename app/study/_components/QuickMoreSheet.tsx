@@ -81,15 +81,6 @@ const ROW_DEFS: readonly RowDef[] = [
   },
 ] as const;
 
-const LOADING_BADGES: MoreBadgesPayload["badges"] = {
-  ai_plan: { subtitle: "Loading...", badge: null },
-  qa_forum: { subtitle: "Loading...", badge: null },
-  gpa: { subtitle: "Loading...", badge: null },
-  leaderboard: { subtitle: "Loading...", badge: null },
-  tutors: { subtitle: "Loading...", badge: null },
-  apply_rep: { subtitle: "Loading...", badge: null, hidden: false },
-};
-
 const FALLBACK_BADGES: MoreBadgesPayload["badges"] = {
   ai_plan: { subtitle: "Build a week-by-week schedule", badge: null },
   qa_forum: { subtitle: "Ask your coursemates", badge: null },
@@ -138,9 +129,7 @@ export default function QuickMoreSheet({ open, onClose }: QuickMoreSheetProps) {
   const badges =
     badgeState.status === "success"
       ? badgeState.data.badges
-      : badgeState.status === "error"
-      ? FALLBACK_BADGES
-      : LOADING_BADGES;
+      : FALLBACK_BADGES;
 
   useEffect(() => {
     if (!open) return;

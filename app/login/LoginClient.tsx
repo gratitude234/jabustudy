@@ -17,6 +17,7 @@ import {
 } from "lucide-react";
 
 type Banner = { type: "success" | "error" | "info"; text: string } | null;
+const DEFAULT_LOGIN_DESTINATION = "/study";
 
 function cx(...classes: Array<string | false | null | undefined>) {
   return classes.filter(Boolean).join(" ");
@@ -24,14 +25,14 @@ function cx(...classes: Array<string | false | null | undefined>) {
 
 function normalizeNext(next: string | null) {
   const n = (next ?? "").trim();
-  if (!n) return "/study/me";
+  if (!n) return DEFAULT_LOGIN_DESTINATION;
 
   // Only allow internal, absolute-path routes
-  if (!n.startsWith("/")) return "/study/me";
-  if (n.startsWith("//")) return "/study/me";
+  if (!n.startsWith("/")) return DEFAULT_LOGIN_DESTINATION;
+  if (n.startsWith("//")) return DEFAULT_LOGIN_DESTINATION;
   // Block attempts to smuggle protocol via encoding
   const lowered = decodeURIComponent(n).toLowerCase();
-  if (lowered.includes("http://") || lowered.includes("https://")) return "/study/me";
+  if (lowered.includes("http://") || lowered.includes("https://")) return DEFAULT_LOGIN_DESTINATION;
 
   return n;
 }
@@ -147,7 +148,7 @@ export default function LoginClient() {
       }
 
       setToast({ type: "success", text: "Welcome back ✅" });
-      router.replace(next || "/study/me");
+      router.replace(next || DEFAULT_LOGIN_DESTINATION);
       router.refresh();
     } finally {
       if (alive.current) setLoading(false);
@@ -167,7 +168,7 @@ export default function LoginClient() {
     try {
       const redirectTo =
         typeof window !== "undefined"
-          ? `${window.location.origin}/auth/callback?next=${encodeURIComponent("/study/me")}`
+          ? `${window.location.origin}/auth/callback?next=${encodeURIComponent(DEFAULT_LOGIN_DESTINATION)}`
           : undefined;
 
       const { error } = await supabase.auth.resetPasswordForEmail(em, { redirectTo });

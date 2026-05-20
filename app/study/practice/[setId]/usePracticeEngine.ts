@@ -6,8 +6,24 @@ import { supabase } from "@/lib/supabase";
 
 type LatestRestore = {
   answers?: Record<string, string>;
+  writtenAnswers?: Record<string, string>;
   flagged?: Record<string, boolean>;
 };
+
+type QuestionType = "mcq" | "short_answer" | "theory";
+
+function questionTypeOf(q: Pick<QuizQuestion, "question_type"> | null | undefined): QuestionType {
+  return q?.question_type === "short_answer" || q?.question_type === "theory" ? q.question_type : "mcq";
+}
+
+function isWrittenQuestion(q: Pick<QuizQuestion, "question_type"> | null | undefined) {
+  return questionTypeOf(q) !== "mcq";
+}
+
+function normalizeMarkingPoints(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  return value.map((item) => String(item ?? "").trim()).filter(Boolean);
+}
 
 function readLocalDraft(key: string): LatestRestore {
   if (typeof window === "undefined") return {};
@@ -17,6 +33,10 @@ function readLocalDraft(key: string): LatestRestore {
     const parsed = JSON.parse(raw) as any;
     return {
       answers: parsed?.answers && typeof parsed.answers === "object" ? parsed.answers : undefined,
+      writtenAnswers:
+        parsed?.writtenAnswers && typeof parsed.writtenAnswers === "object"
+          ? parsed.writtenAnswers
+          : undefined,
       flagged: parsed?.flagged && typeof parsed.flagged === "object" ? parsed.flagged : undefined,
     };
   } catch {
@@ -52,6 +72,8 @@ export function usePracticeEngine({
 
   const [idx, setIdx] = useState(0);
   const [answers, setAnswers] = useState<Record<string, string>>({});
+  const [writtenAnswers, setWrittenAnswers] = useState<Record<string, string>>({});
+  const [writtenSaving, setWrittenSaving] = useState(false);
   const [submitted, setSubmitted] = useState(false);
   const [flagged, setFlagged] = useState<Record<string, boolean>>({});
 
@@ -116,20 +138,26 @@ export function usePracticeEngine({
 
   const stats = useMemo(() => {
     const total = activeQuestions.length;
-    const answered = activeQuestions.filter((q) => answers[q.id]).length;
+    const answered = activeQuestions.filter((q) =>
+      isWrittenQuestion(q) ? Boolean(writtenAnswers[q.id]?.trim()) : Boolean(answers[q.id])
+    ).length;
     const flaggedCount = activeQuestions.filter((q) => flagged[q.id]).length;
+    const scoredTotal = activeQuestions.filter((q) => !isWrittenQuestion(q)).length;
+    const writtenTotal = total - scoredTotal;
+    const writtenAnswered = activeQuestions.filter((q) => isWrittenQuestion(q) && Boolean(writtenAnswers[q.id]?.trim())).length;
 
     let correct = 0;
     if (submitted) {
       for (const q of activeQuestions) {
+        if (isWrittenQuestion(q)) continue;
         const chosen = answers[q.id];
         if (!chosen) continue;
         const o = (optionsByQ[q.id] ?? []).find((x) => x.id === chosen);
         if (o?.is_correct) correct += 1;
       }
     }
-    return { total, answered, flaggedCount, correct };
-  }, [activeQuestions, answers, flagged, submitted, optionsByQ]);
+    return { total, answered, flaggedCount, correct, scoredTotal, writtenTotal, writtenAnswered };
+  }, [activeQuestions, answers, writtenAnswers, flagged, submitted, optionsByQ]);
 
   // Load + restore/create attempt + timer base
   useEffect(() => {
@@ -147,6 +175,8 @@ export function usePracticeEngine({
       setTimeLeftMs(null);
       deadlineRef.current = null;
       setReviewTab("all");
+      setWrittenAnswers({});
+      setWrittenSaving(false);
 
       try {
         if (!setId) throw new Error("Missing set id");
@@ -168,7 +198,7 @@ export function usePracticeEngine({
         const qReq = supabase
           .from("study_quiz_questions")
           .select(
-            "id,prompt,explanation,ai_explanation,study_ref,question_kind,difficulty_level,cognitive_level,source_topic,question_fingerprint,generation_meta,position," +
+            "id,prompt,explanation,question_type,model_answer,marking_points,ai_explanation,study_ref,question_kind,difficulty_level,cognitive_level,source_topic,question_fingerprint,generation_meta,position," +
             "study_quiz_options(id,question_id,text,is_correct,position)"
           )
           .eq("set_id", setId)
@@ -239,6 +269,9 @@ export function usePracticeEngine({
           id: String(rest.id),
           prompt: String(rest.prompt ?? ""),
           explanation: rest.explanation ?? null,
+          question_type: questionTypeOf(rest as any),
+          model_answer: (rest as any).model_answer ?? null,
+          marking_points: normalizeMarkingPoints((rest as any).marking_points),
           ai_explanation: (rest as any).ai_explanation ?? null,
           study_ref: (rest as any).study_ref ?? null,
           question_kind: (rest as any).question_kind ?? null,
@@ -272,21 +305,26 @@ export function usePracticeEngine({
             // the confirmed attemptId before we can request them.
             const ansRes = await supabase
               .from("study_attempt_answers")
-              .select("question_id,selected_option_id")
+              .select("question_id,selected_option_id,text_answer")
               .eq("attempt_id", effectiveAttemptId);
 
             const amap: Record<string, string> = {};
+            const wmap: Record<string, string> = {};
             (ansRes.data ?? []).forEach((r: any) => {
               if (r?.question_id && r?.selected_option_id)
                 amap[String(r.question_id)] = String(r.selected_option_id);
+              if (r?.question_id && typeof r?.text_answer === "string")
+                wmap[String(r.question_id)] = String(r.text_answer);
             });
 
             // Merge local draft (localStorage wins for latest unsaved answers)
             const local = readLocalDraft(`jabu:practiceDraft:${setId}:${effectiveAttemptId}`);
             if (local.answers) Object.assign(amap, local.answers);
+            if (local.writtenAnswers) Object.assign(wmap, local.writtenAnswers);
 
             if (!cancelled) {
               setAnswers(amap);
+              setWrittenAnswers(wmap);
               if (local.flagged) setFlagged(local.flagged);
             }
           }
@@ -313,14 +351,20 @@ export function usePracticeEngine({
             // Restore saved answers from the existing attempt
             const ansRes = await supabase
               .from("study_attempt_answers")
-              .select("question_id,selected_option_id")
+              .select("question_id,selected_option_id,text_answer")
               .eq("attempt_id", effectiveAttemptId);
             const amap: Record<string, string> = {};
+            const wmap: Record<string, string> = {};
             (ansRes.data ?? []).forEach((r: any) => {
               if (r?.question_id && r?.selected_option_id)
                 amap[String(r.question_id)] = String(r.selected_option_id);
+              if (r?.question_id && typeof r?.text_answer === "string")
+                wmap[String(r.question_id)] = String(r.text_answer);
             });
-            if (!cancelled) setAnswers(amap);
+            if (!cancelled) {
+              setAnswers(amap);
+              setWrittenAnswers(wmap);
+            }
           } else {
             // No existing attempt — create new one
             const startedIso = new Date().toISOString();
@@ -418,19 +462,49 @@ export function usePracticeEngine({
     return () => clearInterval(t);
   }, [submitted]);
 
-  // Autosave to localStorage (answers + flags)
+  // Autosave to localStorage (answers + written answers + flags)
   useEffect(() => {
     if (typeof window === "undefined") return;
     if (!setId || !attemptId) return;
     try {
       window.localStorage.setItem(
         draftKey,
-        JSON.stringify({ answers, flagged, updatedAt: Date.now() })
+        JSON.stringify({ answers, writtenAnswers, flagged, updatedAt: Date.now() })
       );
     } catch {
       // ignore
     }
-  }, [answers, flagged, draftKey, setId, attemptId]);
+  }, [answers, writtenAnswers, flagged, draftKey, setId, attemptId]);
+
+  // Debounced Supabase autosave for written answers. MCQs still persist immediately on tap.
+  useEffect(() => {
+    if (submitted) return;
+    const userId = userIdRef.current;
+    if (!userId || !attemptId) return;
+    const writtenQuestions = activeQuestions.filter((q) => isWrittenQuestion(q));
+    if (!writtenQuestions.length) return;
+
+    setWrittenSaving(true);
+    const timer = setTimeout(() => {
+      const now = new Date().toISOString();
+      const rows = writtenQuestions.map((q) => ({
+        attempt_id: attemptId,
+        user_id: userId,
+        question_id: q.id,
+        text_answer: writtenAnswers[q.id] ?? "",
+        updated_at: now,
+      }));
+
+      supabase
+        .from("study_attempt_answers")
+        .upsert(rows as any[], { onConflict: "attempt_id,question_id" })
+        .then(() => setWrittenSaving(false));
+    }, 650);
+
+    return () => {
+      clearTimeout(timer);
+    };
+  }, [activeQuestions, attemptId, submitted, writtenAnswers]);
 
   function choose(qid: string, oid: string) {
     if (submitted) return;
@@ -455,6 +529,11 @@ export function usePracticeEngine({
         // ignore
       }
     })();
+  }
+
+  function writeAnswer(qid: string, text: string) {
+    if (submitted) return;
+    setWrittenAnswers((prev) => ({ ...prev, [qid]: text }));
   }
 
   function toggleFlag(qid: string) {
@@ -489,6 +568,7 @@ export function usePracticeEngine({
     const weakIds = new Set<string>(
       questions
         .filter((q) => {
+          if (isWrittenQuestion(q)) return false;
           const chosen = answers[q.id];
           if (!chosen) return true; // unanswered
           const o = (optionsByQ[q.id] ?? []).find((x) => x.id === chosen);
@@ -517,6 +597,7 @@ export function usePracticeEngine({
 
     setRetryWeakIds(weakIds);
     setAnswers({});
+    setWrittenAnswers({});
     setFlagged({});
     setIdx(0);
     setSubmitted(false);
@@ -550,8 +631,11 @@ export function usePracticeEngine({
       }
 
       const total = activeQuestions.length;
+      const scoredQuestions = activeQuestions.filter((q) => !isWrittenQuestion(q));
+      const writtenQuestions = activeQuestions.filter((q) => isWrittenQuestion(q));
+      const writtenAnswered = writtenQuestions.filter((q) => Boolean(writtenAnswers[q.id]?.trim())).length;
       let correct = 0;
-      for (const q of activeQuestions) {
+      for (const q of scoredQuestions) {
         const chosen = answers[q.id];
         if (!chosen) continue;
         const o = (optionsByQ[q.id] ?? []).find((x) => x.id === chosen);
@@ -576,8 +660,24 @@ export function usePracticeEngine({
         submitted_at: submittedIso,
         score: correct,
         total_questions: total,
+        scored_questions_count: scoredQuestions.length,
+        written_questions_count: writtenQuestions.length,
+        written_answered_count: writtenAnswered,
         time_spent_seconds: timeSpent,
       };
+
+      if (writtenQuestions.length > 0) {
+        await supabase.from("study_attempt_answers").upsert(
+          writtenQuestions.map((q) => ({
+            attempt_id: attemptId,
+            user_id: userId,
+            question_id: q.id,
+            text_answer: writtenAnswers[q.id] ?? "",
+            updated_at: submittedIso,
+          })) as any[],
+          { onConflict: "attempt_id,question_id" }
+        );
+      }
 
       await supabase
         .from("study_practice_attempts")
@@ -586,7 +686,7 @@ export function usePracticeEngine({
         .eq("user_id", userId);
 
       // Update set-level due_at for spaced repetition
-      const pct = total > 0 ? (correct / total) * 100 : 0;
+      const pct = scoredQuestions.length > 0 ? (correct / scoredQuestions.length) * 100 : 0;
       const daysAhead = pct >= 80 ? 3 : pct >= 60 ? 2 : 1;
       const dueAt = new Date(Date.now() + daysAhead * 24 * 60 * 60 * 1000).toISOString();
       supabase
@@ -611,6 +711,7 @@ export function usePracticeEngine({
 
       const prevPoints = (existingActivity as any)?.points ?? 0;
       const prevAttempts = (existingActivity as any)?.attempts ?? 0;
+      const earnedPracticePoints = scoredQuestions.length > 0 ? Math.max(1, correct) : 0;
 
       await supabase
         .from("study_daily_activity")
@@ -619,7 +720,7 @@ export function usePracticeEngine({
             user_id: userId,
             activity_date: activityDate,
             did_practice: true,
-            points: prevPoints + Math.max(1, correct),
+            points: prevPoints + earnedPracticePoints,
             attempts: prevAttempts + 1,
             updated_at: submittedIso,
           } as any,
@@ -629,12 +730,14 @@ export function usePracticeEngine({
       // ── SRS: persist weak/correct signals ──────────────────────────────
       // Fetch existing rows for the questions in this attempt so we can
       // compute the new interval without a round-trip per question.
-      const questionIds = activeQuestions.map((q) => q.id);
-      const { data: existingRows } = await supabase
-        .from("study_weak_questions")
-        .select("question_id, miss_count, correct_streak, last_missed_at")
-        .eq("user_id", userId)
-        .in("question_id", questionIds);
+      const questionIds = scoredQuestions.map((q) => q.id);
+      const { data: existingRows } = questionIds.length
+        ? await supabase
+            .from("study_weak_questions")
+            .select("question_id, miss_count, correct_streak, last_missed_at")
+            .eq("user_id", userId)
+            .in("question_id", questionIds)
+        : { data: [] as any[] };
 
       const existingMap: Record<string, { miss_count: number; correct_streak: number; last_missed_at: string | null }> = {};
       for (const row of (existingRows ?? []) as any[]) {
@@ -657,7 +760,7 @@ export function usePracticeEngine({
       const srsUpserts: any[] = [];
       const summaryRows: typeof weakSummary = [];
 
-      for (const q of activeQuestions) {
+      for (const q of scoredQuestions) {
         const chosen = answers[q.id];
         const opts = optionsByQ[q.id] ?? [];
         const isCorrect = chosen ? (opts.find((o) => o.id === chosen)?.is_correct ?? false) : false;
@@ -740,18 +843,21 @@ export function usePracticeEngine({
 
     const list = activeQuestions.map((q, i) => {
       const chosen = answers[q.id] ?? null;
+      const writtenAnswer = writtenAnswers[q.id] ?? "";
+      const isWritten = isWrittenQuestion(q);
       const opts = optionsByQ[q.id] ?? [];
       const correctOpt = opts.find((o) => o.is_correct) ?? null;
       const chosenOpt = chosen ? opts.find((o) => o.id === chosen) ?? null : null;
 
-      const isWrong = !!chosen && !!chosenOpt && !chosenOpt.is_correct;
-      const isUnanswered = !chosen;
+      const isWrong = !isWritten && !!chosen && !!chosenOpt && !chosenOpt.is_correct;
+      const isUnanswered = isWritten ? !writtenAnswer.trim() : !chosen;
       const isFlagged = !!flagged[q.id];
 
       return {
         q,
         index: i,
         chosen,
+        writtenAnswer,
         chosenOpt,
         correctOpt,
         isWrong,
@@ -764,7 +870,7 @@ export function usePracticeEngine({
     if (reviewTab === "flagged") return list.filter((x) => x.isFlagged);
     if (reviewTab === "unanswered") return list.filter((x) => x.isUnanswered);
     return list;
-  }, [submitted, activeQuestions, answers, optionsByQ, flagged, reviewTab]);
+  }, [submitted, activeQuestions, answers, writtenAnswers, optionsByQ, flagged, reviewTab]);
 
   return {
     // data
@@ -780,6 +886,8 @@ export function usePracticeEngine({
     current,
     opts,
     answers,
+    writtenAnswers,
+    writtenSaving,
     flagged,
     submitted,
     setSubmitted,
@@ -799,6 +907,7 @@ export function usePracticeEngine({
 
     // actions
     choose,
+    writeAnswer,
     toggleFlag,
     goToQuestion,
     softReset,

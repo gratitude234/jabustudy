@@ -15,6 +15,7 @@ import {
 } from "lucide-react";
 
 type Phase = "loading" | "success" | "error";
+const DEFAULT_AUTH_DESTINATION = "/study";
 
 function cx(...classes: Array<string | false | null | undefined>) {
   return classes.filter(Boolean).join(" ");
@@ -22,10 +23,10 @@ function cx(...classes: Array<string | false | null | undefined>) {
 
 function normalizeNext(next: string | null) {
   const n = (next ?? "").trim();
-  if (!n) return "/study/me";
+  if (!n) return DEFAULT_AUTH_DESTINATION;
 
-  if (!n.startsWith("/")) return "/study/me";
-  if (n.startsWith("//")) return "/study/me";
+  if (!n.startsWith("/")) return DEFAULT_AUTH_DESTINATION;
+  if (n.startsWith("//")) return DEFAULT_AUTH_DESTINATION;
 
   let decoded = n;
   try {
@@ -35,7 +36,7 @@ function normalizeNext(next: string | null) {
   }
 
   const lowered = decoded.toLowerCase();
-  if (lowered.includes("http://") || lowered.includes("https://")) return "/study/me";
+  if (lowered.includes("http://") || lowered.includes("https://")) return DEFAULT_AUTH_DESTINATION;
 
   return n;
 }
@@ -99,7 +100,7 @@ export default function CallbackClient() {
       // Tiny delay for smoother UX
       await new Promise((r) => setTimeout(r, 200));
 
-      router.replace(next || "/study/me");
+      router.replace(next || DEFAULT_AUTH_DESTINATION);
       router.refresh();
     } catch (e: any) {
       console.error(e);
@@ -166,7 +167,7 @@ export default function CallbackClient() {
               </button>
 
               <Link
-                href={`/login?next=${encodeURIComponent(next || "/study/me")}`}
+                href={`/login?next=${encodeURIComponent(next || DEFAULT_AUTH_DESTINATION)}`}
                 className="inline-flex w-full items-center justify-center gap-2 rounded-2xl border bg-white px-4 py-2.5 text-sm font-medium text-zinc-900 hover:bg-zinc-50 no-underline"
               >
                 Go to login
@@ -200,7 +201,7 @@ export default function CallbackClient() {
           {phase === "success" ? (
             <div className="mt-5">
               <Link
-                href={next || "/study/me"}
+                href={next || DEFAULT_AUTH_DESTINATION}
                 className="inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-black px-4 py-2.5 text-sm font-medium text-white hover:opacity-90 no-underline"
               >
                 Continue

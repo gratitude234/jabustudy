@@ -15,6 +15,7 @@ const APP_CONTAINER =
 export default function AppChrome({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const [updateWorker, setUpdateWorker] = useState<ServiceWorker | null>(null);
+  const hasDesktopSidebar = pathname?.startsWith("/study") && !pathname.startsWith("/study-admin");
 
   useEffect(() => {
     const handleUpdate = (e: Event) => {
@@ -41,7 +42,7 @@ export default function AppChrome({ children }: { children: React.ReactNode }) {
       </Suspense>
 
       {/* Content — shifted right by sidebar width at md+ */}
-      <div className="md:ml-[220px]">
+      <div className={hasDesktopSidebar ? "md:ml-[220px]" : undefined}>
         <main className={[APP_CONTAINER, "py-6 md:py-8", "pb-20 md:pb-8"].join(" ")}>
           {children}
         </main>

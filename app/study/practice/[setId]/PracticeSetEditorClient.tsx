@@ -22,6 +22,18 @@ function normalize(v: string) {
   return v.trim().replace(/\s+/g, " ");
 }
 
+function questionTypeOf(q: Pick<QuizQuestion, "question_type">) {
+  return q.question_type === "short_answer" || q.question_type === "theory" ? q.question_type : "mcq";
+}
+
+function pointsText(points: unknown) {
+  return Array.isArray(points) ? points.map((p) => String(p ?? "").trim()).filter(Boolean).join("\n") : "";
+}
+
+function parsePoints(value: string) {
+  return value.split(/\r?\n/).map((p) => p.trim()).filter(Boolean);
+}
+
 type QuizSet = {
   id: string;
   title: string;
@@ -40,6 +52,9 @@ type QuizQuestion = {
   set_id: string;
   prompt: string;
   explanation: string | null;
+  question_type?: "mcq" | "short_answer" | "theory" | null;
+  model_answer?: string | null;
+  marking_points?: string[] | null;
   position: number | null;
   created_at: string;
 };
@@ -211,7 +226,7 @@ export default function PracticeSetEditorClient({ setId }: { setId: string }) {
       const nextPos = questions.length ? (questions[questions.length - 1].position ?? questions.length - 1) + 1 : 0;
       const { data, error } = await supabase
         .from("study_quiz_questions")
-        .insert({ set_id: setId, prompt: "New questionâ€¦", explanation: null, position: nextPos })
+        .insert({ set_id: setId, prompt: "New question...", explanation: null, question_type: "mcq", model_answer: null, marking_points: [], position: nextPos } as any)
         .select("*")
         .single();
       if (error) throw error;
@@ -235,8 +250,11 @@ export default function PracticeSetEditorClient({ setId }: { setId: string }) {
         .update({
           prompt: patch.prompt ?? q.prompt,
           explanation: patch.explanation ?? q.explanation,
+          question_type: patch.question_type ?? q.question_type ?? "mcq",
+          model_answer: patch.model_answer ?? q.model_answer ?? null,
+          marking_points: patch.marking_points ?? q.marking_points ?? [],
           position: patch.position ?? q.position,
-        })
+        } as any)
         .eq("id", q.id);
       if (error) throw error;
       setQuestions((arr) => arr.map((x) => (x.id === q.id ? { ...x, ...patch } : x)));
@@ -513,7 +531,7 @@ export default function PracticeSetEditorClient({ setId }: { setId: string }) {
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <p className="text-sm font-semibold text-zinc-900">Questions</p>
-            <p className="text-xs text-zinc-600">Each question should have at least 2 options and one correct answer.</p>
+            <p className="text-xs text-zinc-600">Build MCQs, short-answer prompts, and theory questions in one set.</p>
           </div>
           <button
             type="button"
@@ -539,6 +557,8 @@ export default function PracticeSetEditorClient({ setId }: { setId: string }) {
               .map((q, idx) => {
                 const open = expandedQ[q.id] ?? idx < 1;
                 const qBusy = !!mutating[q.id];
+                const qType = questionTypeOf(q);
+                const isWritten = qType !== "mcq";
                 const opts = optionsByQ[q.id] || [];
                 const hasCorrect = opts.some((o) => o.is_correct);
                 return (
@@ -595,6 +615,33 @@ export default function PracticeSetEditorClient({ setId }: { setId: string }) {
                     {open ? (
                       <div className="mt-4 grid gap-3">
                         <div>
+                          <label className="text-xs font-semibold text-zinc-700">Question type</label>
+                          <div className="mt-1.5 grid grid-cols-3 gap-1.5">
+                            {([
+                              ["mcq", "MCQ"],
+                              ["short_answer", "Short answer"],
+                              ["theory", "Theory"],
+                            ] as const).map(([value, label]) => (
+                              <button
+                                key={value}
+                                type="button"
+                                onClick={() =>
+                                  setQuestions((arr) => arr.map((x) => (x.id === q.id ? { ...x, question_type: value } : x)))
+                                }
+                                className={cn(
+                                  "rounded-xl border px-2 py-2 text-xs font-semibold transition",
+                                  qType === value
+                                    ? "border-zinc-900 bg-zinc-900 text-white"
+                                    : "border-zinc-200 bg-white text-zinc-600 hover:bg-zinc-50"
+                                )}
+                              >
+                                {label}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+
+                        <div>
                           <label className="text-xs font-semibold text-zinc-700">Prompt</label>
                           <textarea
                             value={q.prompt}
@@ -614,10 +661,41 @@ export default function PracticeSetEditorClient({ setId }: { setId: string }) {
                           />
                         </div>
 
+                        {isWritten ? (
+                          <>
+                            <div>
+                              <label className="text-xs font-semibold text-zinc-700">Model answer</label>
+                              <textarea
+                                value={q.model_answer ?? ""}
+                                onChange={(e) => setQuestions((arr) => arr.map((x) => (x.id === q.id ? { ...x, model_answer: e.target.value } : x)))}
+                                className="mt-1 w-full rounded-2xl border px-3 py-2 text-sm outline-none focus:ring-2"
+                                rows={4}
+                                placeholder="Reference answer students compare against after writing."
+                              />
+                            </div>
+                            <div>
+                              <label className="text-xs font-semibold text-zinc-700">Marking points</label>
+                              <textarea
+                                value={pointsText(q.marking_points)}
+                                onChange={(e) => setQuestions((arr) => arr.map((x) => (x.id === q.id ? { ...x, marking_points: parsePoints(e.target.value) } : x)))}
+                                className="mt-1 w-full rounded-2xl border px-3 py-2 text-sm outline-none focus:ring-2"
+                                rows={3}
+                                placeholder="One expected point per line."
+                              />
+                            </div>
+                          </>
+                        ) : null}
+
                         <div className="flex flex-wrap items-center gap-2">
                           <button
                             type="button"
-                            onClick={() => saveQuestion(q, { prompt: q.prompt, explanation: q.explanation ?? null })}
+                            onClick={() => saveQuestion(q, {
+                              prompt: q.prompt,
+                              explanation: q.explanation ?? null,
+                              question_type: qType,
+                              model_answer: isWritten ? q.model_answer ?? null : null,
+                              marking_points: isWritten ? q.marking_points ?? [] : [],
+                            })}
                             disabled={qBusy}
                             className={cn(
                               "inline-flex items-center gap-2 rounded-2xl border bg-white px-3 py-2 text-sm font-semibold hover:bg-zinc-50",
@@ -628,7 +706,11 @@ export default function PracticeSetEditorClient({ setId }: { setId: string }) {
                             Save question
                           </button>
 
-                          {hasCorrect ? (
+                          {isWritten ? (
+                            <span className="inline-flex items-center gap-2 rounded-full border border-blue-200 bg-blue-50 px-3 py-1 text-xs font-semibold text-blue-800">
+                              Written answer
+                            </span>
+                          ) : hasCorrect ? (
                             <span className="inline-flex items-center gap-2 rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-800">
                               <Check className="h-4 w-4" /> Correct answer set
                             </span>
@@ -639,6 +721,7 @@ export default function PracticeSetEditorClient({ setId }: { setId: string }) {
                           )}
                         </div>
 
+                        {!isWritten ? (
                         <div className="rounded-3xl border bg-zinc-50 p-3">
                           <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                             <p className="text-sm font-semibold text-zinc-900">Options</p>
@@ -726,6 +809,7 @@ export default function PracticeSetEditorClient({ setId }: { setId: string }) {
                             {opts.length === 0 ? <p className="text-sm text-zinc-600">No options yet. Add at least 2.</p> : null}
                           </div>
                         </div>
+                        ) : null}
                       </div>
                     ) : null}
                   </div>

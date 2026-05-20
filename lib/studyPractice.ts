@@ -18,6 +18,7 @@ export type PracticeAttemptRow = {
   submitted_at: string | null;
   score: number | null;
   total_questions: number | null;
+  scored_questions_count?: number | null;
   time_spent_seconds: number | null;
   study_quiz_sets: {
     title: string | null;
@@ -32,7 +33,7 @@ export async function getLatestAttempt(): Promise<PracticeAttemptRow | null> {
   // Prefer in-progress first, then most recent submitted.
   const { data, error } = await supabase
     .from("study_practice_attempts")
-    .select("id,user_id,set_id,status,started_at,submitted_at,score,total_questions,time_spent_seconds,study_quiz_sets(title,course_code)")
+    .select("id,user_id,set_id,status,started_at,submitted_at,score,total_questions,scored_questions_count,time_spent_seconds,study_quiz_sets(title,course_code)")
     .eq("user_id", userId)
     .order("status", { ascending: true })
     .order("started_at", { ascending: false })
@@ -50,7 +51,7 @@ export async function getInProgressAttempts(limit = 3): Promise<PracticeAttemptR
 
   const { data, error } = await supabase
     .from("study_practice_attempts")
-    .select("id,user_id,set_id,status,started_at,submitted_at,score,total_questions,time_spent_seconds,study_quiz_sets(title,course_code)")
+    .select("id,user_id,set_id,status,started_at,submitted_at,score,total_questions,scored_questions_count,time_spent_seconds,study_quiz_sets(title,course_code)")
     .eq("user_id", userId)
     .eq("status", "in_progress")
     .order("updated_at", { ascending: false })

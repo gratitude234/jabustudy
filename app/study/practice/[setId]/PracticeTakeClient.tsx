@@ -325,6 +325,8 @@ export default function PracticeTakeClient() {
     current,
     opts,
     answers,
+    writtenAnswers,
+    writtenSaving,
     submitted,
     setSubmitted,
     attemptId,
@@ -333,6 +335,7 @@ export default function PracticeTakeClient() {
     finalizing,
     weakSummary,
     choose,
+    writeAnswer,
     softReset,
     retryWeakQuestions,
     finalizeAttempt,
@@ -361,14 +364,14 @@ export default function PracticeTakeClient() {
   useEffect(() => {
     if (!submitted || finalizing || milestoneShownRef.current) return;
     milestoneShownRef.current = true;
-    const m = getMilestone(stats.correct, stats.total);
+    const m = getMilestone(stats.correct, stats.scoredTotal);
     setMilestone(m);
     if (dismissTimerRef.current) clearTimeout(dismissTimerRef.current);
     dismissTimerRef.current = setTimeout(() => setMilestone(null), 5000);
     return () => {
       if (dismissTimerRef.current) clearTimeout(dismissTimerRef.current);
     };
-  }, [submitted, finalizing, stats.correct, stats.total]);
+  }, [submitted, finalizing, stats.correct, stats.scoredTotal]);
 
   // Streak feedback — fetched once when results appear
   const [streakCount, setStreakCount] = useState<number | null>(null);
@@ -455,6 +458,13 @@ export default function PracticeTakeClient() {
   const isLast = questions.length > 0 && idx >= questions.length - 1;
 
   const chosenId = current ? answers[current.id] : null;
+  const currentQuestionType = current?.question_type === "short_answer" || current?.question_type === "theory"
+    ? current.question_type
+    : "mcq";
+  const isWrittenCurrent = currentQuestionType !== "mcq";
+  const currentWrittenAnswer = current ? writtenAnswers[current.id] ?? "" : "";
+  const currentMarkingPoints = Array.isArray(current?.marking_points) ? current.marking_points : [];
+  const writtenCompareOpen = current ? submitted || !!revealed[current.id] : false;
 
   const currentOptions = (opts as AnyOption[]) ?? [];
   const correctOptionId = useMemo(() => {
@@ -481,7 +491,7 @@ export default function PracticeTakeClient() {
     return index >= 0 ? optionKeyAt(index) : null;
   }, [currentOptions]);
 
-  const isRevealed = current ? !!revealed[current.id] : false;
+  const isRevealed = current ? !!revealed[current.id] && !isWrittenCurrent : false;
 
   const answeredPct = useMemo(() => {
     const t = Math.max(0, total || 0);
@@ -565,6 +575,7 @@ export default function PracticeTakeClient() {
   function onPick(optionId: string) {
     if (!current) return;
     if (submitted) return;
+    if (isWrittenCurrent) return;
 
     // lock a question after reveal (no changing answers)
     if (revealed[current.id]) return;
@@ -584,6 +595,7 @@ export default function PracticeTakeClient() {
       const optionIndex = keyMap[e.key.toLowerCase()];
 
       if (optionIndex !== undefined) {
+        if (current?.question_type === "short_answer" || current?.question_type === "theory") return;
         const option = opts[optionIndex] as AnyOption | undefined;
         if (!option) return;
         if (current && revealed[current.id]) return;
@@ -592,7 +604,7 @@ export default function PracticeTakeClient() {
         return;
       }
 
-      if (e.key === "ArrowRight" || (e.key === "Enter" && current && revealed[current.id])) {
+      if (e.key === "ArrowRight" || (e.key === "Enter" && current && revealed[current.id] && current.question_type !== "short_answer" && current.question_type !== "theory")) {
         if (!isLast) {
           setIdx((v) => Math.min(questions.length - 1, v + 1));
         } else {
@@ -612,7 +624,7 @@ export default function PracticeTakeClient() {
   }, [opts, current, revealed, submitted, navOpen, isLast, questions.length, choose, setIdx]);
 
   useEffect(() => {
-    if (!isRevealed || submitted || isLast) {
+    if (!isRevealed || submitted || isLast || isWrittenCurrent) {
       setDraining(false);
       return;
     }
@@ -624,7 +636,7 @@ export default function PracticeTakeClient() {
     };
   // idx in deps ensures the bar resets on every new question
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isRevealed, idx, submitted, isLast, questions.length]);
+  }, [isRevealed, idx, submitted, isLast, isWrittenCurrent, questions.length]);
 
   if (dueFetching || (isDueParam && !engineReady)) {
     return (
@@ -690,7 +702,7 @@ if (err || !meta) {
     );
   }
 
-  const resultPct = stats.total > 0 ? Math.round((stats.correct / stats.total) * 100) : 0;
+  const resultPct = stats.scoredTotal > 0 ? Math.round((stats.correct / stats.scoredTotal) * 100) : 0;
 
   return (
     <div className="pb-28 md:pb-6">
@@ -794,7 +806,7 @@ if (err || !meta) {
               <p className="mt-0.5 text-[12px] font-semibold text-muted-foreground">
                 Answered <span className="tabular-nums">{stats.answered}</span>{" "}
                 <span className="text-muted-foreground">•</span>{" "}
-                Correct <span className="tabular-nums">{stats.correct}</span>
+                MCQ correct <span className="tabular-nums">{stats.correct}</span>
               </p>
             </div>
 
@@ -853,7 +865,12 @@ if (err || !meta) {
               </div>
 
               <p className="text-sm font-semibold text-white/70">
-                {stats.correct} / {stats.total} correct
+                {stats.scoredTotal > 0
+                  ? `MCQ score ${stats.correct} / ${stats.scoredTotal}`
+                  : "Written practice complete"}
+                {stats.writtenTotal > 0
+                  ? ` · Written ${stats.writtenAnswered} / ${stats.writtenTotal}`
+                  : ""}
               </p>
               <p className="mt-1.5 truncate px-6 text-xs font-medium text-white/45">
                 {normalize(meta.title)}{meta.course_code ? ` · ${meta.course_code}` : ""}
@@ -891,14 +908,14 @@ if (err || !meta) {
             {/* Action buttons */}
             <div className="space-y-2 bg-[#3B1FA8] px-5 py-4">
               {/* Primary CTA */}
-              {stats.correct < stats.total ? (
+              {stats.scoredTotal > 0 && stats.correct < stats.scoredTotal ? (
                 <button
                   type="button"
                   onClick={() => { setRevealed({}); setStudyHintOpen({}); retryWeakQuestions(); }}
                   className="flex w-full items-center justify-center gap-2 rounded-2xl bg-white px-4 py-3 text-sm font-extrabold text-[#5B35D5] transition hover:bg-white/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white"
                 >
                   <RotateCcw className="h-4 w-4" />
-                  Retry weak ({stats.total - stats.correct})
+                  Retry weak ({stats.scoredTotal - stats.correct})
                 </button>
               ) : (
                 <button
@@ -963,12 +980,12 @@ if (err || !meta) {
               <span className="text-[11px] font-semibold text-emerald-600/70 dark:text-emerald-500">Correct</span>
             </div>
             <div className="flex flex-col items-center justify-center gap-0.5 rounded-2xl border border-rose-200/60 bg-rose-50 py-4 dark:border-rose-800/30 dark:bg-rose-950/20">
-              <span className="text-2xl font-extrabold text-rose-500 dark:text-rose-400">{stats.total - stats.correct}</span>
-              <span className="text-[11px] font-semibold text-rose-500/70 dark:text-rose-500">Missed</span>
+              <span className="text-2xl font-extrabold text-rose-500 dark:text-rose-400">{Math.max(0, stats.scoredTotal - stats.correct)}</span>
+              <span className="text-[11px] font-semibold text-rose-500/70 dark:text-rose-500">MCQ missed</span>
             </div>
             <div className="flex flex-col items-center justify-center gap-0.5 rounded-2xl border border-border bg-card py-4">
-              <span className="text-2xl font-extrabold text-foreground">{stats.total}</span>
-              <span className="text-[11px] font-semibold text-muted-foreground">Total</span>
+              <span className="text-2xl font-extrabold text-foreground">{stats.writtenAnswered}/{stats.writtenTotal}</span>
+              <span className="text-[11px] font-semibold text-muted-foreground">Written</span>
             </div>
           </div>
 
@@ -1112,7 +1129,7 @@ if (err || !meta) {
               Keep going
             </p>
             <div className="divide-y divide-border">
-              {stats.correct < stats.total && (
+              {stats.scoredTotal > 0 && stats.correct < stats.scoredTotal && (
                 <button
                   type="button"
                   onClick={() => { setRevealed({}); setStudyHintOpen({}); retryWeakQuestions(); }}
@@ -1122,7 +1139,7 @@ if (err || !meta) {
                     <RotateCcw className="h-4 w-4 text-rose-500" />
                   </div>
                   <div className="flex-1">
-                    <p className="text-sm font-semibold text-foreground">Retry weak ({stats.total - stats.correct})</p>
+                    <p className="text-sm font-semibold text-foreground">Retry weak ({stats.scoredTotal - stats.correct})</p>
                     <p className="text-xs text-muted-foreground">Focus on what you missed</p>
                   </div>
                   <ChevronRight className="h-4 w-4 text-muted-foreground/40" />
@@ -1246,12 +1263,16 @@ if (err || !meta) {
             {/* hint row */}
             <div className="mt-3 flex items-center justify-between gap-2">
               <p className="text-[12px] font-semibold text-muted-foreground">
-                {studyMode
+                {isWrittenCurrent
+                  ? currentQuestionType === "theory"
+                    ? "Write your answer, then compare it with the model answer."
+                    : "Type a concise answer, then compare it with the model answer."
+                  : studyMode
                   ? "Study mode — explanation shown after each answer."
                   : "Tap an option to see if it’s right."}
               </p>
 
-              {isRevealed ? (
+              {!isWrittenCurrent && isRevealed ? (
                 chosenId === correctOptionId ? (
                   <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2.5 py-1.5 text-[12px] font-extrabold text-foreground">
                     <CheckCircle2 className="h-4 w-4 text-emerald-600" /> Correct
@@ -1284,7 +1305,66 @@ if (err || !meta) {
               )
             ) : null}
 
+            {isWrittenCurrent && current ? (
+              <div className="mt-4 space-y-3">
+                <textarea
+                  value={currentWrittenAnswer}
+                  onChange={(e) => writeAnswer(current.id, e.target.value)}
+                  rows={currentQuestionType === "theory" ? 8 : 4}
+                  className="w-full resize-y rounded-2xl border border-border bg-background px-4 py-3 text-sm leading-relaxed text-foreground outline-none transition focus:border-[#5B35D5] focus:ring-2 focus:ring-[#5B35D5]/20"
+                  placeholder={currentQuestionType === "theory" ? "Write your theory answer here..." : "Type your answer here..."}
+                />
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <span className="text-[11px] font-semibold text-muted-foreground">
+                    {writtenSaving ? "Saving..." : "Saved as you type"}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setRevealed((m) => ({ ...m, [current.id]: true }))}
+                    disabled={!currentWrittenAnswer.trim()}
+                    className={cn(
+                      "inline-flex items-center gap-2 rounded-2xl border px-3 py-2 text-xs font-extrabold transition",
+                      currentWrittenAnswer.trim()
+                        ? "border-[#5B35D5]/30 bg-[#EEEDFE] text-[#3B24A8] hover:bg-[#E2DFFE]"
+                        : "border-border bg-background text-muted-foreground opacity-60"
+                    )}
+                  >
+                    <BookOpen className="h-3.5 w-3.5" />
+                    Compare answer
+                  </button>
+                </div>
+
+                {writtenCompareOpen ? (
+                  <div className="space-y-2">
+                    <div className="rounded-2xl border border-border bg-background p-3">
+                      <p className="text-xs font-extrabold text-muted-foreground">Your answer</p>
+                      <p className="mt-1 whitespace-pre-wrap text-sm leading-relaxed text-foreground">
+                        {currentWrittenAnswer.trim() || "No answer submitted."}
+                      </p>
+                    </div>
+                    <div className="rounded-2xl border border-[#5B35D5]/20 bg-[#EEEDFE] p-3 dark:border-[#5B35D5]/30 dark:bg-[#5B35D5]/10">
+                      <p className="text-xs font-extrabold text-[#3B24A8] dark:text-indigo-300">Model answer</p>
+                      <p className="mt-1 whitespace-pre-wrap text-sm leading-relaxed text-foreground">
+                        {current.model_answer?.trim() || current.explanation?.trim() || "No model answer provided yet."}
+                      </p>
+                      {currentMarkingPoints.length > 0 ? (
+                        <div className="mt-3">
+                          <p className="text-xs font-extrabold text-[#3B24A8] dark:text-indigo-300">Marking points</p>
+                          <ul className="mt-1 list-disc space-y-1 pl-5 text-sm leading-relaxed text-foreground">
+                            {currentMarkingPoints.map((point, pointIndex) => (
+                              <li key={`${point}-${pointIndex}`}>{point}</li>
+                            ))}
+                          </ul>
+                        </div>
+                      ) : null}
+                    </div>
+                  </div>
+                ) : null}
+              </div>
+            ) : null}
+
             {/* Options */}
+            {!isWrittenCurrent ? (
             <div className="mt-4 grid gap-2">
               {currentOptions.map((o, i) => {
                 const checked = chosenId === o.id;
@@ -1355,9 +1435,10 @@ if (err || !meta) {
                 );
               })}
             </div>
+            ) : null}
 
             {/* Auto-advance bar — drains over 1.5s then moves to next question */}
-            {isRevealed && !submitted && !isLast && (
+            {isRevealed && !submitted && !isLast && !isWrittenCurrent && (
               <div className="mt-3 h-0.5 w-full overflow-hidden rounded-full bg-primary-light">
                 <div
                   className="h-full bg-primary transition-[width] duration-[1500ms] ease-linear"
@@ -1516,7 +1597,8 @@ if (err || !meta) {
             </div>
             <div className="grid grid-cols-8 gap-2 max-h-48 overflow-y-auto">
               {questions.map((q, i) => {
-                const isAnswered = !!answers[q.id];
+                const isWritten = q.question_type === "short_answer" || q.question_type === "theory";
+                const isAnswered = isWritten ? Boolean(writtenAnswers[q.id]?.trim()) : !!answers[q.id];
                 const isCurrent = i === idx;
                 return (
                   <button

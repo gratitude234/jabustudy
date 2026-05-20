@@ -242,9 +242,14 @@ export async function POST(req: NextRequest) {
   if (questionId) {
     const { data: row } = await admin
       .from("study_quiz_questions")
-      .select("ai_explanation,explanation,study_ref,source_topic")
+      .select("ai_explanation,explanation,study_ref,source_topic,question_type")
       .eq("id", questionId)
       .maybeSingle();
+
+    const questionType = row?.question_type === "short_answer" || row?.question_type === "theory" ? row.question_type : "mcq";
+    if (questionType !== "mcq") {
+      return NextResponse.json({ error: "AI option explanations are only available for MCQs." }, { status: 400 });
+    }
 
     cache = parseCache(typeof row?.ai_explanation === "string" ? row.ai_explanation : null);
     dbBasicExplanation = cleanString(row?.explanation, 1600);

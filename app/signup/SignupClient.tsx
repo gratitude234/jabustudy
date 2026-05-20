@@ -12,6 +12,8 @@ import {
 } from "lucide-react";
 
 type Banner = { type: "success" | "error" | "info"; text: string } | null;
+const DEFAULT_SIGNUP_DESTINATION = "/study/onboarding?next=/study";
+const DEFAULT_LOGIN_DESTINATION = "/study";
 
 function cx(...classes: Array<string | false | null | undefined>) {
   return classes.filter(Boolean).join(" ");
@@ -19,11 +21,11 @@ function cx(...classes: Array<string | false | null | undefined>) {
 
 function normalizeNext(next: string | null) {
   const n = (next ?? "").trim();
-  if (!n) return "/study/me";
-  if (!n.startsWith("/")) return "/study/me";
-  if (n.startsWith("//")) return "/study/me";
+  if (!n) return DEFAULT_SIGNUP_DESTINATION;
+  if (!n.startsWith("/")) return DEFAULT_SIGNUP_DESTINATION;
+  if (n.startsWith("//")) return DEFAULT_SIGNUP_DESTINATION;
   const lowered = decodeURIComponent(n).toLowerCase();
-  if (lowered.includes("http://") || lowered.includes("https://")) return "/study/me";
+  if (lowered.includes("http://") || lowered.includes("https://")) return DEFAULT_SIGNUP_DESTINATION;
   return n;
 }
 
@@ -95,6 +97,7 @@ export default function SignupClient() {
 
   const nameValid     = fullName.trim().length >= 2;
   const emailValid    = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim());
+  const jabuEmail     = /@(?:[a-z0-9-]+\.)*jabu\.edu\.ng$/i.test(email.trim());
   const passwordValid = password.trim().length >= 6;
   const confirmOk     = !confirm.trim() || confirm === password;
 
@@ -146,7 +149,7 @@ export default function SignupClient() {
       if (data.session && data.user) {
         await upsertProfile(data.user.id, nm, em);
         toast({ type: "success", text: "Account created ✅ Redirecting…" });
-        router.replace(next || "/study/me");
+        router.replace(next || DEFAULT_SIGNUP_DESTINATION);
         router.refresh();
         return;
       }
@@ -218,7 +221,7 @@ export default function SignupClient() {
               Wrong email?
             </button>
           </div>
-          <Link href={`/login?next=${encodeURIComponent(next || "/study/me")}`}
+          <Link href={`/login?next=${encodeURIComponent(DEFAULT_LOGIN_DESTINATION)}`}
             className="inline-flex w-full items-center justify-center gap-2 rounded-[14px] bg-primary px-4 py-3 text-sm font-bold text-white shadow-[0_4px_16px_rgba(91,53,213,0.3)] hover:opacity-90 no-underline transition">
             Go to login <ArrowRight className="h-4 w-4" />
           </Link>
@@ -238,7 +241,7 @@ export default function SignupClient() {
           Create account
         </h1>
         <p className="mt-1.5 text-sm text-muted-brand">
-          Join thousands of JABU students.
+          Join with your JABU student email for the best experience.
         </p>
       </div>
 
@@ -273,7 +276,11 @@ export default function SignupClient() {
             </div>
             {!emailValid && email.trim().length > 0
               ? <p className="text-[11px] text-rose-600">Enter a valid email address.</p>
-              : <p className="text-[11px] text-muted-brand/70">We don't share your email.</p>}
+              : email.trim().length > 0 && !jabuEmail
+                ? <p className="text-[11px] text-amber-700">A JABU email is recommended so your account feels more trusted on campus.</p>
+                : jabuEmail
+                  ? <p className="text-[11px] text-emerald-700">Great - your JABU email helps classmates recognize you.</p>
+                  : <p className="text-[11px] text-muted-brand/70">Use your JABU student email if you have one. We don't share it.</p>}
           </div>
 
           {/* Password */}
@@ -326,7 +333,7 @@ export default function SignupClient() {
 
           <p className="pt-1 text-center text-xs text-muted-brand">
             Already have an account?{" "}
-            <Link href={`/login?next=${encodeURIComponent(next || "/study/me")}`}
+            <Link href={`/login?next=${encodeURIComponent(DEFAULT_LOGIN_DESTINATION)}`}
               className="font-bold text-foreground underline underline-offset-4">
               Sign in
             </Link>

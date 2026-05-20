@@ -195,6 +195,7 @@ export async function POST(
           set_id: bankRun.quiz_set_id,
           prompt: q.question,
           explanation: q.explanation,
+          question_type: "mcq",
           position: (existingCount ?? 0) + index,
           source_material_id: materialId,
           source_chunk_id: q.sourceChunkId,

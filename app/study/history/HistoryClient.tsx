@@ -63,6 +63,7 @@ type AttemptRow = {
   status?: string | null;
   score?: number | null;
   total_questions?: number | null;
+  scored_questions_count?: number | null;
   time_spent_seconds?: number | null;
   study_quiz_sets?: {
     id: string;
@@ -70,6 +71,10 @@ type AttemptRow = {
     course_code?: string | null;
   } | null;
 };
+
+function scoreDenominator(row: { scored_questions_count?: number | null; total_questions?: number | null }) {
+  return typeof row.scored_questions_count === "number" ? row.scored_questions_count : row.total_questions ?? 0;
+}
 
 // A set group: all attempts for the same quiz set
 type SetGroup = {
@@ -508,9 +513,8 @@ function SetGroupCard({ group }: { group: SetGroup }) {
   const pilotScore =
     latestSubmitted &&
     typeof latestSubmitted.score === "number" &&
-    typeof latestSubmitted.total_questions === "number" &&
-    latestSubmitted.total_questions > 0
-      ? Math.round((latestSubmitted.score / latestSubmitted.total_questions) * 100)
+    scoreDenominator(latestSubmitted) > 0
+      ? Math.round((latestSubmitted.score / scoreDenominator(latestSubmitted)) * 100)
       : null;
 
   const hasAnyInProgress = Boolean(inProgressAttempt);
@@ -570,9 +574,8 @@ function SetGroupCard({ group }: { group: SetGroup }) {
             const pct =
               !isIP &&
               typeof a.score === "number" &&
-              typeof a.total_questions === "number" &&
-              a.total_questions > 0
-                ? Math.round((a.score / a.total_questions) * 100)
+              scoreDenominator(a) > 0
+                ? Math.round((a.score / scoreDenominator(a)) * 100)
                 : null;
             return <ScoreDot key={a.id} pct={pct} inProgress={isIP} />;
           })}
@@ -720,7 +723,7 @@ export default function HistoryClient() {
           // All submitted attempts for stats
           supabase
             .from(TABLE_ATTEMPTS)
-            .select(`score,total_questions,time_spent_seconds,${TABLE_SETS}(course_code)`)
+            .select(`score,total_questions,scored_questions_count,time_spent_seconds,${TABLE_SETS}(course_code)`)
             .eq("user_id", uid)
             .eq("status", "submitted")
             .order("submitted_at", { ascending: true })
@@ -729,7 +732,7 @@ export default function HistoryClient() {
           // Trend points (chronological, graded)
           supabase
             .from(TABLE_ATTEMPTS)
-            .select(`submitted_at,score,total_questions,${TABLE_SETS}(course_code)`)
+            .select(`submitted_at,score,total_questions,scored_questions_count,${TABLE_SETS}(course_code)`)
             .eq("user_id", uid)
             .eq("status", "submitted")
             .not("score", "is", null)
@@ -750,26 +753,26 @@ export default function HistoryClient() {
         if (cancelled) return;
 
         // ── Stats ──
-        type SubmittedRow = { score: number | null; total_questions: number | null; time_spent_seconds: number | null; study_quiz_sets?: { course_code?: string | null } | null };
+        type SubmittedRow = { score: number | null; total_questions: number | null; scored_questions_count?: number | null; time_spent_seconds: number | null; study_quiz_sets?: { course_code?: string | null } | null };
         const submittedRows = ((submittedRes.data ?? []) as SubmittedRow[]).filter(Boolean);
         const graded = submittedRows.filter(
-          (r) => typeof r.score === "number" && typeof r.total_questions === "number" && r.total_questions! > 0
+          (r) => typeof r.score === "number" && scoreDenominator(r) > 0
         );
 
         const avgScore =
           graded.length > 0
-            ? Math.round(graded.reduce((s, r) => s + (r.score! / r.total_questions!) * 100, 0) / graded.length)
+            ? Math.round(graded.reduce((s, r) => s + (r.score! / scoreDenominator(r)) * 100, 0) / graded.length)
             : null;
 
         const firstScore =
           graded.length > 0
-            ? Math.round((graded[0].score! / graded[0].total_questions!) * 100)
+            ? Math.round((graded[0].score! / scoreDenominator(graded[0])) * 100)
             : null;
 
         let bestScore: number | null = null;
         let bestCourseCode = "";
         for (const r of graded) {
-          const pct = Math.round((r.score! / r.total_questions!) * 100);
+          const pct = Math.round((r.score! / scoreDenominator(r)) * 100);
           if (bestScore == null || pct > bestScore) {
             bestScore = pct;
             bestCourseCode = (r.study_quiz_sets as any)?.course_code?.trim().toUpperCase() ?? "";
@@ -780,7 +783,7 @@ export default function HistoryClient() {
         for (const attempt of graded) {
           const code = attempt.study_quiz_sets?.course_code?.trim().toUpperCase();
           if (!code) continue;
-          const pct = Math.round((attempt.score! / attempt.total_questions!) * 100);
+          const pct = Math.round((attempt.score! / scoreDenominator(attempt)) * 100);
           if (!courseAvgs.has(code)) courseAvgs.set(code, []);
           courseAvgs.get(code)!.push(pct);
         }
@@ -819,10 +822,10 @@ export default function HistoryClient() {
         // ── Trend points ──
         const rawTrend = (trendRes.data ?? []) as any[];
         const parsedTrend: TrendPoint[] = rawTrend
-          .filter((r) => r.submitted_at && typeof r.score === "number" && r.total_questions > 0)
+          .filter((r) => r.submitted_at && typeof r.score === "number" && scoreDenominator(r) > 0)
           .map((r) => ({
             submittedAt: r.submitted_at as string,
-            pct: Math.round((r.score / r.total_questions) * 100),
+            pct: Math.round((r.score / scoreDenominator(r)) * 100),
             courseCode: (r[TABLE_SETS]?.course_code ?? "").toString().trim().toUpperCase(),
           }));
         if (!cancelled) setTrendPoints(parsedTrend);
@@ -907,7 +910,7 @@ export default function HistoryClient() {
       let query = supabase
         .from(TABLE_ATTEMPTS)
         .select(
-          `id,set_id,created_at,updated_at,submitted_at,status,score,total_questions,time_spent_seconds,${TABLE_SETS}(id,title,course_code)`,
+          `id,set_id,created_at,updated_at,submitted_at,status,score,total_questions,scored_questions_count,time_spent_seconds,${TABLE_SETS}(id,title,course_code)`,
           { count: "exact" }
         )
         .eq("user_id", uid);

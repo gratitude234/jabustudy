@@ -12,6 +12,9 @@ export type QuizQuestion = {
   id: string;
   prompt: string;
   explanation: string | null;
+  question_type?: "mcq" | "short_answer" | "theory" | null;
+  model_answer?: string | null;
+  marking_points?: string[] | null;
   ai_explanation?: string | null;
   question_kind?: string | null;
   difficulty_level?: string | null;

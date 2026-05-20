@@ -195,6 +195,7 @@ export async function POST(req: NextRequest) {
     prompt: question.question,
     position: index,
     explanation: question.explanation,
+    question_type: "mcq",
     ai_generated: true,
     source_material_id: materialId,
     study_ref: question.studyRef,

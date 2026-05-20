@@ -181,9 +181,32 @@ function StepMeta({ meta, setMeta, onNext, onBack }: { meta: MetaState; setMeta:
 // ─── Step 3: Preview ───────────────────────────────────────────────────────────
 
 type QuestionOption = { text: string; is_correct: boolean };
-type Question = { prompt: string; options: QuestionOption[]; explanation?: string };
+type QuestionType = "mcq" | "short_answer" | "theory";
+type Question = {
+  prompt: string;
+  options: QuestionOption[];
+  explanation?: string;
+  question_type?: QuestionType;
+  model_answer?: string;
+  marking_points?: string[];
+};
+
+function questionTypeOf(q: Question): QuestionType {
+  return q.question_type === "short_answer" || q.question_type === "theory" ? q.question_type : "mcq";
+}
+
+function parsePoints(value: string) {
+  return value.split(/\r?\n/).map((p) => p.trim()).filter(Boolean);
+}
+
+function pointsText(points: string[] | undefined) {
+  return (points ?? []).join("\n");
+}
+
 function QuestionCard({ q, idx, onChange, onDelete }: { q: Question; idx: number; onChange: (q: Question) => void; onDelete: () => void }) {
   const setField = (k: keyof Question, v: string) => onChange({ ...q, [k]: v });
+  const qType = questionTypeOf(q);
+  const isWritten = qType !== "mcq";
   const setOption = (oi: number, k: keyof QuestionOption, v: string | boolean) => {
     const opts = q.options.map((o, i) => i === oi ? { ...o, [k]: v } : o);
     onChange({ ...q, options: opts });
@@ -211,6 +234,26 @@ function QuestionCard({ q, idx, onChange, onDelete }: { q: Question; idx: number
         onChange={e => setField("prompt", e.target.value)}
         className="w-full rounded-2xl border bg-white px-4 py-3 text-sm text-zinc-800 resize-y outline-none leading-relaxed focus:border-zinc-400"
       />
+      <div className="mt-2.5 grid grid-cols-3 gap-1.5">
+        {([
+          ["mcq", "MCQ"],
+          ["short_answer", "Short"],
+          ["theory", "Theory"],
+        ] as const).map(([value, label]) => (
+          <button
+            key={value}
+            type="button"
+            onClick={() => onChange({ ...q, question_type: value })}
+            className={[
+              "rounded-xl border px-2 py-1.5 text-xs font-semibold transition-colors",
+              qType === value ? "border-zinc-900 bg-zinc-900 text-white" : "border-zinc-200 bg-white text-zinc-600 hover:bg-zinc-50",
+            ].join(" ")}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+      {!isWritten ? (
       <div className="mt-2.5 flex flex-col gap-1.5">
         {q.options.map((opt, oi) => (
           <div key={oi} className="flex gap-2 items-center">
@@ -236,6 +279,24 @@ function QuestionCard({ q, idx, onChange, onDelete }: { q: Question; idx: number
           </div>
         ))}
       </div>
+      ) : (
+        <div className="mt-2.5 grid gap-2">
+          <textarea
+            value={q.model_answer || ""}
+            onChange={e => onChange({ ...q, model_answer: e.target.value })}
+            placeholder="Model answer"
+            className="w-full rounded-2xl border bg-white px-4 py-2.5 text-sm text-zinc-700 outline-none focus:border-zinc-400"
+            rows={3}
+          />
+          <textarea
+            value={pointsText(q.marking_points)}
+            onChange={e => onChange({ ...q, marking_points: parsePoints(e.target.value) })}
+            placeholder="Marking points, one per line"
+            className="w-full rounded-2xl border bg-white px-4 py-2.5 text-sm text-zinc-700 outline-none focus:border-zinc-400"
+            rows={3}
+          />
+        </div>
+      )}
       {q.explanation && (
         <div className="mt-2.5">
           <Label>Explanation</Label>
@@ -256,7 +317,7 @@ function StepPreview({ questions, setQuestions, onNext, onBack, parsing }: { que
   }, [setQuestions]);
   const del = (i: number) => setQuestions(qs => qs.filter((_, j) => j !== i));
 
-  const issues = questions.filter(q => !q.options.some(o => o.is_correct)).length;
+  const issues = questions.filter(q => questionTypeOf(q) === "mcq" && !q.options.some(o => o.is_correct)).length;
 
   return (
     <div>
@@ -341,6 +402,7 @@ function buildSQL(meta: MetaState, questions: Question[]) {
   const setId = genUUID();
   const now = new Date().toISOString();
   const esc = (s: string) => (s || "").replace(/'/g, "''");
+  const escJson = (value: unknown) => JSON.stringify(value).replace(/'/g, "''");
 
   const lines: string[] = [];
   lines.push(`-- ============================================================`);
@@ -374,11 +436,14 @@ function buildSQL(meta: MetaState, questions: Question[]) {
 
   questions.forEach((q, qi) => {
     const qId = genUUID();
+    const qType = questionTypeOf(q);
+    const isWritten = qType !== "mcq";
     lines.push(``);
     lines.push(`-- Q${qi + 1}: ${q.prompt.substring(0, 50)}...`);
-    lines.push(`INSERT INTO public.study_quiz_questions (id, set_id, prompt, explanation, position, created_at)`);
-    lines.push(`VALUES ('${qId}', '${setId}', '${esc(q.prompt)}', ${q.explanation ? `'${esc(q.explanation)}'` : "NULL"}, ${qi}, now());`);
+    lines.push(`INSERT INTO public.study_quiz_questions (id, set_id, prompt, explanation, question_type, model_answer, marking_points, position, created_at)`);
+    lines.push(`VALUES ('${qId}', '${setId}', '${esc(q.prompt)}', ${q.explanation ? `'${esc(q.explanation)}'` : "NULL"}, '${qType}', ${isWritten && q.model_answer ? `'${esc(q.model_answer)}'` : "NULL"}, '${escJson(isWritten ? q.marking_points ?? [] : [])}'::jsonb, ${qi}, now());`);
 
+    if (isWritten) return;
     q.options.forEach((opt, oi) => {
       const oId = genUUID();
       lines.push(`INSERT INTO public.study_quiz_options (id, question_id, text, is_correct, position)`);

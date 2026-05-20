@@ -61,6 +61,9 @@ type AttemptRow = {
   submitted_at: string | null;
   score: number | null;
   total_questions: number | null;
+  scored_questions_count?: number | null;
+  written_questions_count?: number | null;
+  written_answered_count?: number | null;
   time_spent_seconds: number | null;
 };
 
@@ -77,6 +80,9 @@ type QuestionRow = {
   id: string;
   prompt: string;
   explanation: string | null;
+  question_type?: "mcq" | "short_answer" | "theory" | null;
+  model_answer?: string | null;
+  marking_points?: string[] | null;
   source_topic?: string | null;
   study_ref?: {
     chunkId?: string;
@@ -97,6 +103,25 @@ type OptionRow = {
 };
 
 type ReviewTab = "wrong" | "flagged" | "unanswered" | "all";
+
+function questionTypeOf(q: Pick<QuestionRow, "question_type"> | null | undefined) {
+  return q?.question_type === "short_answer" || q?.question_type === "theory" ? q.question_type : "mcq";
+}
+
+function isWrittenQuestion(q: Pick<QuestionRow, "question_type"> | null | undefined) {
+  return questionTypeOf(q) !== "mcq";
+}
+
+function normalizeMarkingPoints(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  return value.map((item) => String(item ?? "").trim()).filter(Boolean);
+}
+
+function scoreDenominator(attempt: Pick<AttemptRow, "scored_questions_count" | "total_questions"> | null) {
+  return typeof attempt?.scored_questions_count === "number"
+    ? attempt.scored_questions_count
+    : attempt?.total_questions ?? 0;
+}
 
 /*
 type AiExplainState =
@@ -263,12 +288,13 @@ function optionKeyAt(index: number): BetterExplanationOptionKey | null {
 }
 
 function QuestionPalette({
-  open, questions, answers, optionsByQ, flagged,
+  open, questions, answers, writtenAnswers, optionsByQ, flagged,
   selectedQ, tab, onSelectQ, onSetTab, onClose,
 }: {
   open: boolean;
   questions: QuestionRow[];
   answers: Record<string, string>;
+  writtenAnswers: Record<string, string>;
   optionsByQ: Record<string, OptionRow[]>;
   flagged: Record<string, boolean>;
   selectedQ: string | null;
@@ -301,12 +327,18 @@ function QuestionPalette({
           <div className="mt-4 grid grid-cols-6 gap-2 sm:grid-cols-10">
             {questions.map((q, i) => {
               const chosenId = answers[q.id];
+              const isWritten = isWrittenQuestion(q);
+              const hasWrittenAnswer = Boolean(writtenAnswers[q.id]?.trim());
               const opts = optionsByQ[q.id] ?? [];
               const chosen = chosenId ? opts.find((o) => o.id === chosenId) ?? null : null;
               const ok = Boolean(chosen && chosen.is_correct);
               const isActive = selectedQ === q.id;
               const isFlagged = !!flagged[q.id];
-              const tone = !chosenId
+              const tone = isWritten
+                ? hasWrittenAnswer
+                  ? "border-[#5B35D5]/30 bg-[#EEEDFE] text-foreground dark:bg-[#5B35D5]/10"
+                  : "border-border bg-background text-foreground hover:bg-secondary/50"
+                : !chosenId
                 ? "border-border bg-background text-foreground hover:bg-secondary/50"
                 : ok
                 ? "border-emerald-300/40 bg-emerald-100/30 text-foreground dark:bg-emerald-950/20"
@@ -371,6 +403,7 @@ export default function AttemptReviewClient() {
   const [questions, setQuestions] = useState<QuestionRow[]>([]);
   const [optionsByQ, setOptionsByQ] = useState<Record<string, OptionRow[]>>({});
   const [answers, setAnswers] = useState<Record<string, string>>({});
+  const [writtenAnswers, setWrittenAnswers] = useState<Record<string, string>>({});
   const [prevPct, setPrevPct] = useState<number | null>(null);
 
   const [tab, setTab] = useState<ReviewTab>("all");
@@ -408,7 +441,7 @@ export default function AttemptReviewClient() {
 
         const { data: att, error: attErr } = await supabase
           .from("study_practice_attempts")
-          .select("id,user_id,set_id,status,started_at,submitted_at,score,total_questions,time_spent_seconds")
+          .select("id,user_id,set_id,status,started_at,submitted_at,score,total_questions,scored_questions_count,written_questions_count,written_answered_count,time_spent_seconds")
           .eq("id", attemptId)
           .eq("user_id", user.id)
           .maybeSingle();
@@ -426,12 +459,12 @@ export default function AttemptReviewClient() {
             .maybeSingle(),
           supabase
             .from("study_quiz_questions")
-            .select("id,prompt,explanation,source_topic,study_ref,position")
+            .select("id,prompt,explanation,question_type,model_answer,marking_points,source_topic,study_ref,position")
             .eq("set_id", setId)
             .order("position", { ascending: true }),
           supabase
             .from("study_practice_attempts")
-            .select("score,total_questions")
+            .select("score,total_questions,scored_questions_count")
             .eq("user_id", user.id)
             .eq("set_id", setId)
             .eq("status", "submitted")
@@ -457,7 +490,7 @@ export default function AttemptReviewClient() {
             : Promise.resolve({ data: [], error: null }),
           supabase
             .from("study_attempt_answers")
-            .select("question_id,selected_option_id")
+            .select("question_id,selected_option_id,text_answer")
             .eq("attempt_id", attemptId),
         ]);
 
@@ -476,9 +509,13 @@ export default function AttemptReviewClient() {
         }
 
         const aMap: Record<string, string> = {};
+        const wMap: Record<string, string> = {};
         for (const r of (aRes.data ?? []) as any[]) {
           if (r?.question_id && r?.selected_option_id) {
             aMap[String(r.question_id)] = String(r.selected_option_id);
+          }
+          if (r?.question_id && typeof r?.text_answer === "string") {
+            wMap[String(r.question_id)] = String(r.text_answer);
           }
         }
 
@@ -503,6 +540,7 @@ export default function AttemptReviewClient() {
         // Pre-open explanations for wrong answers
         const expSeed: Record<string, boolean> = {};
         for (const q of qs) {
+          if (questionTypeOf(q) !== "mcq") continue;
           const qid = String(q.id);
           const chosenId = aMap[qid];
           if (!chosenId) continue;
@@ -511,8 +549,9 @@ export default function AttemptReviewClient() {
         }
 
         let prevPctValue: number | null = null;
-        if (prevRes.data?.score != null && prevRes.data?.total_questions && prevRes.data.total_questions > 0) {
-          prevPctValue = Math.round((prevRes.data.score / prevRes.data.total_questions) * 100);
+        const prevDenominator = scoreDenominator(prevRes.data as any);
+        if (prevRes.data?.score != null && prevDenominator > 0) {
+          prevPctValue = Math.round((prevRes.data.score / prevDenominator) * 100);
         }
 
         if (!cancelled) {
@@ -523,6 +562,9 @@ export default function AttemptReviewClient() {
             id: String(q.id),
             prompt: String(q.prompt ?? ""),
             explanation: q.explanation ? String(q.explanation) : null,
+            question_type: questionTypeOf(q),
+            model_answer: q.model_answer ? String(q.model_answer) : null,
+            marking_points: normalizeMarkingPoints(q.marking_points),
             source_topic: q.source_topic ? String(q.source_topic) : null,
             study_ref: q.study_ref && typeof q.study_ref === "object" ? q.study_ref : null,
             position: typeof q.position === "number" ? q.position : null,
@@ -531,6 +573,7 @@ export default function AttemptReviewClient() {
           setQuestions(normalizedQs);
           setOptionsByQ(grouped);
           setAnswers(aMap);
+          setWrittenAnswers(wMap);
           setFlagged(localFlags);
           setExpOpen(expSeed);
           setUnderstood(understoodMap);
@@ -538,10 +581,13 @@ export default function AttemptReviewClient() {
 
           // Default: first wrong → first unanswered → first
           const firstWrong = normalizedQs.find((qq) => {
+            if (isWrittenQuestion(qq)) return false;
             const chosen = (grouped[qq.id] ?? []).find((x) => x.id === aMap[qq.id]);
             return !!chosen && !chosen.is_correct;
           })?.id ?? null;
-          const firstUnanswered = normalizedQs.find((qq) => !aMap[qq.id])?.id ?? null;
+          const firstUnanswered = normalizedQs.find((qq) =>
+            isWrittenQuestion(qq) ? !wMap[qq.id]?.trim() : !aMap[qq.id]
+          )?.id ?? null;
 
           // Default tab to "wrong" if any wrong answers exist, else "all"
           if (firstWrong) setTab("wrong");
@@ -568,8 +614,20 @@ export default function AttemptReviewClient() {
   const derived = useMemo(() => {
     let correct = 0, wrong = 0, unanswered = 0;
     const wrongIds: string[] = [], unansweredIds: string[] = [];
+    let scoredTotal = 0, writtenTotal = 0, writtenAnswered = 0;
 
     for (const q of questions) {
+      if (isWrittenQuestion(q)) {
+        writtenTotal++;
+        if (writtenAnswers[q.id]?.trim()) {
+          writtenAnswered++;
+        } else {
+          unanswered++;
+          unansweredIds.push(q.id);
+        }
+        continue;
+      }
+      scoredTotal++;
       const chosenId = answers[q.id];
       const opts = optionsByQ[q.id] ?? [];
       if (!chosenId) { unanswered++; unansweredIds.push(q.id); continue; }
@@ -580,8 +638,8 @@ export default function AttemptReviewClient() {
 
     const flaggedIds = questions.filter((q) => !!flagged[q.id]).map((q) => q.id);
 
-    return { total: questions.length, correct, wrong, unanswered, wrongIds, unansweredIds, flaggedIds };
-  }, [questions, answers, optionsByQ, flagged]);
+    return { total: questions.length, correct, wrong, unanswered, wrongIds, unansweredIds, flaggedIds, scoredTotal, writtenTotal, writtenAnswered };
+  }, [questions, answers, writtenAnswers, optionsByQ, flagged]);
 
   const filteredList = useMemo(() => {
     if (tab === "wrong") return derived.wrongIds;
@@ -602,6 +660,9 @@ export default function AttemptReviewClient() {
   );
 
   const selectedOpts = selected ? optionsByQ[selected.id] ?? [] : [];
+  const selectedIsWritten = isWrittenQuestion(selected);
+  const selectedWrittenAnswer = selected ? writtenAnswers[selected.id] ?? "" : "";
+  const selectedMarkingPoints = Array.isArray(selected?.marking_points) ? selected.marking_points : [];
   const chosenId = selected ? answers[selected.id] : undefined;
   const chosenOpt = selected ? selectedOpts.find((o) => o.id === chosenId) ?? null : null;
   const correctOpt = selected ? selectedOpts.find((o) => o.is_correct) ?? null : null;
@@ -624,8 +685,8 @@ export default function AttemptReviewClient() {
     const index = selectedOpts.findIndex((o) => o.is_correct);
     return index >= 0 ? optionKeyAt(index) : null;
   }, [selectedOpts]);
-  const isWrong = Boolean(chosenId && chosenOpt && !chosenOpt.is_correct);
-  const isUnanswered = Boolean(selected && !chosenId);
+  const isWrong = !selectedIsWritten && Boolean(chosenId && chosenOpt && !chosenOpt.is_correct);
+  const isUnanswered = Boolean(selected && (selectedIsWritten ? !selectedWrittenAnswer.trim() : !chosenId));
 
   // ── Handlers ─────────────────────────────────────────────────────────────
 
@@ -731,9 +792,10 @@ export default function AttemptReviewClient() {
     );
   }
 
-  const { pct } = scoreGrade(derived.correct, derived.total);
+  const scoreTotal = scoreDenominator(attempt) || derived.scoredTotal;
+  const { pct } = scoreGrade(derived.correct, scoreTotal);
   const headerCode = normalize(String(setMeta.course_code ?? "")).toUpperCase();
-  const scoreDiff = attempt.score != null && attempt.total_questions && attempt.total_questions > 0 && prevPct != null
+  const scoreDiff = attempt.score != null && scoreTotal > 0 && prevPct != null
     ? pct - prevPct : null;
 
   // Progress bar: position in all questions
@@ -840,11 +902,12 @@ export default function AttemptReviewClient() {
         </div>
 
         {/* Stats row — neutral framing: skipped is grey, correct is green */}
-        <div className="mt-4 grid grid-cols-4 gap-2">
+        <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-5">
           {[
             { label: "Wrong", value: derived.wrong, color: derived.wrong > 0 ? "#A32D2D" : undefined },
             { label: "Skipped", value: derived.unanswered, color: undefined },
-            { label: "Correct", value: derived.correct, color: derived.correct > 0 ? "#3B6D11" : undefined },
+            { label: "MCQ correct", value: `${derived.correct}/${scoreTotal || derived.scoredTotal}`, color: derived.correct > 0 ? "#3B6D11" : undefined },
+            { label: "Written", value: `${derived.writtenAnswered}/${derived.writtenTotal}`, color: undefined },
             { label: "Time", value: fmtDuration(attempt.time_spent_seconds), color: undefined },
           ].map(({ label, value, color }) => (
             <div key={label} className="rounded-2xl bg-secondary/50 p-2 text-center">
@@ -916,6 +979,8 @@ export default function AttemptReviewClient() {
                 const qIndex = questions.findIndex((q) => q.id === qid);
                 const q = questions[qIndex];
                 const isActive = selectedQ === qid;
+                const isWritten = isWrittenQuestion(q);
+                const hasWrittenAnswer = Boolean(writtenAnswers[qid]?.trim());
                 const chosenIdForQ = answers[qid];
                 const opts = optionsByQ[qid] ?? [];
                 const chosen = chosenIdForQ ? opts.find((o) => o.id === chosenIdForQ) : null;
@@ -943,7 +1008,11 @@ export default function AttemptReviewClient() {
                             Got it
                           </span>
                         )}
-                        {!chosenIdForQ ? (
+                        {isWritten ? (
+                          <span className="rounded-full border border-[#5B35D5]/20 bg-[#EEEDFE] px-2 py-0.5 text-[#3B24A8]">
+                            {hasWrittenAnswer ? "Written" : "Skipped"}
+                          </span>
+                        ) : !chosenIdForQ ? (
                           <span className="rounded-full border border-border bg-background px-2 py-0.5 text-muted-brand">Skipped</span>
                         ) : ok ? (
                           <span className="rounded-full border border-emerald-300/40 bg-emerald-100/30 px-2 py-0.5 text-emerald-800 dark:bg-emerald-950/20 dark:text-emerald-300">Correct</span>
@@ -953,7 +1022,11 @@ export default function AttemptReviewClient() {
                       </div>
                     </div>
                     <div className="mt-0.5 shrink-0">
-                      {!chosenIdForQ ? (
+                      {isWritten ? (
+                        <span className="inline-flex h-8 w-8 items-center justify-center rounded-2xl border border-[#5B35D5]/20 bg-[#EEEDFE] text-sm font-medium text-[#3B24A8]">
+                          T
+                        </span>
+                      ) : !chosenIdForQ ? (
                         <span className="inline-flex h-8 w-8 items-center justify-center rounded-2xl border border-border bg-background text-sm text-muted-brand">—</span>
                       ) : ok ? (
                         <CheckCircle2 className="h-5 w-5 text-emerald-600" />
@@ -1009,7 +1082,35 @@ export default function AttemptReviewClient() {
                 {normalize(selected.prompt)}
               </p>
 
+              {selectedIsWritten ? (
+                <div className="mt-4 space-y-3">
+                  <div className="rounded-2xl border border-border bg-background p-4">
+                    <p className="text-xs font-medium text-muted-brand">Your answer</p>
+                    <p className="mt-2 whitespace-pre-wrap text-sm leading-relaxed text-foreground">
+                      {selectedWrittenAnswer.trim() || "No answer submitted."}
+                    </p>
+                  </div>
+                  <div className="rounded-2xl border border-primary/20 bg-primary-light p-4 dark:border-primary/30 dark:bg-primary/10">
+                    <p className="text-xs font-medium text-primary-text dark:text-indigo-300">Model answer</p>
+                    <p className="mt-2 whitespace-pre-wrap text-sm leading-relaxed text-foreground">
+                      {selected.model_answer?.trim() || selected.explanation?.trim() || "No model answer provided yet."}
+                    </p>
+                    {selectedMarkingPoints.length > 0 ? (
+                      <div className="mt-3">
+                        <p className="text-xs font-medium text-primary-text dark:text-indigo-300">Marking points</p>
+                        <ul className="mt-2 list-disc space-y-1 pl-5 text-sm leading-relaxed text-foreground">
+                          {selectedMarkingPoints.map((point, pointIndex) => (
+                            <li key={`${point}-${pointIndex}`}>{point}</li>
+                          ))}
+                        </ul>
+                      </div>
+                    ) : null}
+                  </div>
+                </div>
+              ) : null}
+
               {/* Options */}
+              {!selectedIsWritten ? (
               <div className="mt-4 grid gap-2">
                 {selectedOpts.map((o, i) => {
                   const isChosen = chosenId === o.id;
@@ -1054,8 +1155,10 @@ export default function AttemptReviewClient() {
                   );
                 })}
               </div>
+              ) : null}
 
               {/* Explanation */}
+              {!selectedIsWritten ? (
               <div className="mt-4 rounded-2xl border border-border bg-card p-4">
                 <button
                   type="button"
@@ -1082,6 +1185,7 @@ export default function AttemptReviewClient() {
                   </p>
                 )}
               </div>
+              ) : null}
 
               {/* Mark as understood + correct answer label */}
               {(isWrong || isUnanswered) && (
@@ -1105,7 +1209,7 @@ export default function AttemptReviewClient() {
                       {understood[selected.id] ? "Got it" : "Mark as understood"}
                     </button>
 
-                    {correctOpt && (
+                    {!selectedIsWritten && correctOpt && (
                       <p className="text-right text-xs text-muted-brand">
                         Correct: <span className="font-medium text-foreground">{normalize(correctOpt.text)}</span>
                       </p>
@@ -1113,7 +1217,7 @@ export default function AttemptReviewClient() {
                   </div>
 
                   <div className="mt-3">
-                    {explanationOptions && chosenOptionKey && correctOptionKey ? (
+                    {!selectedIsWritten && explanationOptions && chosenOptionKey && correctOptionKey ? (
                       <BetterExplanationInline
                         questionId={selected.id}
                         questionPrompt={selected.prompt}
@@ -1188,6 +1292,7 @@ export default function AttemptReviewClient() {
         open={paletteOpen}
         questions={questions}
         answers={answers}
+        writtenAnswers={writtenAnswers}
         optionsByQ={optionsByQ}
         flagged={flagged}
         selectedQ={selectedQ}
