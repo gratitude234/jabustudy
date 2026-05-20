@@ -16,7 +16,6 @@ import {
   Star,
   Bookmark,
   BookmarkCheck,
-  Download,
   SortAsc,
   SortDesc,
   TrendingUp,
@@ -446,9 +445,9 @@ function detectFileKind(m: MaterialRow): "pdf" | "image" | "other" {
 }
 
 function MaterialCard({
-  m, saved, saving, onToggleSave, onDownload,
+  m, saved, saving, onToggleSave,
 }: {
-  m: MaterialRow; saved: boolean; saving: boolean; onToggleSave: () => void; onDownload: () => void;
+  m: MaterialRow; saved: boolean; saving: boolean; onToggleSave: () => void;
 }) {
   const title = (m.title ?? "Untitled material").trim() || "Untitled material";
   const courseCode = (m.study_courses?.course_code ?? "").toString().trim();
@@ -521,15 +520,9 @@ function MaterialCard({
             </div>
           </div>
           <div className="flex flex-col items-end gap-2 flex-shrink-0">
-            <a
-              href={`/api/study/materials/${m.id}/download`}
-              download
-              onClick={(e) => { e.stopPropagation(); onDownload(); }}
-              className={cn("inline-flex items-center gap-1.5 rounded-xl bg-primary px-2.5 py-2 text-xs font-semibold text-white no-underline","hover:opacity-90","focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2")}
-              aria-label="Download"
-            >
-              <Download className="h-3.5 w-3.5" /> Download
-            </a>
+            <span className="grid h-8 w-8 place-items-center rounded-xl bg-primary-light text-primary" aria-hidden>
+              <ArrowRight className="h-4 w-4" />
+            </span>
             <button
               type="button"
               onClick={(e) => { e.stopPropagation(); onToggleSave(); }}
@@ -1869,10 +1862,6 @@ export default function MaterialsClient() {
               saved={savedIds.has(m.id)}
               saving={savingId === m.id}
               onToggleSave={() => onToggleMaterialSave(m.id)}
-              onDownload={() => {
-                bumpDownloads(m.id);
-                setToast("Download started");
-              }}
             />
           ))
         )}

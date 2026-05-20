@@ -12,12 +12,9 @@ import {
   BookOpen,
   CheckCircle2,
   ChevronRight,
-  Clock,
+  Download,
   FileText,
-  Loader2,
   MessageCircle,
-  Play,
-  ShieldCheck,
   Sparkles,
   UploadCloud,
   Zap,
@@ -82,52 +79,6 @@ type QuestionRow = {
   solved: boolean | null;
 };
 
-type BankTopic = {
-  title: string;
-  description?: string | null;
-  target?: number | null;
-  generated?: number | null;
-};
-
-type BankMaterial = {
-  id: string;
-  material_id: string;
-  position: number | null;
-  status: string | null;
-  topic_outline: BankTopic[] | null;
-  generated_count: number | null;
-  error_message: string | null;
-  study_materials?: {
-    id: string;
-    title: string | null;
-    material_type: string | null;
-    file_path: string | null;
-  } | null;
-};
-
-type BankState = {
-  run: {
-    id: string;
-    course_id: string;
-    course_code: string;
-    quiz_set_id: string;
-    status: "draft" | "ready" | "completed" | "failed" | string;
-    batch_size: number | null;
-    topic_target: number | null;
-  };
-  materials: BankMaterial[];
-  questionsCount: number;
-};
-
-type BankGenerationIntent = "weak_areas" | "untested_sections" | "hard" | "past_question_style";
-
-const BANK_GENERATION_MODES: Array<{ value: BankGenerationIntent; label: string; sub: string }> = [
-  { value: "weak_areas", label: "Cover weak areas", sub: "Start with topics that need more questions." },
-  { value: "untested_sections", label: "Use untested sections", sub: "Prefer parts with little question coverage." },
-  { value: "hard", label: "Harder questions", sub: "Make the batch more exam-demanding." },
-  { value: "past_question_style", label: "Past-question style", sub: "Use an exam-style pattern when possible." },
-];
-
 // â”€â”€ Helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 function norm(v: string) {
   return v.trim().replace(/\s+/g, " ");
@@ -141,11 +92,6 @@ function timeAgoShort(iso?: string | null) {
   const h = Math.floor(m / 60);
   if (h < 24) return `${h}h ago`;
   return `${Math.floor(h / 24)}d ago`;
-}
-
-function isAiSupported(filePath: string | null) {
-  if (!filePath) return false;
-  return /\.(pdf|png|jpg|jpeg|webp|docx|pptx)$/i.test(filePath);
 }
 
 const TYPE_META: Record<string, { label: string; color: string; bg: string }> = {
@@ -186,11 +132,14 @@ function MaterialCard({ m, courseCode }: { m: Material; courseCode: string }) {
         <p className="truncate text-sm font-semibold text-foreground">{title}</p>
         <p className="mt-0.5 text-xs text-muted-brand">
           {[meta.label, m.level ? `${m.level}L` : null, m.semester ? `${m.semester} sem` : null]
-            .filter(Boolean).join(" Â· ")}
+            .filter(Boolean).join(" / ")}
         </p>
       </div>
       {typeof m.downloads === "number" && m.downloads > 0 && (
-        <p className="shrink-0 text-xs text-muted-brand">â†“{m.downloads}</p>
+        <p className="inline-flex shrink-0 items-center gap-1 text-xs text-muted-brand">
+          <Download className="h-3.5 w-3.5" />
+          {m.downloads}
+        </p>
       )}
       <ChevronRight className="h-4 w-4 shrink-0 text-muted-brand" />
     </Link>
@@ -199,7 +148,6 @@ function MaterialCard({ m, courseCode }: { m: Material; courseCode: string }) {
 
 function PracticeSetCard({ s }: { s: PracticeSet }) {
   const isAiCourse = s.source === "ai_course";
-  const isOfficialAi = s.source === "rep_ai_bank";
   const sources: SourceMaterial[] = Array.isArray(s.source_material_ids)
     ? s.source_material_ids
     : [];
@@ -211,25 +159,22 @@ function PracticeSetCard({ s }: { s: PracticeSet }) {
     >
       <div className={cn(
         "mt-0.5 grid h-9 w-9 shrink-0 place-items-center rounded-xl",
-        isAiCourse || isOfficialAi ? "bg-primary" : "bg-primary-light"
+        isAiCourse ? "bg-primary" : "bg-primary-light"
       )}>
-        <Sparkles className={cn("h-4 w-4", isAiCourse || isOfficialAi ? "text-white" : "text-primary")} />
+        <Sparkles className={cn("h-4 w-4", isAiCourse ? "text-white" : "text-primary")} />
       </div>
       <div className="min-w-0 flex-1">
         <p className="truncate text-sm font-semibold text-foreground">
           {norm(String(s.title ?? "Practice set"))}
         </p>
         <div className="mt-0.5 flex flex-wrap items-center gap-x-1.5 gap-y-0.5">
-          {isOfficialAi && (
-            <span className="text-xs font-extrabold text-primary">Official AI-built</span>
-          )}
           {typeof s.questions_count === "number" && (
             <span className="text-xs text-muted-brand">{s.questions_count} questions</span>
           )}
           {typeof s.time_limit_minutes === "number" && (
-            <span className="text-xs text-muted-brand">Â· {s.time_limit_minutes} min</span>
+            <span className="text-xs text-muted-brand">/ {s.time_limit_minutes} min</span>
           )}
-          {s.level && <span className="text-xs text-muted-brand">Â· {s.level}L</span>}
+          {s.level && <span className="text-xs text-muted-brand">/ {s.level}L</span>}
         </div>
         {isAiCourse && sources.length > 0 && (
           <p className="mt-1 text-[11px] text-primary/70 leading-snug">
@@ -238,7 +183,7 @@ function PracticeSetCard({ s }: { s: PracticeSet }) {
               .map((src) => src.title ?? "material")
               .join(", ")
               .slice(0, 80)}
-            {sources.map((s) => s.title ?? "").join(", ").length > 80 ? "â€¦" : ""}
+            {sources.map((s) => s.title ?? "").join(", ").length > 80 ? "..." : ""}
           </p>
         )}
       </div>
@@ -252,211 +197,6 @@ function SectionHeader({ title, action }: { title: string; action?: React.ReactN
     <div className="flex items-center justify-between gap-2 mb-2">
       <p className="text-xs font-extrabold uppercase tracking-wider text-muted-brand">{title}</p>
       {action}
-    </div>
-  );
-}
-
-function bankMaterialTitle(row: BankMaterial) {
-  const material = Array.isArray(row.study_materials)
-    ? row.study_materials[0]
-    : row.study_materials;
-  return material?.title ?? "Untitled material";
-}
-
-function BankBuilderCard({
-  bank,
-  compatibleMaterials,
-  selectedIds,
-  setSelectedIds,
-  busy,
-  error,
-  onStart,
-  onGenerate,
-  onPublish,
-  generationIntent,
-  setGenerationIntent,
-}: {
-  bank: BankState | null;
-  compatibleMaterials: Material[];
-  selectedIds: string[];
-  setSelectedIds: (ids: string[]) => void;
-  busy: boolean;
-  error: string | null;
-  onStart: () => void;
-  onGenerate: () => void;
-  onPublish: () => void;
-  generationIntent: BankGenerationIntent;
-  setGenerationIntent: (intent: BankGenerationIntent) => void;
-}) {
-  const ready = bank?.run.status === "ready";
-  const hasBank = Boolean(bank?.run.id);
-
-  return (
-    <div className="rounded-3xl border border-primary/20 bg-primary/5 p-4 shadow-sm">
-      <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0">
-          <div className="flex items-center gap-2">
-            <ShieldCheck className="h-4 w-4 text-primary" />
-            <p className="text-sm font-extrabold text-primary-text">Official question bank</p>
-          </div>
-          <p className="mt-1 text-xs leading-snug text-primary/70">
-            Build the rep-reviewed practice set that appears on the Practice page.
-          </p>
-        </div>
-        {hasBank && (
-          <span className="shrink-0 rounded-full border border-primary/20 bg-background px-2.5 py-1 text-[11px] font-extrabold text-primary-text">
-            {bank?.questionsCount ?? 0} Q
-          </span>
-        )}
-      </div>
-
-      {error && (
-        <p className="mt-3 rounded-2xl border border-rose-300/40 bg-rose-50 px-3 py-2 text-xs font-semibold text-rose-700">
-          {error}
-        </p>
-      )}
-
-      {!hasBank ? (
-        <div className="mt-3 space-y-3">
-          <div className="space-y-2">
-            {compatibleMaterials.slice(0, 8).map((m) => {
-              const checked = selectedIds.includes(m.id);
-              const meta = typeMeta(m.material_type ?? "other");
-              return (
-                <button
-                  key={m.id}
-                  type="button"
-                  onClick={() =>
-                    setSelectedIds(
-                      checked ? selectedIds.filter((id) => id !== m.id) : [...selectedIds, m.id]
-                    )
-                  }
-                  className={cn(
-                    "flex w-full items-center gap-3 rounded-2xl border bg-background px-3 py-2.5 text-left transition",
-                    checked ? "border-primary/30" : "border-border"
-                  )}
-                >
-                  <div className={cn("grid h-8 w-8 shrink-0 place-items-center rounded-xl", meta.bg, meta.color)}>
-                    <FileText className="h-3.5 w-3.5" />
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <p className="truncate text-sm font-semibold text-foreground">{m.title ?? "Untitled material"}</p>
-                    <p className="text-[11px] text-muted-brand">{meta.label}</p>
-                  </div>
-                  <span
-                    className={cn(
-                      "grid h-5 w-5 shrink-0 place-items-center rounded-full border",
-                      checked ? "border-primary bg-primary text-white" : "border-border"
-                    )}
-                  >
-                    {checked ? <CheckCircle2 className="h-3.5 w-3.5" /> : null}
-                  </span>
-                </button>
-              );
-            })}
-          </div>
-          <button
-            type="button"
-            onClick={onStart}
-            disabled={busy || selectedIds.length === 0}
-            className="inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-primary px-4 py-3 text-sm font-extrabold text-white transition hover:opacity-90 disabled:opacity-60"
-          >
-            {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
-            {busy ? "Starting bank..." : "Start official bank"}
-          </button>
-        </div>
-      ) : (
-        <div className="mt-3 space-y-3">
-          <div className="grid gap-2 sm:grid-cols-2">
-            {BANK_GENERATION_MODES.map(({ value, label, sub }) => (
-              <button
-                key={value}
-                type="button"
-                onClick={() => setGenerationIntent(value)}
-                disabled={busy || ready}
-                className={cn(
-                  "rounded-2xl border px-3 py-2.5 text-left transition disabled:opacity-60",
-                  generationIntent === value
-                    ? "border-primary/30 bg-primary-light text-primary-text"
-                    : "border-border bg-background text-foreground hover:bg-secondary/40"
-                )}
-              >
-                <p className="text-xs font-extrabold">{label}</p>
-                <p className="mt-0.5 text-[11px] leading-snug text-muted-brand">{sub}</p>
-              </button>
-            ))}
-          </div>
-          <div className="space-y-2">
-            {bank!.materials.map((row) => {
-              const topics = Array.isArray(row.topic_outline) ? row.topic_outline : [];
-              const totalTarget = topics.reduce((sum, t) => sum + Number(t.target ?? 0), 0);
-              const totalGenerated = topics.reduce((sum, t) => sum + Number(t.generated ?? 0), 0);
-              const pct = totalTarget > 0 ? Math.round((totalGenerated / totalTarget) * 100) : 0;
-              return (
-                <div key={row.id} className="rounded-2xl border border-border bg-background px-3 py-3">
-                  <div className="flex items-start justify-between gap-2">
-                    <div className="min-w-0">
-                      <p className="truncate text-sm font-semibold text-foreground">{bankMaterialTitle(row)}</p>
-                      <p className="mt-0.5 text-[11px] font-semibold text-muted-brand">
-                        {row.status === "covered"
-                          ? "Covered"
-                          : row.status === "failed"
-                            ? "Needs retry"
-                            : row.status === "pending"
-                              ? "Pending outline"
-                              : `${totalGenerated}/${totalTarget || "?"} topic questions`}
-                      </p>
-                    </div>
-                    <span className="shrink-0 text-[11px] font-extrabold text-primary">{row.status === "covered" ? "Done" : `${pct}%`}</span>
-                  </div>
-                  {topics.length > 0 && (
-                    <div className="mt-2 flex flex-wrap gap-1.5">
-                      {topics.slice(0, 4).map((topic) => (
-                        <span key={topic.title} className="rounded-full border border-primary/15 bg-primary/5 px-2 py-0.5 text-[10px] font-semibold text-primary/70">
-                          {topic.title}: {topic.generated ?? 0}/{topic.target ?? 0}
-                        </span>
-                      ))}
-                    </div>
-                  )}
-                  {row.error_message && (
-                    <p className="mt-2 rounded-xl border border-rose-300/40 bg-rose-50 px-2 py-1.5 text-[11px] font-semibold text-rose-700">
-                      {row.error_message}
-                    </p>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-
-          <div className="grid gap-2 sm:grid-cols-3">
-            <button
-              type="button"
-              onClick={onGenerate}
-              disabled={busy || ready}
-              className="inline-flex items-center justify-center gap-2 rounded-2xl bg-primary px-3 py-2.5 text-xs font-extrabold text-white transition hover:opacity-90 disabled:opacity-60"
-            >
-              {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5" />}
-              Next batch
-            </button>
-            <Link
-              href={`/study-admin/question-quality/${encodeURIComponent(bank!.run.quiz_set_id)}`}
-              className="inline-flex items-center justify-center gap-2 rounded-2xl border border-border bg-background px-3 py-2.5 text-xs font-extrabold text-foreground no-underline hover:bg-secondary/40"
-            >
-              <Play className="h-3.5 w-3.5" />
-              Open editor
-            </Link>
-            <button
-              type="button"
-              onClick={onPublish}
-              disabled={busy || (bank?.questionsCount ?? 0) === 0}
-              className="inline-flex items-center justify-center gap-2 rounded-2xl border border-emerald-300/50 bg-emerald-50 px-3 py-2.5 text-xs font-extrabold text-emerald-700 transition hover:bg-emerald-100 disabled:opacity-60"
-            >
-              <CheckCircle2 className="h-3.5 w-3.5" />
-              Publish
-            </button>
-          </div>
-        </div>
-      )}
     </div>
   );
 }
@@ -477,12 +217,6 @@ export default function CourseHubPage() {
 
   const [levelFilter, setLevelFilter] = useState<string>("all");
   const [showAllMaterials, setShowAllMaterials] = useState(false);
-  const [canManageBank, setCanManageBank] = useState(false);
-  const [bank, setBank] = useState<BankState | null>(null);
-  const [bankLoading, setBankLoading] = useState(false);
-  const [bankError, setBankError] = useState<string | null>(null);
-  const [selectedBankMaterialIds, setSelectedBankMaterialIds] = useState<string[]>([]);
-  const [bankGenerationIntent, setBankGenerationIntent] = useState<BankGenerationIntent>("weak_areas");
 
   useEffect(() => {
     let mounted = true;
@@ -569,22 +303,6 @@ export default function CourseHubPage() {
     return materials.filter((m) => levelFilter === "all" || norm(String(m.level ?? "")) === levelFilter);
   }, [materials, levelFilter]);
 
-  const grouped = useMemo(() => {
-    const map = new Map<string, Material[]>();
-    for (const m of filteredMaterials) {
-      const key = String(m.material_type ?? "other");
-      if (!map.has(key)) map.set(key, []);
-      map.get(key)!.push(m);
-    }
-    const entries = Array.from(map.entries());
-    entries.sort((a, b) => {
-      const ia = TYPE_ORDER.indexOf(a[0]);
-      const ib = TYPE_ORDER.indexOf(b[0]);
-      return (ia === -1 ? 999 : ia) - (ib === -1 ? 999 : ib);
-    });
-    return entries;
-  }, [filteredMaterials]);
-
   const pastQuestions = useMemo(
     () => filteredMaterials.filter((m) => m.material_type === "past_question"),
     [filteredMaterials]
@@ -594,62 +312,6 @@ export default function CourseHubPage() {
     () => filteredMaterials.filter((m) => m.material_type !== "past_question"),
     [filteredMaterials]
   );
-
-  const firstAiMaterial = useMemo(
-    () => materials.find((m) => isAiSupported(m.file_path)) ?? null,
-    [materials]
-  );
-
-  const compatibleMaterials = useMemo(
-    () => materials.filter((m) => isAiSupported(m.file_path)),
-    [materials]
-  );
-
-  useEffect(() => {
-    setSelectedBankMaterialIds((prev) => {
-      const valid = new Set(compatibleMaterials.map((m) => m.id));
-      const kept = prev.filter((id) => valid.has(id));
-      if (kept.length) return kept;
-      return compatibleMaterials.slice(0, 5).map((m) => m.id);
-    });
-  }, [compatibleMaterials]);
-
-  async function authHeaders() {
-    const { data } = await supabase.auth.getSession();
-    const token = data.session?.access_token;
-    if (!token) throw new Error("Sign in to manage this course bank.");
-    return {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${token}`,
-    };
-  }
-
-  async function refreshBank(courseId: string) {
-    try {
-      const headers = await authHeaders();
-      const res = await fetch(`/api/study/rep-question-bank?courseId=${encodeURIComponent(courseId)}`, {
-        headers,
-        cache: "no-store",
-      });
-      if (res.status === 401 || res.status === 403) {
-        setCanManageBank(false);
-        setBank(null);
-        return;
-      }
-      const json = await res.json().catch(() => null);
-      if (!res.ok || !json?.ok) throw new Error(json?.error ?? "Could not load question bank.");
-      setCanManageBank(true);
-      setBank((json.bank ?? null) as BankState | null);
-    } catch {
-      setCanManageBank(false);
-      setBank(null);
-    }
-  }
-
-  useEffect(() => {
-    if (!course?.id) return;
-    void refreshBank(course.id);
-  }, [course?.id]);
 
   const topPracticeHref = practiceSets[0]?.id
     ? `/study/practice/${encodeURIComponent(String(practiceSets[0].id))}`
@@ -661,72 +323,6 @@ export default function CourseHubPage() {
     if (materials.length > 0) return "browse";
     return "upload";
   }, [practiceSets, materials]);
-
-  async function handleStartBank() {
-    if (!course?.id || bankLoading) return;
-    setBankLoading(true);
-    setBankError(null);
-    try {
-      const headers = await authHeaders();
-      const res = await fetch("/api/study/rep-question-bank/start", {
-        method: "POST",
-        headers,
-        body: JSON.stringify({
-          courseId: course.id,
-          materialIds: selectedBankMaterialIds,
-        }),
-      });
-      const json = await res.json().catch(() => null);
-      if (!res.ok || !json?.ok) throw new Error(json?.error ?? "Failed to start question bank.");
-      setCanManageBank(true);
-      setBank(json.bank as BankState);
-    } catch (e: unknown) {
-      setBankError(e instanceof Error ? e.message : "Failed to start question bank.");
-    } finally {
-      setBankLoading(false);
-    }
-  }
-
-  async function handleGenerateBatch() {
-    if (!bank?.run.id || bankLoading) return;
-    setBankLoading(true);
-    setBankError(null);
-    try {
-      const headers = await authHeaders();
-      const res = await fetch(`/api/study/rep-question-bank/${encodeURIComponent(bank.run.id)}/generate-batch`, {
-        method: "POST",
-        headers,
-        body: JSON.stringify({ generationIntent: bankGenerationIntent }),
-      });
-      const json = await res.json().catch(() => null);
-      if (!res.ok || !json?.ok) throw new Error(json?.error ?? "Failed to generate batch.");
-      setBank(json.bank as BankState);
-    } catch (e: unknown) {
-      setBankError(e instanceof Error ? e.message : "Failed to generate batch.");
-    } finally {
-      setBankLoading(false);
-    }
-  }
-
-  async function handlePublishBank() {
-    if (!bank?.run.id || bankLoading) return;
-    setBankLoading(true);
-    setBankError(null);
-    try {
-      const headers = await authHeaders();
-      const res = await fetch(`/api/study/rep-question-bank/${encodeURIComponent(bank.run.id)}/publish`, {
-        method: "POST",
-        headers,
-      });
-      const json = await res.json().catch(() => null);
-      if (!res.ok || !json?.ok) throw new Error(json?.error ?? "Failed to publish bank.");
-      router.push(`/study/practice/${encodeURIComponent(bank.run.quiz_set_id)}`);
-    } catch (e: unknown) {
-      setBankError(e instanceof Error ? e.message : "Failed to publish bank.");
-    } finally {
-      setBankLoading(false);
-    }
-  }
 
   if (loading) {
     return (
@@ -765,7 +361,7 @@ export default function CourseHubPage() {
             <p className="mt-1.5 text-sm font-semibold text-white/75 leading-snug">{norm(course.course_title)}</p>
           )}
           {(dept || faculty) && (
-            <p className="mt-0.5 text-xs text-white/50">{[dept, faculty].filter(Boolean).join(" Â· ")}</p>
+            <p className="mt-0.5 text-xs text-white/50">{[dept, faculty].filter(Boolean).join(" / ")}</p>
           )}
 
           {/* Contextual stats â€” only show non-zero */}
@@ -830,7 +426,7 @@ export default function CourseHubPage() {
                     {[
                       practiceSets[0].questions_count ? `${practiceSets[0].questions_count} questions` : null,
                       practiceSets[0].time_limit_minutes ? `${practiceSets[0].time_limit_minutes} min` : null,
-                    ].filter(Boolean).join(" Â· ")}
+                    ].filter(Boolean).join(" / ")}
                   </p>
                 </div>
                 <Sparkles className="h-5 w-5 shrink-0 text-white/80" />
@@ -884,22 +480,6 @@ export default function CourseHubPage() {
           </div>
 
           {/* â”€â”€ Level filter â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
-          {canManageBank && compatibleMaterials.length > 0 && (
-            <BankBuilderCard
-              bank={bank}
-              compatibleMaterials={compatibleMaterials}
-              selectedIds={selectedBankMaterialIds}
-              setSelectedIds={setSelectedBankMaterialIds}
-              busy={bankLoading}
-              error={bankError}
-              onStart={handleStartBank}
-              onGenerate={handleGenerateBatch}
-              onPublish={handlePublishBank}
-              generationIntent={bankGenerationIntent}
-              setGenerationIntent={setBankGenerationIntent}
-            />
-          )}
-
           {availableLevels.length > 1 && (
             <div className="flex gap-2 overflow-x-auto [scrollbar-width:none] py-0.5">
               {(["all", ...availableLevels] as string[]).map((lv) => (
@@ -931,7 +511,7 @@ export default function CourseHubPage() {
                       href={`/study/library?type=past_question&q=${encodeURIComponent(code)}`}
                       className="text-xs font-semibold text-primary no-underline"
                     >
-                      See all {pastQuestions.length} â†’
+                      See all {pastQuestions.length}
                     </Link>
                   ) : undefined
                 }
@@ -954,7 +534,7 @@ export default function CourseHubPage() {
                     href={`/study/practice?course=${encodeURIComponent(code)}`}
                     className="text-xs font-semibold text-primary no-underline"
                   >
-                    See all â†’
+                    See all
                   </Link>
                 ) : undefined
               }
@@ -970,11 +550,7 @@ export default function CourseHubPage() {
               <div className="rounded-2xl border border-primary/15 bg-primary/5 px-4 py-3">
                 <p className="text-sm font-semibold text-primary-text">No practice sets yet</p>
                 <p className="mt-0.5 text-xs text-primary/70">
-                  {firstAiMaterial
-                    ? canManageBank
-                      ? "Use the official question bank builder above to create the first class practice set."
-                      : "Your course rep can publish an official practice set from the materials below."
-                    : "Upload a material first, then your course rep can build practice from it."}
+                  Use the materials below to revise, or upload more course files for this class.
                 </p>
               </div>
             )}
@@ -1073,7 +649,7 @@ export default function CourseHubPage() {
                   href={`/study/questions?course=${encodeURIComponent(code)}`}
                   className="text-xs font-semibold text-primary no-underline"
                 >
-                  See all â†’
+                    See all
                 </Link>
               )}
             </div>
@@ -1099,7 +675,7 @@ export default function CourseHubPage() {
                         </p>
                         <p className="mt-0.5 text-xs text-muted-brand">
                           {solved ? "Solved" : unanswered ? "Unanswered" : `${q.answers_count} answer${q.answers_count !== 1 ? "s" : ""}`}
-                          {q.created_at ? ` Â· ${timeAgoShort(q.created_at)}` : ""}
+                          {q.created_at ? ` / ${timeAgoShort(q.created_at)}` : ""}
                         </p>
                       </div>
                       {solved && <CheckCircle2 className="h-3.5 w-3.5 shrink-0 text-emerald-500 mt-0.5" />}

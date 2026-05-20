@@ -163,7 +163,6 @@ export default function AskQuestionClient() {
   }
 
   const titleRemaining = TITLE_MAX - title.length;
-  const bodyRemaining  = BODY_MAX  - body.length;
 
   return (
     <div className="space-y-4 pb-28 md:pb-6">
@@ -220,13 +219,10 @@ export default function AskQuestionClient() {
 
         {/* Title */}
         <div className="p-4">
-          <div className="flex items-center justify-between mb-2">
+          <div className="mb-2">
             <label className="text-xs font-medium uppercase tracking-widest text-muted-brand">
               Title
             </label>
-            <span className={cn("text-xs tabular-nums", titleRemaining < 20 ? "text-rose-600" : "text-muted-brand")}>
-              {title.length}/{TITLE_MAX}
-            </span>
           </div>
           <input
             value={title}
@@ -245,6 +241,9 @@ export default function AskQuestionClient() {
                 style={{ width: `${Math.min(100, (title.length / TITLE_MAX) * 100)}%` }}
               />
             </div>
+          )}
+          {title.length > 0 && title.trim().length < 8 && (
+            <p className="mt-1.5 text-xs text-muted-brand">Min. 8 characters to post</p>
           )}
         </div>
 
@@ -358,13 +357,10 @@ export default function AskQuestionClient() {
 
         {/* Details */}
         <div className="p-4">
-          <div className="flex items-center justify-between mb-2">
+          <div className="mb-2">
             <label className="text-xs font-medium uppercase tracking-widest text-muted-brand">
               Details
             </label>
-            <span className={cn("text-xs tabular-nums", bodyRemaining < 200 ? "text-rose-600" : "text-muted-brand")}>
-              {body.length}/{BODY_MAX}
-            </span>
           </div>
           <textarea
             value={body}
@@ -374,6 +370,9 @@ export default function AskQuestionClient() {
             style={{ minHeight: 120 }}
             maxLength={BODY_MAX}
           />
+          {body.length > 0 && body.trim().length < 10 && (
+            <p className="mt-1.5 text-xs text-muted-brand">Min. 10 characters to post</p>
+          )}
         </div>
       </div>
 
