@@ -22,7 +22,6 @@ import {
   Loader2,
   RefreshCw,
   RotateCcw,
-  Send,
   Share2,
   ShieldCheck,
   Sparkles,
@@ -63,7 +62,6 @@ type GeneratedMcqQuestion = {
   };
 };
 
-<<<<<<< HEAD
 type GeneratedWrittenQuestion = {
   question_type: "short_answer" | "theory";
   question: string;
@@ -87,11 +85,10 @@ type GeneratedWrittenQuestion = {
 };
 
 type GeneratedQuestion = GeneratedMcqQuestion | GeneratedWrittenQuestion;
-=======
+
 function isBetterExplanationOptionKey(value: string | undefined): value is BetterExplanationOptionKey {
   return value === "A" || value === "B" || value === "C" || value === "D";
 }
->>>>>>> 0b6b4b7e0f46702e317cef0d7539a9f58b4814c2
 
 type GenerationIntent = "weak_areas" | "untested_sections" | "application" | "hard" | "topic";
 type GenerationMode = "auto" | GenerationIntent;
@@ -132,13 +129,12 @@ const STUDENT_GENERATION_MODES: Array<{ value: GenerationMode; label: string; su
   { value: "topic", label: "Focus on a topic", sub: "Use the focus area you type below." },
 ];
 
-<<<<<<< HEAD
 const QUESTION_FORMATS: Array<{ value: QuestionFormat; label: string; sub: string }> = [
   { value: "mixed", label: "Mixed", sub: "Objective, short-answer, and theory" },
   { value: "mcq", label: "Objective", sub: "A-D questions only" },
   { value: "written", label: "Written/Theory", sub: "Typed answers and marking points" },
 ];
-=======
+
 function resolveGenerationIntent(mode: GenerationMode, config: { difficulty: "easy" | "mixed" | "hard"; focus: string }): GenerationIntent {
   if (mode !== "auto") return mode;
   if (config.focus.trim()) return "topic";
@@ -152,13 +148,6 @@ function generationModeCopy(mode: GenerationMode, config: { difficulty: "easy" |
   if (config.difficulty === "hard") return "Auto will generate harder exam-style questions.";
   return "Auto will cover weak areas first.";
 }
->>>>>>> 0b6b4b7e0f46702e317cef0d7539a9f58b4814c2
-
-type ChatMessage = {
-  id: string;
-  role: "user" | "model";
-  text: string;
-};
 
 type Course = {
   id: string;
@@ -509,7 +498,7 @@ function ImageViewer({ url, title, heightClass = "h-[70vh]" }: { url: string; ti
   );
 }
 
-function InlinePreview({ url, title, kind, onAskAI }: { url: string; title: string; kind: "pdf" | "image" | "other"; onAskAI?: () => void }) {
+function InlinePreview({ url, title, kind }: { url: string; title: string; kind: "pdf" | "image" | "other" }) {
   const [open, setOpen] = useState(false);
   if (kind === "other" || !url) return null;
 
@@ -538,23 +527,6 @@ function InlinePreview({ url, title, kind, onAskAI }: { url: string; title: stri
           {kind === "pdf" && (
             <div className="relative">
               <ResolvedFileViewer url={url} title={title} kind="pdf" heightClass="h-[60vh]" />
-              {onAskAI && (
-                <button
-                  type="button"
-                  onClick={onAskAI}
-                  className={cn(
-                    "absolute bottom-3 right-3 z-10",
-                    "inline-flex items-center gap-1.5 rounded-full",
-                    "bg-primary px-3.5 py-2 text-xs font-extrabold text-white",
-                    "shadow-lg hover:opacity-90",
-                    "focus-visible:outline-none focus-visible:ring-2",
-                    "focus-visible:ring-primary focus-visible:ring-offset-2"
-                  )}
-                >
-                  <Sparkles className="h-3.5 w-3.5" />
-                  Ask AI
-                </button>
-              )}
             </div>
           )}
           {kind === "image" && <ResolvedFileViewer url={url} title={title} kind="image" heightClass="h-[60vh]" />}
@@ -779,23 +751,12 @@ export default function MaterialDetailClient({
   const [retryPool, setRetryPool] = useState<GeneratedQuestion[] | null>(null);
   const syncedQuizMissesRef = useRef<string | null>(null);
 
-
-  const [chatOpen, setChatOpen] = useState(false);
-  const [chatHistory, setChatHistory] = useState<ChatMessage[]>([]);
-  const [chatInput, setChatInput] = useState("");
-  const [chatLoading, setChatLoading] = useState(false);
-  const [chatError, setChatError] = useState<string | null>(null);
-  const messagesEndRef = useRef<HTMLDivElement>(null);
-  const chatInputRef = useRef<HTMLInputElement>(null);
-
   function showToast(msg: string) {
     setToast(msg);
     if (toastRef.current) clearTimeout(toastRef.current);
     toastRef.current = setTimeout(() => setToast(null), 2600);
   }
 
-  useEffect(() => { messagesEndRef.current?.scrollIntoView({ behavior: "smooth" }); }, [chatHistory]);
-  useEffect(() => { if (!chatOpen) return; chatInputRef.current?.focus(); }, [chatOpen]);
   useEffect(() => {
     setUploaderIsRep(false);
     if (!m.uploader_id) return;
@@ -959,12 +920,8 @@ export default function MaterialDetailClient({
           count: quizConfig.count,
           difficulty: quizConfig.difficulty,
           focus: quizConfig.focus || undefined,
-<<<<<<< HEAD
           questionFormat: quizConfig.questionFormat,
-          generationIntent,
-=======
           generationIntent: resolveGenerationIntent(generationMode, quizConfig),
->>>>>>> 0b6b4b7e0f46702e317cef0d7539a9f58b4814c2
         }),
       });
       const data = await readGenerateQuestionsResponse(res);
@@ -1077,40 +1034,6 @@ export default function MaterialDetailClient({
     } catch (e: unknown) {
       setSaveQsError(e instanceof Error ? e.message : "Failed to save questions.");
     } finally { setSavingQs(false); }
-  }
-
-  async function handleChatSend() {
-    const message = chatInput.trim();
-    if (!message || chatLoading) return;
-    const userMsg: ChatMessage = { id: crypto.randomUUID(), role: "user", text: message };
-    const modelMessageId = crypto.randomUUID();
-    const updatedHistory = [...chatHistory, userMsg];
-    setChatHistory(updatedHistory);
-    setChatInput("");
-    setChatLoading(true);
-    setChatError(null);
-    try {
-      const res = await fetch("/api/ai/material-chat", {
-        method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ materialId: m.id, message, history: chatHistory }),
-      });
-      if (!res.ok) { const data = await res.json(); throw new Error(data.error ?? "Chat failed."); }
-      const reader = res.body?.getReader();
-      const decoder = new TextDecoder();
-      let modelText = "";
-      setChatHistory([...updatedHistory, { id: modelMessageId, role: "model", text: "" }]);
-      if (reader) {
-        while (true) {
-          const { done, value } = await reader.read();
-          if (done) break;
-          modelText += decoder.decode(value, { stream: true });
-          setChatHistory([...updatedHistory, { id: modelMessageId, role: "model", text: modelText }]);
-        }
-      }
-    } catch (e: unknown) {
-      setChatError(e instanceof Error ? e.message : "Something went wrong.");
-      setChatHistory(chatHistory);
-    } finally { setChatLoading(false); }
   }
 
   const MetaPill = ({ children }: { children: React.ReactNode }) => (
@@ -1230,16 +1153,14 @@ export default function MaterialDetailClient({
           </div>
 
           {/* AI feature cluster */}
-          {(isAiGenSupported(m) || kind === "pdf") && (
+          {isAiGenSupported(m) && (
           <div className="space-y-3 rounded-3xl border border-primary/20 bg-primary-light/40 p-3">
             <div>
               <p className="text-xs font-semibold uppercase tracking-wider text-primary">AI study tools</p>
-              <p className="mt-1 text-sm font-semibold text-primary-text">Turn this file into practice or ask questions about it.</p>
+              <p className="mt-1 text-sm font-semibold text-primary-text">Turn this file into practice questions.</p>
             </div>
 
             <div className="space-y-2">
-            {/* Generate practice questions */}
-            {isAiGenSupported(m) && (
               <button type="button"
                 onClick={() => setQuizState("config")}
                 className="flex w-full items-center gap-3 rounded-xl border border-primary/20 bg-primary-light/70 px-4 py-3.5 text-left transition hover:bg-primary-light focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary">
@@ -1251,77 +1172,8 @@ export default function MaterialDetailClient({
                   <p className="text-xs text-primary/70">AI-powered exam prep from this material</p>
                 </div>
               </button>
-            )}
-
-            {kind === "pdf" && (
-              <button type="button" onClick={() => setChatOpen((v) => !v)}
-                className={cn(
-                  "flex w-full items-center gap-3 rounded-xl border px-4 py-3.5 text-left transition",
-                  "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary",
-                  chatOpen
-                    ? "border-primary/30 bg-primary-light"
-                    : "border-border/60 bg-background hover:bg-secondary/40"
-                )}>
-                <span className={cn("grid h-9 w-9 shrink-0 place-items-center rounded-xl", chatOpen ? "bg-primary text-white" : "bg-secondary text-muted-brand")}>
-                  <Send className="h-4 w-4" />
-                </span>
-                <div className="min-w-0 flex-1">
-                  <p className={cn("text-sm font-bold", chatOpen ? "text-primary-text" : "text-foreground")}>Ask AI</p>
-                  <p className="text-xs text-muted-brand">Ask anything about this PDF</p>
-                </div>
-              </button>
-            )}
             </div>
 
-            {/* Chat panel */}
-            {kind === "pdf" && chatOpen && (
-        <div id="material-chat-panel" className="overflow-hidden rounded-2xl border border-primary/25 bg-card">
-          <div className="flex items-center justify-between border-b border-border/60 px-4 py-3">
-            <div className="flex items-center gap-2">
-              <Sparkles className="h-4 w-4 text-primary" />
-              <p className="text-sm font-semibold text-foreground">Ask AI about this material</p>
-            </div>
-            <div className="flex items-center gap-2">
-              {chatHistory.length > 0 && (
-                <button type="button" onClick={() => { setChatHistory([]); setChatError(null); }}
-                  className="rounded-xl border border-border/60 px-3 py-1.5 text-xs font-medium text-muted-brand transition hover:bg-secondary/30 hover:text-foreground">
-                  Clear
-                </button>
-              )}
-              <button type="button" onClick={() => setChatOpen(false)}
-                className="grid h-7 w-7 place-items-center rounded-xl border border-border/60 text-muted-brand hover:bg-secondary/40">
-                <X className="h-3.5 w-3.5" />
-              </button>
-            </div>
-          </div>
-          <div className="flex max-h-72 flex-col gap-3 overflow-y-auto px-4 py-3">
-            {chatHistory.length === 0 && (
-              <p className="py-4 text-center text-xs text-muted-brand">
-                Ask anything about this document. AI answers only from its content.
-              </p>
-            )}
-            {chatHistory.map((msg) => (
-              <div key={msg.id} className={cn("max-w-[88%] rounded-2xl px-3.5 py-2.5 text-sm leading-relaxed whitespace-pre-wrap",
-                msg.role === "user" ? "ml-auto bg-primary text-white" : "mr-auto bg-primary-light text-primary-text")}>
-                {msg.text || (<span className="flex items-center gap-1.5 text-primary/60"><Loader2 className="h-3 w-3 animate-spin" /> Thinking…</span>)}
-              </div>
-            ))}
-            {chatError && <p className="text-center text-xs text-red-500">{chatError}</p>}
-            <div ref={messagesEndRef} />
-          </div>
-          <div className="flex items-center gap-2 border-t border-border/60 px-3 py-2.5">
-            <input ref={chatInputRef} type="text" value={chatInput}
-              onChange={(e) => setChatInput(e.target.value)}
-              onKeyDown={(e) => { if (e.key === "Enter") handleChatSend(); }}
-              placeholder="Ask a question…" disabled={chatLoading}
-              className="flex-1 rounded-xl border border-border/60 bg-background px-3 py-2 text-sm outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/20 disabled:opacity-60" />
-            <button type="button" onClick={handleChatSend} disabled={chatLoading || !chatInput.trim()}
-              className="inline-flex h-9 w-9 items-center justify-center rounded-xl bg-primary text-white transition hover:opacity-90 disabled:opacity-50">
-              {chatLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <ArrowRight className="h-4 w-4" />}
-            </button>
-          </div>
-        </div>
-            )}
           </div>
           )}
         </div>
@@ -1333,12 +1185,6 @@ export default function MaterialDetailClient({
           url={fileUrl}
           title={title}
           kind={kind}
-          onAskAI={kind === "pdf" ? () => {
-            setChatOpen(true);
-            setTimeout(() => {
-              document.getElementById("material-chat-panel")?.scrollIntoView({ behavior: "smooth", block: "start" });
-            }, 100);
-          } : undefined}
         />
       )}
 
