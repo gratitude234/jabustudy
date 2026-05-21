@@ -96,7 +96,7 @@ type GenerationMode = "auto" | GenerationIntent;
 type AiGenerationMeta = {
   provider: "bedrock" | "gemini";
   model: string;
-  inputMode: "extracted-text" | "inline-file" | "indexed-chunks" | "coverage-aware";
+  inputMode: "extracted-text" | "inline-file" | "file-uri" | "indexed-chunks" | "coverage-aware";
   reason?: string;
   fallbackProvider?: "bedrock" | "gemini";
   fallbackReason?: string;
@@ -291,24 +291,53 @@ function withPdfPage(url: string, page?: number) {
   return `${url.split("#")[0]}#page=${safePage}`;
 }
 
-async function readGenerateQuestionsResponse(res: Response): Promise<GenerateQuestionsResponse> {
-  const text = await res.text();
-  if (!text.trim()) return {};
+async function readNdjsonQuestions(
+  res: Response,
+  onQuestion?: (q: GeneratedQuestion) => void
+): Promise<{ questions: GeneratedQuestion[]; ai: AiGenerationMeta | null }> {
+  if (!res.ok) {
+    let errorMsg = "Failed to generate questions.";
+    try {
+      const text = await res.text();
+      const parsed = JSON.parse(text);
+      if (parsed.error) errorMsg = parsed.error;
+    } catch { /* ignore */ }
+    throw new Error(errorMsg);
+  }
+  if (!res.body) throw new Error("No response body from server.");
+
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+  let finalAi: AiGenerationMeta | null = null;
+  const questions: GeneratedQuestion[] = [];
 
   try {
-    return JSON.parse(text) as GenerateQuestionsResponse;
-  } catch {
-    console.error("[study-ai] non-json generate-questions response", {
-      status: res.status,
-      contentType: res.headers.get("content-type"),
-      bodyStart: text.slice(0, 240),
-    });
-    return {
-      error: res.ok
-        ? "The server returned an unreadable AI response."
-        : "The AI server crashed before returning JSON. Check the deployment function logs for /api/ai/generate-questions.",
-    };
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split("\n");
+      buffer = lines.pop() ?? "";
+      for (const line of lines) {
+        if (!line.trim()) continue;
+        let msg: Record<string, unknown>;
+        try { msg = JSON.parse(line); } catch { continue; }
+        if (msg.type === "question") {
+          questions.push(msg.question as GeneratedQuestion);
+          onQuestion?.(msg.question as GeneratedQuestion);
+        } else if (msg.type === "done") {
+          finalAi = msg.ai as AiGenerationMeta;
+        } else if (msg.type === "error") {
+          throw new Error(String(msg.message ?? "Generation failed."));
+        }
+      }
+    }
+  } finally {
+    reader.releaseLock();
   }
+
+  return { questions, ai: finalAi };
 }
 
 const GDOCS = (url: string) =>
@@ -734,6 +763,7 @@ export default function MaterialDetailClient({
   const [generateMoreError, setGenerateMoreError] = useState<string | null>(null);
   const [hintShown, setHintShown] = useState<Record<number, boolean>>({});
   const [generationAi, setGenerationAi] = useState<AiGenerationMeta | null>(null);
+  const [streamingQuestions, setStreamingQuestions] = useState<GeneratedQuestion[]>([]);
   const [generationMode, setGenerationMode] = useState<GenerationMode>("auto");
 
   // Quiz state machine
@@ -907,6 +937,7 @@ export default function MaterialDetailClient({
 
   async function handleGenerateQuestions() {
     setQuizState("loading");
+    setStreamingQuestions([]);
     setGenQsError(null);
     setGenerationAi(null);
     setSavedSetId(null);
@@ -924,29 +955,21 @@ export default function MaterialDetailClient({
           generationIntent: resolveGenerationIntent(generationMode, quizConfig),
         }),
       });
-      const data = await readGenerateQuestionsResponse(res);
-      if (!res.ok) {
-        console.warn("[study-ai] question generation failed", {
-          provider: data.ai?.provider ?? "unknown",
-          model: data.ai?.model ?? "unknown",
-          error: data.ai?.error ?? data.error ?? null,
-        });
-        throw new Error(data.error ?? "Failed to generate questions.");
-      }
-      if (!Array.isArray(data.questions)) {
-        throw new Error("Failed to generate questions.");
-      }
-      console.info("[study-ai] generated questions", {
-        provider: data.ai?.provider ?? "unknown",
-        model: data.ai?.model ?? "unknown",
-        inputMode: data.ai?.inputMode ?? "unknown",
-        reason: data.ai?.reason ?? null,
-        fallbackProvider: data.ai?.fallbackProvider ?? null,
-        fallbackReason: data.ai?.fallbackReason ?? null,
-        count: data.questions.length,
+      const { questions, ai } = await readNdjsonQuestions(res, (q) => {
+        setStreamingQuestions((prev) => [...prev, q]);
       });
-      setGeneratedQuestions(data.questions);
-      setGenerationAi(data.ai ?? null);
+      if (!questions.length) throw new Error("Failed to generate questions.");
+      console.info("[study-ai] generated questions", {
+        provider: ai?.provider ?? "unknown",
+        model: ai?.model ?? "unknown",
+        inputMode: ai?.inputMode ?? "unknown",
+        reason: ai?.reason ?? null,
+        fallbackProvider: ai?.fallbackProvider ?? null,
+        fallbackReason: ai?.fallbackReason ?? null,
+        count: questions.length,
+      });
+      setGeneratedQuestions(questions);
+      setGenerationAi(ai);
       setAnswers({});
       setWrittenAnswers({});
       setWrittenCompared({});
@@ -978,29 +1001,19 @@ export default function MaterialDetailClient({
           generationIntent: intent,
         }),
       });
-      const data = await readGenerateQuestionsResponse(res);
-      if (!res.ok) {
-        console.warn("[study-ai] generate more failed", {
-          provider: data.ai?.provider ?? "unknown",
-          model: data.ai?.model ?? "unknown",
-          error: data.ai?.error ?? data.error ?? null,
-        });
-        throw new Error(data.error ?? "Failed to generate questions.");
-      }
-      if (!Array.isArray(data.questions)) {
-        throw new Error("Failed to generate questions.");
-      }
+      const { questions: moreQuestions, ai: moreAi } = await readNdjsonQuestions(res);
+      if (!moreQuestions.length) throw new Error("Failed to generate questions.");
       console.info("[study-ai] generated more questions", {
-        provider: data.ai?.provider ?? "unknown",
-        model: data.ai?.model ?? "unknown",
-        inputMode: data.ai?.inputMode ?? "unknown",
-        reason: data.ai?.reason ?? null,
-        fallbackProvider: data.ai?.fallbackProvider ?? null,
-        fallbackReason: data.ai?.fallbackReason ?? null,
-        count: data.questions.length,
+        provider: moreAi?.provider ?? "unknown",
+        model: moreAi?.model ?? "unknown",
+        inputMode: moreAi?.inputMode ?? "unknown",
+        reason: moreAi?.reason ?? null,
+        fallbackProvider: moreAi?.fallbackProvider ?? null,
+        fallbackReason: moreAi?.fallbackReason ?? null,
+        count: moreQuestions.length,
       });
-      setGeneratedQuestions(data.questions);
-      setGenerationAi(data.ai ?? null);
+      setGeneratedQuestions(moreQuestions);
+      setGenerationAi(moreAi);
       setAnswers({});
       setWrittenAnswers({});
       setWrittenCompared({});
@@ -1482,7 +1495,11 @@ export default function MaterialDetailClient({
               {quizState === "loading" && (
                 <div className="flex flex-1 flex-col items-center justify-center gap-3 py-16">
                   <Loader2 className="h-8 w-8 animate-spin text-primary" />
-                  <p className="text-sm text-muted-brand">Generating {quizConfig.count} {formatQuestionFormat(quizConfig.questionFormat)} questions...</p>
+                  {streamingQuestions.length > 0 ? (
+                    <p className="text-sm text-muted-brand">Generated {streamingQuestions.length} of {quizConfig.count} questions...</p>
+                  ) : (
+                    <p className="text-sm text-muted-brand">Generating {quizConfig.count} {formatQuestionFormat(quizConfig.questionFormat)} questions...</p>
+                  )}
                 </div>
               )}
 

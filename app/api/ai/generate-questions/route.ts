@@ -35,6 +35,7 @@ type StudyMaterialRow = {
   file_path: string | null;
   material_type: string | null;
   index_status?: string | null;
+  gemini_file_uri?: string | null;
 };
 
 type StudyRef = {
@@ -284,6 +285,165 @@ For short_answer and theory items, do not include options or answer letters; inc
   };
 }
 
+function mimeTypeFromPath(path: string): string | null {
+  const ext = path.split(".").pop()?.toLowerCase() ?? "";
+  const map: Record<string, string> = {
+    pdf: "application/pdf",
+    jpg: "image/jpeg",
+    jpeg: "image/jpeg",
+    png: "image/png",
+    webp: "image/webp",
+  };
+  return map[ext] ?? null;
+}
+
+type DirectGenResult = {
+  questions: GeneratedQuestion[];
+  ai: Record<string, unknown>;
+};
+
+async function runDirectGeneration(args: {
+  material: StudyMaterialRow;
+  filePath: string;
+  systemPrompt: string;
+  formatInstruction: ReturnType<typeof questionFormatInstruction>;
+}): Promise<DirectGenResult> {
+  const { material, filePath, systemPrompt, formatInstruction } = args;
+
+  // Reuse cached Gemini file URI for PDFs/images — skip download and base64 encoding
+  const cachedFileUri = material.gemini_file_uri?.trim() ?? "";
+  const cachedMimeType = cachedFileUri ? mimeTypeFromPath(filePath) : null;
+
+  if (cachedFileUri && cachedMimeType) {
+    const parts: AiContentBlock[] = [
+      { type: "file", mimeType: cachedMimeType, fileUri: cachedFileUri },
+      { type: "text", text: systemPrompt },
+    ];
+    const result = await generateJson<{ questions: unknown[] }>({
+      messages: [userMessage(parts)],
+      temperature: 0.3,
+      maxTokens: formatInstruction.maxTokens,
+      timeoutMs: AI_QUESTION_TIMEOUT_MS,
+      modelRole: "document",
+    });
+    if (!result.ok) throw new Error(result.error ?? "AI request failed.");
+    if (!Array.isArray(result.data.questions) || result.data.questions.length === 0) {
+      throw new Error("AI returned no questions.");
+    }
+    const questions = normalizeGeneratedQuestions(result.data.questions);
+    if (questions.length === 0) throw new Error("AI returned no valid questions.");
+    return {
+      questions,
+      ai: {
+        provider: result.provider,
+        model: result.model,
+        fallbackProvider: result.fallbackProvider,
+        fallbackReason: result.fallbackReason,
+        modelFallbackFrom: result.modelFallbackFrom,
+        modelFallbackReason: result.modelFallbackReason,
+        repairedJson: result.repairedJson,
+        repairProvider: result.repairProvider,
+        repairModel: result.repairModel,
+        inputMode: "file-uri",
+        reason: `Generated ${formatInstruction.label} questions from cached Gemini file URI.`,
+      },
+    };
+  }
+
+  // Resolve signed download URL
+  const admin = adminSupabase;
+  const { data: signed } = await admin.storage
+    .from("study-materials")
+    .createSignedUrl(filePath, 300);
+  const downloadUrl = signed?.signedUrl ?? null;
+  if (!downloadUrl) throw new Error("File URL not available.");
+
+  let fileBuffer: ArrayBuffer;
+  try {
+    const fetchRes = await fetch(downloadUrl, { signal: AbortSignal.timeout(30_000) });
+    if (!fetchRes.ok) throw new Error(`HTTP ${fetchRes.status}`);
+    fileBuffer = await fetchRes.arrayBuffer();
+  } catch (e) {
+    throw new Error(e instanceof Error && e.message ? e.message : "Failed to fetch file.");
+  }
+
+  if (fileBuffer.byteLength > 15 * 1024 * 1024) {
+    throw new Error("File is too large for AI question generation (max 15 MB). Try a shorter document.");
+  }
+
+  const content = await extractMaterialContent(fileBuffer, filePath);
+  if (content.kind === "unsupported") throw new Error(content.message);
+
+  if (content.kind === "text") {
+    const truncated = truncateText(content.text, QUESTION_GEN_TEXT_CHARS);
+    const result = await generateJson<{ questions: unknown[] }>({
+      messages: [userMessage(`DOCUMENT CONTENT:\n\n${truncated}\n\n${systemPrompt}`)],
+      temperature: 0.3,
+      maxTokens: formatInstruction.maxTokens,
+      timeoutMs: AI_QUESTION_TIMEOUT_MS,
+      modelRole: "generation",
+    });
+    if (!result.ok) throw new Error(result.error ?? "AI request failed.");
+    if (!Array.isArray(result.data.questions) || result.data.questions.length === 0) {
+      throw new Error("AI returned no questions.");
+    }
+    const questions = normalizeGeneratedQuestions(result.data.questions);
+    if (questions.length === 0) throw new Error("AI returned no valid questions.");
+    return {
+      questions,
+      ai: {
+        provider: result.provider,
+        model: result.model,
+        fallbackProvider: result.fallbackProvider,
+        fallbackReason: result.fallbackReason,
+        modelFallbackFrom: result.modelFallbackFrom,
+        modelFallbackReason: result.modelFallbackReason,
+        repairedJson: result.repairedJson,
+        repairProvider: result.repairProvider,
+        repairModel: result.repairModel,
+        inputMode: "extracted-text",
+        reason: `Generated ${formatInstruction.label} questions from extracted document text.`,
+      },
+    };
+  }
+
+  if (content.kind !== "inline") throw new Error("Unexpected content kind.");
+
+  const parts: AiContentBlock[] = [
+    { type: "inline", mimeType: content.mimeType, data: content.base64, name: "study material" },
+    { type: "text", text: systemPrompt },
+  ];
+  const result = await generateJson<{ questions: unknown[] }>({
+    messages: [userMessage(parts)],
+    temperature: 0.3,
+    maxTokens: formatInstruction.maxTokens,
+    timeoutMs: AI_QUESTION_TIMEOUT_MS,
+    modelRole: "document",
+  });
+  if (!result.ok) throw new Error(result.error ?? "AI request failed.");
+  if (!Array.isArray(result.data.questions) || result.data.questions.length === 0) {
+    throw new Error("AI returned no questions.");
+  }
+  const questions = normalizeGeneratedQuestions(result.data.questions);
+  if (questions.length === 0) throw new Error("AI returned no valid questions.");
+  return {
+    questions,
+    ai: {
+      provider: result.provider,
+      model: result.model,
+      fallbackProvider: result.fallbackProvider,
+      fallbackReason: result.fallbackReason,
+      modelFallbackFrom: result.modelFallbackFrom,
+      modelFallbackReason: result.modelFallbackReason,
+      repairedJson: result.repairedJson,
+      repairProvider: result.repairProvider,
+      repairModel: result.repairModel,
+      inputMode: "inline-file",
+      reason: content.reason ?? `Generated ${formatInstruction.label} questions from the inline file.`,
+    },
+  };
+}
+
 export async function POST(req: NextRequest) {
   try {
     return await handleGenerateQuestionsRequest(req);
@@ -330,7 +490,7 @@ async function handleGenerateQuestionsRequest(req: NextRequest) {
   const admin = adminSupabase;
   const { data: mat, error: matErr } = await admin
     .from("study_materials")
-    .select("id, title, file_url, file_path, material_type, index_status, study_courses(id, course_code)")
+    .select("id, title, file_url, file_path, material_type, index_status, gemini_file_uri, study_courses(id, course_code)")
     .eq("id", materialId)
     .maybeSingle();
 
@@ -340,6 +500,7 @@ async function handleGenerateQuestionsRequest(req: NextRequest) {
   const filePath = material.file_path;
   if (!filePath) return NextResponse.json({ error: "No file attached to this material." }, { status: 400 });
 
+  // ── Build prompt components ────────────────────────────────────────────────
   const difficultyInstruction = {
     easy: "Generate straightforward recall and definition questions.",
     mixed: "Mix of recall, application, and analysis questions.",
@@ -356,99 +517,6 @@ async function handleGenerateQuestionsRequest(req: NextRequest) {
     : "";
   const formatInstruction = questionFormatInstruction(questionFormat, questionCount);
 
-  if (questionFormat === "mcq") {
-    try {
-      const coverageResult = await generateCoverageAwareQuestions({
-        materialId,
-        materialTitle: material.title ?? "Untitled material",
-        count: questionCount,
-        difficulty: effectiveDifficulty,
-        focus,
-        coveredQuestions,
-        generationIntent,
-        topicId,
-        subtopicId,
-      });
-
-      if (coverageResult?.questions.length) {
-        const missingChunkRefs = coverageResult.questions.filter((question) => !question.studyRef?.chunkId).length;
-        if (missingChunkRefs > 0) {
-          console.warn("[generate-questions] coverage-aware result included best-effort refs for indexed material:", {
-            materialId,
-            missingChunkRefs,
-          });
-        }
-        const kindSummary = Object.entries(coverageResult.questionKindCounts)
-          .map(([kind, value]) => `${value} ${kind.replace(/_/g, " ")}`)
-          .join(", ");
-        return NextResponse.json({
-          questions: coverageResult.questions,
-          ai: {
-            provider: coverageResult.ai?.provider ?? "gemini",
-            model: coverageResult.ai?.model ?? process.env.GEMINI_MODEL_GENERATION?.trim() ?? process.env.GEMINI_MODEL?.trim() ?? "gemini-2.5-flash",
-            fallbackProvider: coverageResult.ai?.fallbackProvider,
-            fallbackReason: coverageResult.ai?.fallbackReason,
-            modelFallbackFrom: coverageResult.ai?.modelFallbackFrom,
-            modelFallbackReason: coverageResult.ai?.modelFallbackReason,
-            inputMode: "coverage-aware",
-            reason: `Coverage-aware generation covered ${coverageResult.topicsCovered} topic(s)${kindSummary ? `: ${kindSummary}` : ""}.`,
-            coverage: {
-              topicsCovered: coverageResult.topicsCovered,
-              questionKindCounts: coverageResult.questionKindCounts,
-              cognitiveLevelCounts: coverageResult.cognitiveLevelCounts,
-              chunksLoaded: coverageResult.chunksLoaded,
-              chunksCatalogued: coverageResult.chunksCatalogued,
-              courseMap: coverageResult.coverage,
-              intent: coverageResult.coverage?.intent ?? generationIntent,
-              intentLabel: coverageResult.coverage?.intentLabel,
-              targetedTopic: coverageResult.coverage?.targetedTopic,
-              reason: coverageResult.coverage?.reason,
-            },
-          },
-        });
-      }
-    } catch (error) {
-      console.warn("[generate-questions] coverage-aware generation fell back:", error instanceof Error ? error.message : error);
-      if (material.index_status === "ready") {
-        console.warn("[generate-questions] indexed material is using best-effort generation fallback:", {
-          materialId,
-          indexStatus: material.index_status,
-        });
-      }
-    }
-  }
-
-  // ── Resolve signed download URL ────────────────────────────────────────────
-  const { data: signed } = await admin.storage
-    .from("study-materials")
-    .createSignedUrl(filePath, 300);
-  const downloadUrl = signed?.signedUrl ?? null;
-  if (!downloadUrl) return NextResponse.json({ error: "File URL not available." }, { status: 404 });
-
-  // ── Fetch file bytes ───────────────────────────────────────────────────────
-  let fileBuffer: ArrayBuffer;
-  try {
-    const fetchRes = await fetch(downloadUrl, { signal: AbortSignal.timeout(30_000) });
-    if (!fetchRes.ok) throw new Error(`HTTP ${fetchRes.status}`);
-    fileBuffer = await fetchRes.arrayBuffer();
-  } catch {
-    return NextResponse.json({ error: "Failed to fetch file." }, { status: 502 });
-  }
-
-  if (fileBuffer.byteLength > 15 * 1024 * 1024) {
-    return NextResponse.json(
-      { error: "File is too large for AI question generation (max 15 MB). Try a shorter document." },
-      { status: 422 }
-    );
-  }
-
-  // ── Extract content (PDF/image → inline, DOCX/PPTX → text) ────────────────
-  const content = await extractMaterialContent(fileBuffer, filePath);
-  if (content.kind === "unsupported") {
-    return NextResponse.json({ error: content.message }, { status: 422 });
-  }
-
-  // ── Build AI request ───────────────────────────────────────────────────────
   const systemPrompt = `You are an exam question generator for Nigerian university students.
 ${formatInstruction.text}
 Do not add any knowledge from outside the document.
@@ -495,103 +563,126 @@ Return ONLY a valid JSON object with no markdown, no backticks, no preamble:
   ]
 }`;
 
-  if (content.kind === "text") {
-    const truncated = truncateText(content.text, QUESTION_GEN_TEXT_CHARS);
-    const result = await generateJson<{ questions: unknown[] }>({
-      messages: [userMessage(`DOCUMENT CONTENT:\n\n${truncated}\n\n${systemPrompt}`)],
-      temperature: 0.3,
-      maxTokens: formatInstruction.maxTokens,
-      timeoutMs: AI_QUESTION_TIMEOUT_MS,
-      modelRole: "generation",
-    });
+  // ── Stream NDJSON response ─────────────────────────────────────────────────
+  const encoder = new TextEncoder();
 
-    if (!result.ok) {
-      return NextResponse.json({
-        error: "Failed to generate questions.",
-        ai: { provider: result.provider, model: result.model, error: result.error },
-      }, { status: 500 });
-    }
-    if (!Array.isArray(result.data.questions) || result.data.questions.length === 0) {
-      return NextResponse.json({ error: "Failed to generate questions." }, { status: 500 });
-    }
-    const questions = normalizeGeneratedQuestions(result.data.questions);
-    if (questions.length === 0) {
-      return NextResponse.json({ error: "Failed to generate questions." }, { status: 500 });
-    }
-    return NextResponse.json({
-      questions,
-      ai: {
-        provider: result.provider,
-        model: result.model,
-        fallbackProvider: result.fallbackProvider,
-        fallbackReason: result.fallbackReason,
-        modelFallbackFrom: result.modelFallbackFrom,
-        modelFallbackReason: result.modelFallbackReason,
-        repairedJson: result.repairedJson,
-        repairProvider: result.repairProvider,
-        repairModel: result.repairModel,
-        inputMode: "extracted-text",
-        reason: `Generated ${formatInstruction.label} questions from extracted document text.`,
-      },
-    });
-  }
+  const stream = new ReadableStream({
+    async start(controller) {
+      const emit = (obj: object) => {
+        controller.enqueue(encoder.encode(JSON.stringify(obj) + "\n"));
+      };
 
-  // Build parts array depending on content kind
-  type InlinePart = AiContentBlock;
+      try {
+        // Coverage-aware MCQ path
+        if (questionFormat === "mcq") {
+          let emittedAny = false;
 
-  let parts: InlinePart[];
-  if (content.kind === "inline") {
-    parts = [
-      { type: "inline", mimeType: content.mimeType, data: content.base64, name: "study material" },
-      { type: "text", text: systemPrompt },
-    ];
-  } else {
-    return NextResponse.json({ error: "Unexpected content kind." }, { status: 500 });
-  }
+          try {
+            const coverageResult = await generateCoverageAwareQuestions({
+              materialId,
+              materialTitle: material.title ?? "Untitled material",
+              count: questionCount,
+              difficulty: effectiveDifficulty,
+              focus,
+              coveredQuestions,
+              generationIntent,
+              topicId,
+              subtopicId,
+              onQuestion: (q) => {
+                emit({ type: "question", question: q });
+                emittedAny = true;
+              },
+            });
 
-  const result = await generateJson<{ questions: unknown[] }>({
-    messages: [userMessage(parts)],
-    temperature: 0.3,
-    maxTokens: formatInstruction.maxTokens,
-    timeoutMs: AI_QUESTION_TIMEOUT_MS,
-    modelRole: "document",
+            if (coverageResult?.questions.length) {
+              const missingChunkRefs = coverageResult.questions.filter((q) => !q.studyRef?.chunkId).length;
+              if (missingChunkRefs > 0) {
+                console.warn("[generate-questions] coverage-aware result included best-effort refs:", {
+                  materialId,
+                  missingChunkRefs,
+                });
+              }
+              const kindSummary = Object.entries(coverageResult.questionKindCounts)
+                .map(([kind, value]) => `${value} ${kind.replace(/_/g, " ")}`)
+                .join(", ");
+              emit({
+                type: "done",
+                ai: {
+                  provider: coverageResult.ai?.provider ?? "gemini",
+                  model: coverageResult.ai?.model ?? process.env.GEMINI_MODEL_GENERATION?.trim() ?? process.env.GEMINI_MODEL?.trim() ?? "gemini-2.5-flash",
+                  fallbackProvider: coverageResult.ai?.fallbackProvider,
+                  fallbackReason: coverageResult.ai?.fallbackReason,
+                  modelFallbackFrom: coverageResult.ai?.modelFallbackFrom,
+                  modelFallbackReason: coverageResult.ai?.modelFallbackReason,
+                  inputMode: "coverage-aware",
+                  reason: `Coverage-aware generation covered ${coverageResult.topicsCovered} topic(s)${kindSummary ? `: ${kindSummary}` : ""}.`,
+                  coverage: {
+                    topicsCovered: coverageResult.topicsCovered,
+                    questionKindCounts: coverageResult.questionKindCounts,
+                    cognitiveLevelCounts: coverageResult.cognitiveLevelCounts,
+                    chunksLoaded: coverageResult.chunksLoaded,
+                    chunksCatalogued: coverageResult.chunksCatalogued,
+                    courseMap: coverageResult.coverage,
+                    intent: coverageResult.coverage?.intent ?? generationIntent,
+                    intentLabel: coverageResult.coverage?.intentLabel,
+                    targetedTopic: coverageResult.coverage?.targetedTopic,
+                    reason: coverageResult.coverage?.reason,
+                  },
+                },
+              });
+              return;
+            }
+          } catch (coverageError) {
+            if (emittedAny) {
+              // Some questions already streamed — emit done with what we have
+              emit({
+                type: "done",
+                ai: {
+                  provider: "gemini",
+                  model: process.env.GEMINI_MODEL_GENERATION?.trim() ?? process.env.GEMINI_MODEL?.trim() ?? "gemini-2.5-flash",
+                  inputMode: "coverage-aware",
+                  reason: "Partial coverage-aware generation.",
+                },
+              });
+              return;
+            }
+            console.warn("[generate-questions] coverage-aware generation fell back:", coverageError instanceof Error ? coverageError.message : coverageError);
+            if (material.index_status === "ready") {
+              console.warn("[generate-questions] indexed material using best-effort fallback:", { materialId });
+            }
+          }
+
+          // If emittedAny but coverageResult had 0 questions (shouldn't happen), exit cleanly
+          if (emittedAny) return;
+        }
+
+        // Direct generation — text extraction, file URI, or inline base64
+        const directResult = await runDirectGeneration({
+          material,
+          filePath,
+          systemPrompt,
+          formatInstruction,
+        });
+
+        for (const q of directResult.questions) {
+          emit({ type: "question", question: q });
+        }
+        emit({ type: "done", ai: directResult.ai });
+      } catch (error) {
+        try {
+          emit({ type: "error", message: routeErrorMessage(error) });
+        } catch { /* controller already closed */ }
+      } finally {
+        controller.close();
+      }
+    },
   });
 
-  if (!result.ok) {
-    return NextResponse.json({
-      error: "Failed to generate questions.",
-      ai: { provider: result.provider, model: result.model, error: result.error },
-    }, { status: 500 });
-  }
-
-  // ── Call configured AI provider ────────────────────────────────────────────
-  // ── Parse response ─────────────────────────────────────────────────────────
-  try {
-    if (!Array.isArray(result.data.questions) || result.data.questions.length === 0) {
-      return NextResponse.json({ error: "Failed to generate questions." }, { status: 500 });
-    }
-    const questions = normalizeGeneratedQuestions(result.data.questions);
-    if (questions.length === 0) {
-      return NextResponse.json({ error: "Failed to generate questions." }, { status: 500 });
-    }
-    return NextResponse.json({
-      questions,
-      ai: {
-        provider: result.provider,
-        model: result.model,
-        fallbackProvider: result.fallbackProvider,
-        fallbackReason: result.fallbackReason,
-        modelFallbackFrom: result.modelFallbackFrom,
-        modelFallbackReason: result.modelFallbackReason,
-        repairedJson: result.repairedJson,
-        repairProvider: result.repairProvider,
-        repairModel: result.repairModel,
-        inputMode: "inline-file",
-        reason: content.reason ?? `Generated ${formatInstruction.label} questions from the inline file.`,
-      },
-    });
-  } catch (e: unknown) {
-    console.error("[generate-questions] JSON normalize error:", e instanceof Error ? e.message : e);
-    return NextResponse.json({ error: "Failed to generate questions." }, { status: 500 });
-  }
+  return new Response(stream, {
+    headers: {
+      "Content-Type": "application/x-ndjson",
+      "Cache-Control": "no-cache",
+      "X-Content-Type-Options": "nosniff",
+    },
+  });
 }

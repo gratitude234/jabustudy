@@ -17,7 +17,7 @@ import {
   isBedrockConfigured,
 } from "./bedrock";
 
-export type { AiChatMessage, AiContentBlock, AiModelRole } from "./gemini";
+export type { AiChatMessage, AiContentBlock, AiFileBlock, AiModelRole } from "./gemini";
 
 export type AiProvider = "bedrock" | "gemini";
 

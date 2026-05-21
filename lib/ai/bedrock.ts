@@ -102,6 +102,7 @@ function imageFormat(mimeType: string): "jpeg" | "png" | "webp" | "gif" | undefi
 
 function blockToBedrock(block: AiContentBlock): ContentBlock {
   if (block.type === "text") return { text: block.text };
+  if (block.type === "file") return { text: `[File: ${block.mimeType}]` };
 
   const image = imageFormat(block.mimeType);
   if (image) {

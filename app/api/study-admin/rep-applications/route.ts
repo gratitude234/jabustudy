@@ -1,7 +1,7 @@
 // app/api/study-admin/rep-applications/route.ts
 import { NextResponse } from "next/server";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
-import { requireStudyModerator } from "@/lib/studyAdmin/requireStudyModerator";
+import { requireStudyModeratorFromRequest } from "@/lib/studyAdmin/requireStudyModeratorFromRequest";
 
 type Status = "pending" | "approved" | "rejected" | "all";
 
@@ -27,7 +27,7 @@ export async function GET(req: Request) {
   // Super admin only
   let auth;
   try {
-    auth = await requireStudyModerator();
+    auth = await requireStudyModeratorFromRequest(req);
   } catch (e: any) {
     return jsonError(e?.message || "Unauthorized", e?.status || 401, e?.code || "UNAUTHORIZED");
   }

@@ -87,10 +87,11 @@ export default function ApplyRepPage() {
         const { data: auth } = await supabase.auth.getUser();
         if (!auth?.user) { router.replace("/login?next=%2Fstudy%2Fapply-rep"); return; }
 
-        const [facRes, depRes, meRes] = await Promise.all([
+        const [facRes, depRes, meRes, prefsRes] = await Promise.all([
           supabase.from("study_faculties").select("id,name,sort_order").eq("is_active", true).order("sort_order"),
           supabase.from("study_departments").select("id,name,faculty_id,sort_order").eq("is_active", true).order("sort_order"),
           fetch("/api/study/rep-applications/me", { cache: "no-store" }).then((r) => r.json()),
+          fetch("/api/study/personalization", { cache: "no-store" }).then((r) => r.json()).catch(() => null),
         ]);
 
         if (!mounted) return;
@@ -101,10 +102,19 @@ export default function ApplyRepPage() {
           setMeStatus(meRes.status ?? "not_applied");
           setMeScope(meRes.scope ?? null);
           setMeDecisionReason(meRes?.application?.decision_reason ?? meRes?.application?.note ?? null);
+
           if (meRes?.scope?.faculty_id)    setFacultyId(meRes.scope.faculty_id);
           if (meRes?.scope?.department_id) setDeptId(meRes.scope.department_id);
           const existingLevels = Array.isArray(meRes?.scope?.levels) && meRes.scope.levels.length ? meRes.scope.levels : null;
           if (existingLevels) setLevels(existingLevels);
+
+          // If no existing application scope, seed from onboarding prefs
+          if (!meRes?.scope && prefsRes?.ok && prefsRes.prefs) {
+            const p = prefsRes.prefs;
+            if (p.faculty_id)    setFacultyId(p.faculty_id);
+            if (p.department_id) setDeptId(p.department_id);
+            if (p.level)         setLevels([p.level]);
+          }
         }
       } catch (e: any) {
         if (mounted) setError(e?.message ?? "Failed to load.");

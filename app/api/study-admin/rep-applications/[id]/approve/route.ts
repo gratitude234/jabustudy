@@ -1,7 +1,7 @@
 // app/api/study-admin/rep-applications/[id]/approve/route.ts
 import { NextResponse } from "next/server";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
-import { requireStudyModerator } from "@/lib/studyAdmin/requireStudyModerator";
+import { requireStudyModeratorFromRequest } from "@/lib/studyAdmin/requireStudyModeratorFromRequest";
 
 function jsonError(message: string, status: number, code: string, extra?: Record<string, unknown>) {
   return NextResponse.json({ ok: false, code, message, ...(extra ?? {}) }, { status });
@@ -48,7 +48,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   let resolvedParams: { id: string } | null = null;
   try {
     resolvedParams = await params;
-    auth = await requireStudyModerator();
+    auth = await requireStudyModeratorFromRequest(req);
   } catch (e: any) {
     return jsonError(e?.message || "Unauthorized", e?.status || 401, e?.code || "UNAUTHORIZED");
   }

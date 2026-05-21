@@ -13,7 +13,12 @@ export type AiInlineBlock = {
   data: string;
   name?: string;
 };
-export type AiContentBlock = AiTextBlock | AiInlineBlock;
+export type AiFileBlock = {
+  type: "file";
+  mimeType: string;
+  fileUri: string;
+};
+export type AiContentBlock = AiTextBlock | AiInlineBlock | AiFileBlock;
 
 export type AiChatMessage = {
   role: "system" | "user" | "assistant";
@@ -38,7 +43,7 @@ function getApiKey() {
 function contentToText(content: string | AiContentBlock[]) {
   if (typeof content === "string") return content;
   return content
-    .map((block) => block.type === "text" ? block.text : `[${block.mimeType} attachment: ${block.name ?? "inline file"}]`)
+    .map((block) => block.type === "text" ? block.text : block.type === "file" ? `[${block.mimeType} file]` : `[${block.mimeType} attachment: ${block.name ?? "inline file"}]`)
     .join("\n\n");
 }
 
@@ -50,13 +55,14 @@ function getSystemInstruction(messages: AiChatMessage[]) {
 
 function blockToGeminiPart(block: AiContentBlock) {
   if (block.type === "text") return { text: block.text };
+  if (block.type === "file") return { file_data: { mime_type: block.mimeType, file_uri: block.fileUri } };
   return { inline_data: { mime_type: block.mimeType, data: block.data } };
 }
 
 function getGeminiParts(messages: AiChatMessage[]) {
   const nonSystem = messages.filter((message) => message.role !== "system");
   const source = nonSystem.length ? nonSystem : messages;
-  const parts: Array<{ text: string } | { inline_data: { mime_type: string; data: string } }> = [];
+  const parts: Array<{ text: string } | { inline_data: { mime_type: string; data: string } } | { file_data: { mime_type: string; file_uri: string } }> = [];
 
   for (const message of source) {
     parts.push({ text: `${message.role.toUpperCase()}:` });
