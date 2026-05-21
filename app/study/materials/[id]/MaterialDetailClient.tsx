@@ -148,15 +148,6 @@ function generationModeCopy(mode: GenerationMode, config: { difficulty: "easy" |
   if (config.difficulty === "hard") return "Auto will generate harder exam-style questions.";
   return "Auto will cover weak areas first.";
 }
-<<<<<<< HEAD
-=======
-
-type ChatMessage = {
-  id: string;
-  role: "user" | "model";
-  text: string;
-};
->>>>>>> 4f2f4ac720db2f2c77fcd8879f268987adeb7bb2
 
 type Course = {
   id: string;
@@ -1549,10 +1540,6 @@ export default function MaterialDetailClient({
                         )}
                       </div>
                     )}
-<<<<<<< HEAD
-=======
-
->>>>>>> 4f2f4ac720db2f2c77fcd8879f268987adeb7bb2
                     {isMcqQuestion(currentQ) ? (
                       <>
                         <div className="space-y-2.5">
