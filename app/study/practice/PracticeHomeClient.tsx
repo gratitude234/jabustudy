@@ -784,7 +784,7 @@ function QuizSetCard({
 
 // â"€â"€â"€ "Suggested for today" widget â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€
 
-function SuggestedTodayWidget() {
+function SuggestedTodayWidget({ userId }: { userId: string | null }) {
   const [suggestion, setSuggestion] = React.useState<{
     courseCode: string;
     setId: string;
@@ -796,14 +796,13 @@ function SuggestedTodayWidget() {
     let cancelled = false;
     (async () => {
       try {
-        const { data: { user } } = await supabase.auth.getUser();
-        if (!user || cancelled) return;
+        if (!userId || cancelled) return;
 
         // Check if user has any completed attempts
         const { data: attempts } = await supabase
           .from("study_practice_attempts")
           .select("id")
-          .eq("user_id", user.id)
+          .eq("user_id", userId)
           .eq("status", "submitted")
           .limit(1);
         if (!attempts?.length || cancelled) return;
@@ -818,7 +817,7 @@ function SuggestedTodayWidget() {
               study_quiz_sets!inner(id, course_code)
             )
           `)
-          .eq("user_id", user.id)
+          .eq("user_id", userId)
           .is("graduated_at", null)
           .limit(50);
         if (!weakRows?.length || cancelled) return;
@@ -851,7 +850,7 @@ function SuggestedTodayWidget() {
       }
     })();
     return () => { cancelled = true; };
-  }, []);
+  }, [userId]);
 
   if (!checked || !suggestion) return null;
 
@@ -893,6 +892,7 @@ export default function PracticeHomeClient() {
 
 function PracticeHomeInner() {
   const {
+    loading: prefsLoading,
     isProfileComplete,
     userId: authedUserId,
     displayName,
@@ -972,24 +972,21 @@ function PracticeHomeInner() {
     faculty_id?: string | null;
   } | null>(null);
 
-  // Load user prefs once on mount
+  // Keep local scoring prefs in sync with StudyPrefsProvider. Fetching them here
+  // separately can race Supabase auth locks during reload.
   useEffect(() => {
-    (async () => {
-      try {
-        const { data: auth } = await supabase.auth.getUser();
-        const user = auth?.user;
-        if (!user) return;
-        const { data } = await supabase
-          .from("study_preferences")
-          .select("level, semester, department_id, faculty_id")
-          .eq("user_id", user.id)
-          .maybeSingle();
-        if (data) setUserPrefs(data as any);
-      } catch {
-        // non-fatal â€" for_you falls back to URL params only
-      }
-    })();
-  }, []);
+    if (prefsLoading) return;
+    setUserPrefs(
+      contextPrefs
+        ? {
+            department_id: contextPrefs.department_id ?? null,
+            faculty_id: contextPrefs.faculty_id ?? null,
+            level: contextPrefs.level ?? null,
+            semester: contextPrefs.semester ?? null,
+          }
+        : null
+    );
+  }, [contextPrefs, prefsLoading]);
 
   // toast
   const [toast, setToast] = useState<string | null>(null);
@@ -1014,10 +1011,15 @@ function PracticeHomeInner() {
       publishedOnly ? "p1" : "p0",
       viewParam,
       personalizedOff ? "personalized0" : "personalized1",
+      prefsLoading ? "prefsLoading" : "prefsReady",
+      isProfileComplete ? "profileComplete" : "profileIncomplete",
       courseCodes.join(","),
       authedUserId ?? "anon",
     ].join("|");
-  }, [qParam, courseParam, levelParam, semesterParam, difficultyParam, sortParam, publishedOnly, viewParam, personalizedOff, courseCodes, authedUserId]);
+  }, [qParam, courseParam, levelParam, semesterParam, difficultyParam, sortParam, publishedOnly, viewParam, personalizedOff, prefsLoading, isProfileComplete, courseCodes, authedUserId]);
+
+  const shouldDeferSetFetch =
+    !filterStorageReady || (viewParam === "for_you" && !personalizedOff && prefsLoading);
 
   useEffect(() => setQ(qParam), [qParam]);
 
@@ -1109,7 +1111,8 @@ function PracticeHomeInner() {
     setSets([]);
     setHasMore(false);
     setTotal(0);
-  }, [filtersKey]);
+    if (shouldDeferSetFetch) setLoading(true);
+  }, [filtersKey, shouldDeferSetFetch]);
 
   // Load Due Today count on mount
   useEffect(() => {
@@ -1137,9 +1140,7 @@ function PracticeHomeInner() {
     let mounted = true;
     (async () => {
       try {
-        const { data: auth } = await supabase.auth.getUser();
-        const uid = auth?.user?.id;
-        if (!uid) {
+        if (!authedUserId) {
           if (mounted) {
             setRecentAttempts([]);
           }
@@ -1154,7 +1155,7 @@ function PracticeHomeInner() {
             study_quiz_sets(id,title,course_code)
           `
           )
-          .eq("user_id", uid)
+          .eq("user_id", authedUserId)
           .order("updated_at", { ascending: false })
           .order("created_at", { ascending: false })
           .limit(6);
@@ -1178,32 +1179,7 @@ function PracticeHomeInner() {
     return () => {
       mounted = false;
     };
-  }, []);
-
-  // Load user prefs for personalised For You scoring
-  useEffect(() => {
-    let mounted = true;
-    (async () => {
-      try {
-        const { data: auth } = await supabase.auth.getUser();
-        const uid = auth?.user?.id;
-        if (!uid) return;
-        const { data, error } = await supabase
-          .from("study_preferences")
-          .select("department_id,faculty_id,level,semester")
-          .eq("user_id", uid)
-          .maybeSingle();
-        if (!mounted || error || !data) return;
-        setUserPrefs({
-          department_id: (data as any).department_id ?? null,
-          faculty_id: (data as any).faculty_id ?? null,
-          level: (data as any).level ?? null,
-          semester: (data as any).semester ?? null,
-        });
-      } catch { /* prefs are optional */ }
-    })();
-    return () => { mounted = false; };
-  }, []);
+  }, [authedUserId]);
 
   // â"€â"€ Per-set attempt summaries â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€
   // Loaded whenever the visible set list changes. Gives each card personal
@@ -1217,15 +1193,13 @@ function PracticeHomeInner() {
     let cancelled = false;
     (async () => {
       try {
-        const { data: auth } = await supabase.auth.getUser();
-        const uid = auth?.user?.id;
-        if (!uid) return;
+        if (!authedUserId) return;
 
         // Fetch all attempts for visible sets in one query
         const { data, error } = await supabase
           .from("study_practice_attempts")
           .select("id,set_id,status,score,total_questions")
-          .eq("user_id", uid)
+          .eq("user_id", authedUserId)
           .in("set_id", setIds);
 
         if (cancelled || error || !data) return;
@@ -1286,7 +1260,7 @@ function PracticeHomeInner() {
     })();
 
     return () => { cancelled = true; };
-  }, [sets]);
+  }, [sets, authedUserId]);
 
   async function fetchPage(nextPage: number) {
     const isFirst = nextPage === 1;
@@ -1300,6 +1274,22 @@ function PracticeHomeInner() {
     }
 
     try {
+      const course = courseParam.trim().toUpperCase();
+      const strictForYouWithoutCourses =
+        isFirst &&
+        viewParam === "for_you" &&
+        !personalizedOff &&
+        !course &&
+        isProfileComplete &&
+        courseCodes.length === 0;
+
+      if (strictForYouWithoutCourses) {
+        setSets([]);
+        setTotal(0);
+        setHasMore(false);
+        return;
+      }
+
       const from = (nextPage - 1) * PAGE_SIZE;
       const to = from + PAGE_SIZE - 1;
       const disabledColumns = new Set<PracticeSetOptionalField>();
@@ -1339,7 +1329,6 @@ function PracticeHomeInner() {
           }
         }
 
-        const course = courseParam.trim().toUpperCase();
         if (course) query = query.eq("course_code", course);
         else if (viewParam === "for_you" && !personalizedOff && courseCodes.length > 0) {
           query = query.in("course_code", courseCodes);
@@ -1436,9 +1425,10 @@ function PracticeHomeInner() {
   }
 
   useEffect(() => {
+    if (shouldDeferSetFetch) return;
     fetchPage(1);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [filtersKey]);
+  }, [filtersKey, shouldDeferSetFetch]);
 
   function openFilters() {
     setDraftCourse(courseParam);
@@ -1727,7 +1717,7 @@ function PracticeHomeInner() {
       </div>
 
       {/* Suggested for today widget */}
-      <SuggestedTodayWidget />
+      <SuggestedTodayWidget userId={authedUserId} />
 
       {/* NOT STICKY: Search + filters (regular block) */}
       <Card className="w-full max-w-full overflow-hidden rounded-3xl border bg-background/85 backdrop-blur p-3">
