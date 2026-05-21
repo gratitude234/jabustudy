@@ -115,7 +115,9 @@ export async function getStudyModeratorScopeByUserId(userId: string): Promise<{ 
 
     // HARD REQUIREMENT for both course reps and dept librarians:
     // without department scope, permissions become dangerous.
+    // Super admins fall back to unrestricted super scope if their rep row is broken.
     if (!departmentId) {
+      if (isSuper) return { scope: { role: "super", facultyId: null, departmentId: null, levels: null }, isSuper: true };
       throw httpError(
         "Moderator scope misconfigured (missing department). Contact admin.",
         403,
@@ -136,6 +138,7 @@ export async function getStudyModeratorScopeByUserId(userId: string): Promise<{ 
 
     // course_rep: MUST have levels
     if (!parsedLevels) {
+      if (isSuper) return { scope: { role: "super", facultyId: null, departmentId: null, levels: null }, isSuper: true };
       throw httpError(
         "Moderator scope misconfigured (missing levels). Contact admin.",
         403,

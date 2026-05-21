@@ -179,7 +179,8 @@ export default function StudyAdminRepApplicationsPage() {
         return;
       }
       if (res.status === 403) {
-        router.replace("/study");
+        const j = await res.json().catch(() => ({}));
+        setErr(`Access denied (${j?.code ?? "FORBIDDEN"}): ${j?.message ?? "Your account is not in the study_admins table."}`);
         return;
       }
 
