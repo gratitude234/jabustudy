@@ -17,7 +17,7 @@ import { supabase } from "@/lib/supabase";
  */
 export default function StudyAdminLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter();
-  const pathname = usePathname();
+  const pathname = usePathname(); // used for login redirect "next" param
   const [allowed, setAllowed] = useState(false);
   const [loading, setLoading] = useState(true);
 
@@ -47,7 +47,6 @@ export default function StudyAdminLayout({ children }: { children: React.ReactNo
           return;
         }
         if (!res.ok) {
-          // fallback to study page on unexpected errors
           router.replace("/study");
           return;
         }
@@ -60,7 +59,11 @@ export default function StudyAdminLayout({ children }: { children: React.ReactNo
     return () => {
       mounted = false;
     };
-  }, [router, pathname]);
+    // Run once on mount only — the layout persists across study-admin navigations,
+    // so re-checking on every pathname change caused spurious redirects when the
+    // summary API had a transient error mid-session.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   if (loading) {
     return (
