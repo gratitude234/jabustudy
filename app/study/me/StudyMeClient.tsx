@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import type { ReactNode } from "react";
 import { useEffect, useMemo, useState } from "react";
 import {
@@ -14,6 +15,7 @@ import {
   History,
   Library,
   Loader2,
+  LogOut,
   MessageCircleQuestion,
   PenLine,
   Settings,
@@ -171,8 +173,11 @@ function StudyMeSkeleton() {
 
 function StudyMeInner() {
   const { loading, userId, userEmail, displayName, prefs, hasPrefs, rep } = useStudyPrefs();
+  const router = useRouter();
   const [counts, setCounts] = useState<Counts>(EMPTY_COUNTS);
   const [countsLoading, setCountsLoading] = useState(false);
+  const [loggingOut, setLoggingOut] = useState(false);
+  const [logoutError, setLogoutError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!userId) return;
@@ -233,6 +238,22 @@ function StudyMeInner() {
   const isContributor = rep.status === "approved";
   const repBadge = roleLabel(rep.status, rep.role);
 
+  async function handleLogout() {
+    if (loggingOut) return;
+    setLoggingOut(true);
+    setLogoutError(null);
+
+    const { error } = await supabase.auth.signOut();
+    if (error) {
+      setLogoutError(error.message || "We could not log you out. Please try again.");
+      setLoggingOut(false);
+      return;
+    }
+
+    router.replace("/login");
+    router.refresh();
+  }
+
   return (
     <div className="space-y-4 pb-28 md:pb-6">
       <StudyTabs contributorStatus={loading ? undefined : rep.status} />
@@ -246,15 +267,32 @@ function StudyMeInner() {
         title="Study Profile"
         subtitle="Your academic hub for saved resources, practice progress and contributor tools."
         right={
-          <Link
-            href="/study/onboarding"
-            className="inline-flex items-center gap-2 rounded-2xl border border-border bg-card px-3 py-2 text-sm font-semibold text-foreground no-underline shadow-sm transition hover:bg-secondary/40"
-          >
-            <Settings className="h-4 w-4" />
-            Edit profile
-          </Link>
+          <div className="flex flex-wrap items-center justify-end gap-2">
+            <Link
+              href="/study/onboarding"
+              className="inline-flex items-center gap-2 rounded-2xl border border-border bg-card px-3 py-2 text-sm font-semibold text-foreground no-underline shadow-sm transition hover:bg-secondary/40"
+            >
+              <Settings className="h-4 w-4" />
+              Edit profile
+            </Link>
+            <button
+              type="button"
+              onClick={handleLogout}
+              disabled={loggingOut}
+              className="inline-flex items-center gap-2 rounded-2xl border border-red-200 bg-red-50 px-3 py-2 text-sm font-semibold text-red-700 shadow-sm transition hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500/40"
+            >
+              {loggingOut ? <Loader2 className="h-4 w-4 animate-spin" /> : <LogOut className="h-4 w-4" />}
+              {loggingOut ? "Logging out" : "Log out"}
+            </button>
+          </div>
         }
       />
+
+      {logoutError ? (
+        <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-medium text-red-700">
+          {logoutError}
+        </div>
+      ) : null}
 
       <Card className="space-y-4">
         <div className="flex items-start justify-between gap-4">
