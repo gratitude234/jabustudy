@@ -282,7 +282,7 @@ export async function POST(req: NextRequest) {
       sourceTopic,
     }))],
     temperature: 0.2,
-    maxTokens: 900,
+    maxTokens: 600,
     timeoutMs: 45_000,
     modelRole: "fast",
     model: EXPLAIN_MODEL,

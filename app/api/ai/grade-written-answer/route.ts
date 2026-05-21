@@ -140,10 +140,9 @@ Return ONLY valid JSON with this exact shape:
   "score": 0,
   "maxScore": 10,
   "verdict": "correct" | "mostly_correct" | "partially_correct" | "incorrect" | "unanswered",
-  "feedback": "2-4 concise sentences explaining the score.",
+  "feedback": "2-3 concise sentences explaining the score.",
   "matchedPoints": ["specific correct points the student included"],
-  "missingPoints": ["important points the student missed"],
-  "improvedAnswer": "a better answer the student could have written"
+  "missingPoints": ["important points the student missed"]
 }
 
 The score must be between 0 and 10.`;
@@ -179,12 +178,37 @@ export async function POST(req: NextRequest) {
   if (attemptError) return jsonError(attemptError.message || "Could not load attempt.", 500, "DB_ERROR");
   if (!attempt?.id) return jsonError("Attempt not found.", 404, "ATTEMPT_NOT_FOUND");
 
-  const { data: question, error: questionError } = await admin
-    .from("study_quiz_questions")
-    .select("id,set_id,prompt,question_type,model_answer,marking_points")
-    .eq("id", questionId)
-    .eq("set_id", attempt.set_id)
-    .maybeSingle();
+  const hash = answerHash(answer);
+  const [questionResult, existingAnswerResult] = await Promise.all([
+    admin
+      .from("study_quiz_questions")
+      .select("id,set_id,prompt,question_type,model_answer,marking_points")
+      .eq("id", questionId)
+      .eq("set_id", attempt.set_id)
+      .maybeSingle(),
+    admin
+      .from("study_attempt_answers")
+      .select([
+        "question_id",
+        "ai_grade_score",
+        "ai_grade_max_score",
+        "ai_grade_verdict",
+        "ai_grade_feedback",
+        "ai_grade_matched_points",
+        "ai_grade_missing_points",
+        "ai_grade_improved_answer",
+        "ai_grade_provider",
+        "ai_grade_model",
+        "ai_grade_answer_hash",
+        "ai_graded_at",
+      ].join(","))
+      .eq("attempt_id", attemptId)
+      .eq("question_id", questionId)
+      .maybeSingle(),
+  ]);
+
+  const { data: question, error: questionError } = questionResult;
+  const { data: existingAnswer, error: answerError } = existingAnswerResult;
 
   if (questionError) return jsonError(questionError.message || "Could not load question.", 500, "DB_ERROR");
   if (!question?.id) return jsonError("Question not found for this attempt.", 404, "QUESTION_NOT_FOUND");
@@ -193,27 +217,6 @@ export async function POST(req: NextRequest) {
     ? question.question_type
     : "mcq";
   if (questionType === "mcq") return jsonError("AI grading is only available for written questions.", 400, "NOT_WRITTEN");
-
-  const hash = answerHash(answer);
-  const { data: existingAnswer, error: answerError } = await admin
-    .from("study_attempt_answers")
-    .select([
-      "question_id",
-      "ai_grade_score",
-      "ai_grade_max_score",
-      "ai_grade_verdict",
-      "ai_grade_feedback",
-      "ai_grade_matched_points",
-      "ai_grade_missing_points",
-      "ai_grade_improved_answer",
-      "ai_grade_provider",
-      "ai_grade_model",
-      "ai_grade_answer_hash",
-      "ai_graded_at",
-    ].join(","))
-    .eq("attempt_id", attemptId)
-    .eq("question_id", questionId)
-    .maybeSingle();
 
   if (answerError) return jsonError(answerError.message || "Could not load answer.", 500, "DB_ERROR");
   const existingAnswerRow = existingAnswer as Record<string, any> | null;
@@ -231,7 +234,7 @@ export async function POST(req: NextRequest) {
       studentAnswer: answer,
     }))],
     temperature: 0.1,
-    maxTokens: 900,
+    maxTokens: 500,
     timeoutMs: 45_000,
     modelRole: "fast",
   });

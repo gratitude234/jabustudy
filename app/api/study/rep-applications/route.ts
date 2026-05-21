@@ -102,12 +102,17 @@ export async function POST(req: Request) {
   // 3) Create application
   // Prefer `levels` if the DB has it; keep `level` for legacy schemas.
   // We insert both when possible — extra columns will be ignored only if they exist.
+  const photo_url = typeof body?.photo_url === "string" && body.photo_url.startsWith("http")
+    ? body.photo_url
+    : null;
+
   const insertPayload: Record<string, any> = {
     user_id,
     faculty_id,
     department_id,
-    role, // store normalized role
+    role,
     status: "pending",
+    photo_url,
   };
 
   // For course_rep, keep legacy level too (for old UIs/DB)

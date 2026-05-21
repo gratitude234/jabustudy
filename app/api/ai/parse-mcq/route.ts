@@ -10,7 +10,8 @@ type ParsedQuestion = {
 };
 
 export async function POST(req: NextRequest) {
-  const { text } = await req.json();
+  const { text: rawText } = await req.json();
+  const text = typeof rawText === "string" ? rawText.slice(0, 25_000) : rawText;
 
   if (!text || text.trim().length < 20) {
     return NextResponse.json({ error: "Text too short" }, { status: 400 });

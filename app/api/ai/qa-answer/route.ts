@@ -31,7 +31,9 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
   }
 
-  const { questionId, title, questionBody, courseCode, level } = body;
+  const { questionId, courseCode, level } = body;
+  const title = typeof body.title === "string" ? body.title.slice(0, 500) : body.title;
+  const questionBody = typeof body.questionBody === "string" ? body.questionBody.slice(0, 3000) : body.questionBody;
 
   if (!questionId || !title) {
     return NextResponse.json({ error: "Missing required fields" }, { status: 400 });

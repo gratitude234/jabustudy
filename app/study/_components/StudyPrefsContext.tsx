@@ -7,7 +7,7 @@ import {
   useState,
   useMemo,
 } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, usePathname } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 
 // ── Types ────────────────────────────────────────────────────────────────────
@@ -46,6 +46,7 @@ type RepMeResponse =
         levels: number[] | null;
         all_levels: boolean;
       } | null;
+      courses_setup_done?: boolean;
     }
   | { ok: false; code?: string; message?: string };
 
@@ -67,6 +68,7 @@ export type RepState = {
   status: RepStatus;
   role: RepRole;
   scope: Extract<RepMeResponse, { ok: true }>["scope"];
+  courses_setup_done: boolean;
 };
 
 // ── Context shape ─────────────────────────────────────────────────────────────
@@ -108,6 +110,7 @@ const StudyPrefsContext = createContext<StudyPrefsCtx | null>(null);
 
 export function StudyPrefsProvider({ children }: { children: React.ReactNode }) {
   const router = useRouter();
+  const pathname = usePathname();
 
   const [loading, setLoading] = useState(true);
   const [userId, setUserId] = useState<string | null>(null);
@@ -125,6 +128,7 @@ export function StudyPrefsProvider({ children }: { children: React.ReactNode }) 
     status: "not_applied",
     role: null,
     scope: null,
+    courses_setup_done: true,
   });
 
   useEffect(() => {
@@ -173,7 +177,19 @@ export function StudyPrefsProvider({ children }: { children: React.ReactNode }) 
       // ── Rep state ──────────────────────────────────────────────────────────
       if (repJson && (repJson as any).ok) {
         const ok = repJson as Extract<RepMeResponse, { ok: true }>;
-        setRep({ loading: false, status: ok.status, role: ok.role, scope: ok.scope });
+        const setupDone = ok.courses_setup_done ?? true;
+        setRep({ loading: false, status: ok.status, role: ok.role, scope: ok.scope, courses_setup_done: setupDone });
+
+        // Gate: approved course_reps who haven't set up their courses must do so first
+        if (
+          ok.status === "approved" &&
+          ok.role === "course_rep" &&
+          !setupDone &&
+          !pathname.startsWith("/study/rep-setup")
+        ) {
+          router.replace("/study/rep-setup");
+          return;
+        }
       } else {
         setRep((p) => ({ ...p, loading: false }));
       }

@@ -350,8 +350,9 @@ async function handleGenerateQuestionsRequest(req: NextRequest) {
     .filter(Boolean)
     .join("\n");
 
-  const coveredInstruction = coveredQuestions.length > 0
-    ? `\n\nThe following questions have ALREADY been generated from this document. Do NOT repeat these topics or ask similar questions. Identify sections or concepts in the document that are NOT covered by these questions and generate new questions from those parts:\n${coveredQuestions.map((q, i) => `${i + 1}. ${q}`).join("\n")}`
+  const cappedCoveredQuestions = coveredQuestions.slice(-20);
+  const coveredInstruction = cappedCoveredQuestions.length > 0
+    ? `\n\nThe following questions have ALREADY been generated from this document. Do NOT repeat these topics or ask similar questions. Identify sections or concepts in the document that are NOT covered by these questions and generate new questions from those parts:\n${cappedCoveredQuestions.map((q, i) => `${i + 1}. ${q}`).join("\n")}`
     : "";
   const formatInstruction = questionFormatInstruction(questionFormat, questionCount);
 

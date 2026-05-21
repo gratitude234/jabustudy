@@ -42,7 +42,7 @@ export async function GET() {
   // 1) If user is already approved in study_reps, that is the source of truth.
   const { data: repRow, error: repErr } = await admin
     .from("study_reps")
-    .select("user_id, role, faculty_id, department_id, levels, active, created_at")
+    .select("user_id, role, faculty_id, department_id, levels, active, created_at, courses_setup_done")
     .eq("user_id", user_id)
     .maybeSingle();
 
@@ -62,6 +62,7 @@ export async function GET() {
         levels,
         all_levels: role === "dept_librarian",
       },
+      courses_setup_done: (repRow as any)?.courses_setup_done ?? true,
       rep: {
         created_at: repRow.created_at,
         active: repRow.active,

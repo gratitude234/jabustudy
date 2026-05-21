@@ -206,7 +206,7 @@ async function loadIndexedChunks(materialId: string): Promise<MaterialChunk[]> {
     .select("id,page_number,chunk_index,text")
     .eq("material_id", materialId)
     .order("chunk_index", { ascending: true })
-    .limit(500);
+    .limit(200);
 
   if (error) {
     console.warn("[question-v2] chunk load failed:", error.message);
@@ -221,7 +221,7 @@ async function loadExistingQuestionMemory(materialId: string) {
     .from("study_quiz_questions")
     .select("prompt,question_fingerprint,source_topic")
     .eq("source_material_id", materialId)
-    .limit(300);
+    .limit(60);
 
   if (error) {
     console.warn("[question-v2] existing question memory failed:", error.message);
@@ -237,7 +237,10 @@ async function loadExistingQuestionMemory(materialId: string) {
     .filter((row) => row.prompt);
 }
 
+const OUTLINE_CACHE_TTL_MS = 24 * 60 * 60 * 1000;
+
 async function buildSourceOutline(args: {
+  materialId: string;
   materialTitle: string;
   count: number;
   focus?: string;
@@ -245,6 +248,44 @@ async function buildSourceOutline(args: {
 }): Promise<{ topics: OutlineTopic[]; cataloguedChunks: MaterialChunk[]; ai?: CoverageGenerationResult["ai"] }> {
   const cataloguedChunks = selectCatalogChunks(args.chunks);
   const chunksById = new Map(args.chunks.map((chunk) => [chunk.id, chunk]));
+
+  // Check DB cache (skip when a focus is set — focused outlines are too specific to cache)
+  if (!args.focus) {
+    const { data: mat } = await adminSupabase
+      .from("study_materials")
+      .select("ai_outline, ai_outline_at")
+      .eq("id", args.materialId)
+      .maybeSingle();
+
+    const cacheAge = mat?.ai_outline_at
+      ? Date.now() - new Date(mat.ai_outline_at as string).getTime()
+      : Infinity;
+
+    if (mat?.ai_outline && cacheAge < OUTLINE_CACHE_TTL_MS) {
+      const cached = mat.ai_outline as { topics?: Array<Record<string, unknown>> };
+      const topics = (Array.isArray(cached.topics) ? cached.topics : [])
+        .map((raw) => {
+          const chunkIds = Array.isArray(raw.chunkIds)
+            ? (raw.chunkIds as string[]).filter((id) => chunksById.has(id)).slice(0, 6)
+            : [];
+          const title = typeof raw.title === "string" ? raw.title.trim() : "";
+          const importance = Math.max(1, Math.min(5, Number(raw.importance ?? 3)));
+          const suggestedQuestionCount = Math.max(1, Math.min(5, Number(raw.suggestedQuestionCount ?? 1)));
+          const examAngles = Array.isArray(raw.examAngles)
+            ? (raw.examAngles as unknown[]).map((a) => String(a).trim()).filter(Boolean).slice(0, 4)
+            : [];
+          return { title, chunkIds, importance, suggestedQuestionCount, examAngles };
+        })
+        .filter((topic) => topic.title && topic.chunkIds.length > 0)
+        .slice(0, 12);
+
+      if (topics.length > 0) {
+        console.info("[question-gen] outline cache hit", { materialId: args.materialId });
+        return { topics, cataloguedChunks };
+      }
+    }
+  }
+
   const prompt = `You are creating an exam coverage outline from a study material.
 Material: ${args.materialTitle}
 ${args.focus ? `Student focus request: ${args.focus}` : ""}
@@ -294,8 +335,21 @@ Return ONLY JSON:
     .filter((topic) => topic.title && topic.chunkIds.length > 0)
     .slice(0, 12);
 
+  const finalTopics = topics.length ? topics : fallbackOutline(cataloguedChunks, args.count);
+
+  // Write to DB cache (fire-and-forget; don't block generation if write fails)
+  if (!args.focus && topics.length > 0) {
+    adminSupabase
+      .from("study_materials")
+      .update({ ai_outline: { topics: finalTopics }, ai_outline_at: new Date().toISOString() })
+      .eq("id", args.materialId)
+      .then(({ error }) => {
+        if (error) console.warn("[question-gen] outline cache write failed:", error.message);
+      });
+  }
+
   return {
-    topics: topics.length ? topics : fallbackOutline(cataloguedChunks, args.count),
+    topics: finalTopics,
     cataloguedChunks,
     ai: {
       provider: result.provider,
@@ -457,16 +511,34 @@ function buildCoveragePlan(args: {
   return plan;
 }
 
+const FAILURE_DESCRIPTIONS: Record<string, string> = {
+  duplicate_options: "Two or more answer options were identical. Make all four options clearly distinct.",
+  weak_option: "Options included 'all of the above' or 'none of the above'. Replace with specific alternatives.",
+  thin_explanation: "The explanation was too short. Write at least 2 sentences explaining why the answer is correct.",
+  hint_leaks_answer: "The hint directly stated the correct answer text. Rewrite the hint to point to the concept only.",
+  exact_duplicate: "The question was an exact duplicate of an existing question. Write a question on a different aspect of the topic.",
+  fingerprint_duplicate: "The question was too similar to an existing question. Choose a different exam angle.",
+  near_duplicate: "The question was too similar to an existing question. Choose a different exam angle.",
+};
+
+function failureDescription(code: string): string {
+  return FAILURE_DESCRIPTIONS[code] ?? `Previous attempt failed (${code}). Try a different approach.`;
+}
+
 async function generatePlannedQuestion(args: {
   materialTitle: string;
   plan: PlannedQuestion;
   chunk: MaterialChunk;
   avoidPrompts: string[];
   generationIntent?: StudyGenerationIntent | null;
+  retryReason?: string;
 }) {
   const page = typeof args.chunk.page_number === "number" ? `Page ${args.chunk.page_number}` : "Unknown page";
   const intentInstruction = args.generationIntent
     ? `Generation mode: ${generationIntentLabel(args.generationIntent)}. ${generationIntentReason(args.generationIntent)}`
+    : "";
+  const retryInstruction = args.retryReason
+    ? `\nPrevious attempt was rejected: ${args.retryReason} Fix this specific issue.\n`
     : "";
   const prompt = `You are writing one high-quality Nigerian university exam MCQ from the source chunk.
 Material: ${args.materialTitle}
@@ -475,8 +547,7 @@ Question kind: ${args.plan.questionKind}
 Difficulty: ${args.plan.difficultyLevel}
 Cognitive level: ${args.plan.cognitiveLevel}
 Source: ${page}
-${intentInstruction}
-
+${intentInstruction}${retryInstruction}
 Avoid repeating or closely paraphrasing these questions:
 ${args.avoidPrompts.slice(-35).map((q, i) => `${i + 1}. ${q}`).join("\n") || "None"}
 
@@ -640,6 +711,7 @@ export async function generateCoverageAwareQuestions(args: {
   generationIntent?: StudyGenerationIntent | null;
   topicId?: string | null;
   subtopicId?: string | null;
+  onQuestion?: (question: CoverageGeneratedQuestion) => void;
 }): Promise<CoverageGenerationResult | null> {
   const chunks = await loadIndexedChunks(args.materialId);
   if (chunks.length === 0) return null;
@@ -666,6 +738,7 @@ export async function generateCoverageAwareQuestions(args: {
   let outlineAi: CoverageGenerationResult["ai"] | undefined;
   if (!coveragePlan?.items.length) {
     const outline = await buildSourceOutline({
+      materialId: args.materialId,
       materialTitle: args.materialTitle,
       count: args.count,
       focus: args.focus,
@@ -695,43 +768,97 @@ export async function generateCoverageAwareQuestions(args: {
   const failures: Record<string, number> = {};
   let ai = outlineAi;
 
-  for (const planned of plan) {
-    if (accepted.length >= args.count) break;
-    const chunk = chunksById.get(planned.chunkId);
-    if (!chunk) continue;
+  const BATCH_SIZE = parsePositiveInt(process.env.QUESTION_BATCH_SIZE) ?? 4;
+  let planCursor = 0;
 
-    let acceptedThisPlan = false;
-    for (let attempt = 0; attempt < 2 && !acceptedThisPlan; attempt++) {
-      const generated = await generatePlannedQuestion({
-        materialTitle: args.materialTitle,
-        plan: planned,
-        chunk,
-        avoidPrompts: [...usedPrompts, ...accepted.map((question) => question.question)],
-        generationIntent: args.generationIntent,
-      });
-      const raw = generated?.question ?? null;
-      if (generated?.ai) ai = generated.ai;
-      if (!raw) {
-        failures.ai_empty = (failures.ai_empty ?? 0) + 1;
-        continue;
-      }
+  while (accepted.length < args.count && planCursor < plan.length) {
+    // Collect next BATCH_SIZE valid plan items (skip those with missing chunks)
+    const batchItems: PlannedQuestion[] = [];
+    let sliceCursor = planCursor;
+    while (batchItems.length < BATCH_SIZE && sliceCursor < plan.length) {
+      const planned = plan[sliceCursor++];
+      if (chunksById.has(planned.chunkId)) batchItems.push(planned);
+    }
+    planCursor = sliceCursor;
+    if (batchItems.length === 0) break;
 
-      const question = normalizeGeneratedQuestion(raw, planned, chunk, args.generationIntent);
-      if (!question) {
-        failures.malformed = (failures.malformed ?? 0) + 1;
-        continue;
-      }
+    // Snapshot avoidance state before any concurrent call — all batch tasks share this
+    const avoidSnapshot = [...usedPrompts, ...accepted.map((q) => q.question)];
 
-      const failure = validationFailure(question, [...usedPrompts, ...accepted.map((q) => q.question)], usedFingerprints);
-      if (failure) {
-        failures[failure] = (failures[failure] ?? 0) + 1;
+    type BatchResult = {
+      question: CoverageGeneratedQuestion;
+      aiMeta: CoverageGenerationResult["ai"] | undefined;
+    } | null;
+
+    // Generate all batch items concurrently; each keeps its own per-question retry
+    const batchResults: BatchResult[] = await Promise.all(
+      batchItems.map(async (planned): Promise<BatchResult> => {
+        const chunk = chunksById.get(planned.chunkId)!;
+        let retryReason: string | undefined;
+        for (let attempt = 0; attempt < 2; attempt++) {
+          const generated = await generatePlannedQuestion({
+            materialTitle: args.materialTitle,
+            plan: planned,
+            chunk,
+            avoidPrompts: avoidSnapshot,
+            generationIntent: args.generationIntent,
+            retryReason,
+          });
+          const raw = generated?.question ?? null;
+          if (!raw) {
+            failures.ai_empty = (failures.ai_empty ?? 0) + 1;
+            retryReason = failureDescription("ai_empty");
+            continue;
+          }
+          const question = normalizeGeneratedQuestion(raw, planned, chunk, args.generationIntent);
+          if (!question) {
+            failures.malformed = (failures.malformed ?? 0) + 1;
+            retryReason = failureDescription("malformed");
+            continue;
+          }
+          // Pre-batch dedup against the shared snapshot (cross-question dedup below)
+          const failure = validationFailure(question, avoidSnapshot, usedFingerprints);
+          if (failure) {
+            failures[failure] = (failures[failure] ?? 0) + 1;
+            retryReason = failureDescription(failure);
+            continue;
+          }
+          return {
+            question,
+            aiMeta: generated?.ai,
+          };
+        }
+        return null;
+      })
+    );
+
+    // Within-batch dedup: process results in plan order to catch cross-question collisions
+    const batchAcceptedPrompts: string[] = [];
+    const batchAcceptedFingerprints = new Set<string>();
+
+    for (const result of batchResults) {
+      if (accepted.length >= args.count) break;
+      if (!result) continue;
+      const { question, aiMeta } = result;
+
+      const allPrompts = [...usedPrompts, ...accepted.map((q) => q.question), ...batchAcceptedPrompts];
+      const allFingerprints = new Set([...usedFingerprints, ...batchAcceptedFingerprints]);
+
+      const crossFailure = validationFailure(question, allPrompts, allFingerprints);
+      if (crossFailure) {
+        failures[crossFailure] = (failures[crossFailure] ?? 0) + 1;
         continue;
       }
 
       accepted.push(question);
-      usedFingerprints.add(question.questionFingerprint ?? "");
-      acceptedThisPlan = true;
+      args.onQuestion?.(question);
+      batchAcceptedPrompts.push(question.question);
+      batchAcceptedFingerprints.add(question.questionFingerprint ?? "");
+      if (aiMeta) ai = aiMeta;
     }
+
+    // Commit batch fingerprints to the shared set for subsequent batches
+    for (const fp of batchAcceptedFingerprints) usedFingerprints.add(fp);
   }
 
   if (accepted.length === 0) {

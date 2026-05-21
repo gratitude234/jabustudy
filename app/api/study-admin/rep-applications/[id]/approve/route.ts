@@ -72,7 +72,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   // Fetch application
   const { data: appRow, error: appErr } = await adminDb
     .from("study_rep_applications")
-    .select("id, user_id, status, role, faculty_id, department_id, level, levels")
+    .select("id, user_id, status, role, faculty_id, department_id, level, levels, photo_url")
     .eq("id", id)
     .maybeSingle();
 
@@ -121,8 +121,9 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     faculty_id,
     department_id,
     active: true,
-    role, // store new roles
+    role,
     levels: role === "dept_librarian" ? null : levels,
+    photo_url: (appRow as any)?.photo_url ?? null,
   };
 
   const { error: upsertErr } = await adminDb.from("study_reps").upsert(repPayload, { onConflict: "user_id" });
@@ -145,12 +146,16 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   // C-6: Notify applicant
   try {
     const roleLabel = role === 'dept_librarian' ? 'Dept Librarian' : 'Course Rep';
+    const href = role === 'course_rep' ? '/study/rep-setup' : '/study/materials/upload';
+    const body = role === 'course_rep'
+      ? 'Your application was approved. Start by adding all courses your department offers.'
+      : 'Your application was approved. You can now upload and manage materials for your department.';
     await adminDb.from('notifications').insert({
       user_id: appRow.user_id,
       type:    'rep_approved',
       title:   `You're now a ${roleLabel}!`,
-      body:    'Your application was approved. You can now upload and manage materials for your department.',
-      href:    '/study/materials/upload',
+      body,
+      href,
     });
   } catch { /* non-critical */ }
 
