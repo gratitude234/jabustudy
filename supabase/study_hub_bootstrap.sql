@@ -507,7 +507,12 @@ create table if not exists public.ai_rate_limits (
   primary key (user_id, endpoint)
 );
 
-create or replace view public.study_leaderboard_v as
+-- Recreate views instead of CREATE OR REPLACE because Postgres refuses
+-- replacements that remove columns from an existing view definition.
+drop view if exists public.study_leaderboard_weekly_v;
+drop view if exists public.study_leaderboard_v;
+
+create view public.study_leaderboard_v as
 select
   user_id,
   sum(coalesce(correct_answers, 0))::int as points,
@@ -517,7 +522,7 @@ select
 from public.study_daily_activity
 group by user_id;
 
-create or replace view public.study_leaderboard_weekly_v as
+create view public.study_leaderboard_weekly_v as
 select
   user_id,
   sum(coalesce(correct_answers, 0))::int as points,

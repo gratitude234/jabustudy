@@ -307,14 +307,16 @@ async function runDirectGeneration(args: {
   filePath: string;
   systemPrompt: string;
   formatInstruction: ReturnType<typeof questionFormatInstruction>;
+  onStatus?: (message: string, phase?: string) => void;
 }): Promise<DirectGenResult> {
-  const { material, filePath, systemPrompt, formatInstruction } = args;
+  const { material, filePath, systemPrompt, formatInstruction, onStatus } = args;
 
   // Reuse cached Gemini file URI for PDFs/images — skip download and base64 encoding
   const cachedFileUri = material.gemini_file_uri?.trim() ?? "";
   const cachedMimeType = cachedFileUri ? mimeTypeFromPath(filePath) : null;
 
   if (cachedFileUri && cachedMimeType) {
+    onStatus?.("Using the indexed source file with the AI model.", "file-uri");
     const parts: AiContentBlock[] = [
       { type: "file", mimeType: cachedMimeType, fileUri: cachedFileUri },
       { type: "text", text: systemPrompt },
@@ -351,6 +353,7 @@ async function runDirectGeneration(args: {
   }
 
   // Resolve signed download URL
+  onStatus?.("Preparing the material file for reading.", "prepare-file");
   const admin = adminSupabase;
   const { data: signed } = await admin.storage
     .from("study-materials")
@@ -360,6 +363,7 @@ async function runDirectGeneration(args: {
 
   let fileBuffer: ArrayBuffer;
   try {
+    onStatus?.("Downloading the material securely.", "download-file");
     const fetchRes = await fetch(downloadUrl, { signal: AbortSignal.timeout(30_000) });
     if (!fetchRes.ok) throw new Error(`HTTP ${fetchRes.status}`);
     fileBuffer = await fetchRes.arrayBuffer();
@@ -371,10 +375,12 @@ async function runDirectGeneration(args: {
     throw new Error("File is too large for AI question generation (max 15 MB). Try a shorter document.");
   }
 
+  onStatus?.("Reading the document content.", "extract-content");
   const content = await extractMaterialContent(fileBuffer, filePath);
   if (content.kind === "unsupported") throw new Error(content.message);
 
   if (content.kind === "text") {
+    onStatus?.("Generating questions from the extracted text.", "ai-generate");
     const truncated = truncateText(content.text, QUESTION_GEN_TEXT_CHARS);
     const result = await generateJson<{ questions: unknown[] }>({
       messages: [userMessage(`DOCUMENT CONTENT:\n\n${truncated}\n\n${systemPrompt}`)],
@@ -409,6 +415,7 @@ async function runDirectGeneration(args: {
 
   if (content.kind !== "inline") throw new Error("Unexpected content kind.");
 
+  onStatus?.("Sending the file directly to the AI model.", "ai-generate-file");
   const parts: AiContentBlock[] = [
     { type: "inline", mimeType: content.mimeType, data: content.base64, name: "study material" },
     { type: "text", text: systemPrompt },
@@ -571,13 +578,18 @@ Return ONLY a valid JSON object with no markdown, no backticks, no preamble:
       const emit = (obj: object) => {
         controller.enqueue(encoder.encode(JSON.stringify(obj) + "\n"));
       };
+      const emitStatus = (message: string, phase?: string) => {
+        emit({ type: "status", message, phase });
+      };
 
       try {
+        emitStatus("Starting question generation.", "start");
         // Coverage-aware MCQ path
         if (questionFormat === "mcq") {
           let emittedAny = false;
 
           try {
+            emitStatus("Planning source-backed questions from indexed chunks.", "coverage-plan");
             const coverageResult = await generateCoverageAwareQuestions({
               materialId,
               materialTitle: material.title ?? "Untitled material",
@@ -590,6 +602,7 @@ Return ONLY a valid JSON object with no markdown, no backticks, no preamble:
               subtopicId,
               onQuestion: (q) => {
                 emit({ type: "question", question: q });
+                emitStatus("Checking quality and source references.", "coverage-question");
                 emittedAny = true;
               },
             });
@@ -650,6 +663,7 @@ Return ONLY a valid JSON object with no markdown, no backticks, no preamble:
             if (material.index_status === "ready") {
               console.warn("[generate-questions] indexed material using best-effort fallback:", { materialId });
             }
+            emitStatus("Using the best available document-reading path instead.", "direct-fallback");
           }
 
           // If emittedAny but coverageResult had 0 questions (shouldn't happen), exit cleanly
@@ -662,8 +676,10 @@ Return ONLY a valid JSON object with no markdown, no backticks, no preamble:
           filePath,
           systemPrompt,
           formatInstruction,
+          onStatus: emitStatus,
         });
 
+        emitStatus("Finalizing generated questions.", "finalize");
         for (const q of directResult.questions) {
           emit({ type: "question", question: q });
         }

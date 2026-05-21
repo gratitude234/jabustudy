@@ -120,6 +120,11 @@ type GenerateQuestionsResponse = {
   error?: string;
 };
 
+type GenerationStreamStatus = {
+  message: string;
+  phase?: string;
+};
+
 const STUDENT_GENERATION_MODES: Array<{ value: GenerationMode; label: string; sub: string }> = [
   { value: "auto", label: "Auto", sub: "Let Jabu choose the best next set." },
   { value: "weak_areas", label: "Cover weak areas", sub: "Prioritize topics with fewer questions." },
@@ -293,7 +298,8 @@ function withPdfPage(url: string, page?: number) {
 
 async function readNdjsonQuestions(
   res: Response,
-  onQuestion?: (q: GeneratedQuestion) => void
+  onQuestion?: (q: GeneratedQuestion) => void,
+  onStatus?: (status: GenerationStreamStatus) => void
 ): Promise<{ questions: GeneratedQuestion[]; ai: AiGenerationMeta | null }> {
   if (!res.ok) {
     let errorMsg = "Failed to generate questions.";
@@ -326,6 +332,14 @@ async function readNdjsonQuestions(
         if (msg.type === "question") {
           questions.push(msg.question as GeneratedQuestion);
           onQuestion?.(msg.question as GeneratedQuestion);
+        } else if (msg.type === "status") {
+          const message = typeof msg.message === "string" ? msg.message : "";
+          if (message) {
+            onStatus?.({
+              message,
+              phase: typeof msg.phase === "string" ? msg.phase : undefined,
+            });
+          }
         } else if (msg.type === "done") {
           finalAi = msg.ai as AiGenerationMeta;
         } else if (msg.type === "error") {
@@ -764,6 +778,7 @@ export default function MaterialDetailClient({
   const [hintShown, setHintShown] = useState<Record<number, boolean>>({});
   const [generationAi, setGenerationAi] = useState<AiGenerationMeta | null>(null);
   const [streamingQuestions, setStreamingQuestions] = useState<GeneratedQuestion[]>([]);
+  const [generationStatus, setGenerationStatus] = useState("Preparing question generation...");
   const [generationMode, setGenerationMode] = useState<GenerationMode>("auto");
 
   // Quiz state machine
@@ -938,6 +953,7 @@ export default function MaterialDetailClient({
   async function handleGenerateQuestions() {
     setQuizState("loading");
     setStreamingQuestions([]);
+    setGenerationStatus("Preparing question generation...");
     setGenQsError(null);
     setGenerationAi(null);
     setSavedSetId(null);
@@ -957,6 +973,8 @@ export default function MaterialDetailClient({
       });
       const { questions, ai } = await readNdjsonQuestions(res, (q) => {
         setStreamingQuestions((prev) => [...prev, q]);
+      }, (status) => {
+        setGenerationStatus(status.message);
       });
       if (!questions.length) throw new Error("Failed to generate questions.");
       console.info("[study-ai] generated questions", {
@@ -987,6 +1005,8 @@ export default function MaterialDetailClient({
     const intent = resolveGenerationIntent(mode, quizConfig);
     setGeneratingMore(true);
     setGenerateMoreError(null);
+    setStreamingQuestions([]);
+    setGenerationStatus("Preparing the next set...");
     setGenerationMode(mode);
     try {
       const res = await fetch("/api/ai/generate-questions", {
@@ -1001,7 +1021,11 @@ export default function MaterialDetailClient({
           generationIntent: intent,
         }),
       });
-      const { questions: moreQuestions, ai: moreAi } = await readNdjsonQuestions(res);
+      const { questions: moreQuestions, ai: moreAi } = await readNdjsonQuestions(res, (q) => {
+        setStreamingQuestions((prev) => [...prev, q]);
+      }, (status) => {
+        setGenerationStatus(status.message);
+      });
       if (!moreQuestions.length) throw new Error("Failed to generate questions.");
       console.info("[study-ai] generated more questions", {
         provider: moreAi?.provider ?? "unknown",
@@ -1028,6 +1052,7 @@ export default function MaterialDetailClient({
       setGenerateMoreError(e instanceof Error ? e.message : "Something went wrong.");
     } finally {
       setGeneratingMore(false);
+      setStreamingQuestions([]);
     }
   }
 
@@ -1493,12 +1518,39 @@ export default function MaterialDetailClient({
 
               {/* ── Panel B: Loading ── */}
               {quizState === "loading" && (
-                <div className="flex flex-1 flex-col items-center justify-center gap-3 py-16">
-                  <Loader2 className="h-8 w-8 animate-spin text-primary" />
-                  {streamingQuestions.length > 0 ? (
-                    <p className="text-sm text-muted-brand">Generated {streamingQuestions.length} of {quizConfig.count} questions...</p>
-                  ) : (
-                    <p className="text-sm text-muted-brand">Generating {quizConfig.count} {formatQuestionFormat(quizConfig.questionFormat)} questions...</p>
+                <div className="flex flex-1 flex-col items-center justify-center gap-5 px-5 py-16 text-center">
+                  <div className="grid h-14 w-14 place-items-center rounded-2xl bg-primary-light text-primary">
+                    <Loader2 className="h-7 w-7 animate-spin" />
+                  </div>
+                  <div className="max-w-sm space-y-2">
+                    <p className="text-base font-bold text-foreground">
+                      {streamingQuestions.length > 0
+                        ? `Generated ${streamingQuestions.length} of ${quizConfig.count} questions`
+                        : `Generating ${quizConfig.count} ${formatQuestionFormat(quizConfig.questionFormat)} questions`}
+                    </p>
+                    <p className="text-sm leading-relaxed text-muted-brand">{generationStatus}</p>
+                  </div>
+                  <div className="h-2 w-full max-w-xs overflow-hidden rounded-full bg-secondary">
+                    <div
+                      className={cn(
+                        "h-full rounded-full bg-primary transition-all duration-500",
+                        streamingQuestions.length === 0 && "w-1/3 animate-pulse"
+                      )}
+                      style={streamingQuestions.length > 0
+                        ? { width: `${Math.min(100, Math.round((streamingQuestions.length / quizConfig.count) * 100))}%` }
+                        : undefined}
+                    />
+                  </div>
+                  {streamingQuestions.length > 0 && (
+                    <div className="w-full max-w-sm space-y-2 text-left">
+                      {streamingQuestions.slice(-3).map((question, index) => (
+                        <div key={`${question.question}-${index}`} className="rounded-xl border border-border bg-background px-3 py-2">
+                          <p className="line-clamp-2 text-xs font-semibold leading-relaxed text-foreground">
+                            {question.question}
+                          </p>
+                        </div>
+                      ))}
+                    </div>
                   )}
                 </div>
               )}
@@ -1787,6 +1839,15 @@ export default function MaterialDetailClient({
                       : <><Sparkles className="h-4 w-4" /> Generate {quizConfig.count} more {formatQuestionFormat(quizConfig.questionFormat)} questions</>
                     }
                   </button>
+                  {generatingMore && (
+                    <div className="rounded-2xl border border-border bg-background px-3 py-2 text-center">
+                      <p className="text-xs font-semibold text-foreground">
+                        {streamingQuestions.length > 0
+                          ? `Generated ${streamingQuestions.length} of ${quizConfig.count}`
+                          : generationStatus}
+                      </p>
+                    </div>
+                  )}
                   {missedList.length > 0 && (
                     <button type="button"
                       onClick={() => {
