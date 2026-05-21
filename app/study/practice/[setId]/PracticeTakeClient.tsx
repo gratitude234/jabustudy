@@ -354,7 +354,6 @@ export default function PracticeTakeClient() {
   // Question navigator drawer
   const [navOpen, setNavOpen] = useState(false);
   const [studyHintOpen, setStudyHintOpen] = useState<Record<string, boolean>>({});
-  const [draining, setDraining] = useState(false);
 
   // Milestone toast — fires once when finalization completes
   const [milestone, setMilestone] = useState<Milestone | null>(null);
@@ -577,7 +576,6 @@ export default function PracticeTakeClient() {
   }
 
   function goNext() {
-    setDraining(false);
     setIdx((v) => Math.min(questions.length - 1, v + 1));
   }
 
@@ -635,21 +633,6 @@ export default function PracticeTakeClient() {
     return () => window.removeEventListener("keydown", onKey);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [opts, current, revealed, submitted, navOpen, isLast, questions.length, choose, setIdx]);
-
-  useEffect(() => {
-    if (!isRevealed || submitted || isLast || isWrittenCurrent) {
-      setDraining(false);
-      return;
-    }
-    const startDrain = setTimeout(() => setDraining(true), 16);
-    const advance = setTimeout(() => setIdx((v) => Math.min(questions.length - 1, v + 1)), 1500);
-    return () => {
-      clearTimeout(startDrain);
-      clearTimeout(advance);
-    };
-  // idx in deps ensures the bar resets on every new question
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isRevealed, idx, submitted, isLast, isWrittenCurrent, questions.length]);
 
   if (dueFetching || (isDueParam && !engineReady)) {
     return (
@@ -1280,6 +1263,8 @@ if (err || !meta) {
                   ? currentQuestionType === "theory"
                     ? "Write your answer, then compare it with the model answer."
                     : "Type a concise answer, then compare it with the model answer."
+                  : isRevealed
+                  ? "Review the feedback, then tap Next when you're ready."
                   : studyMode
                   ? "Study mode — explanation shown after each answer."
                   : "Tap an option to see if it’s right."}
@@ -1450,16 +1435,6 @@ if (err || !meta) {
             </div>
             ) : null}
 
-            {/* Auto-advance bar — drains over 1.5s then moves to next question */}
-            {isRevealed && !submitted && !isLast && !isWrittenCurrent && (
-              <div className="mt-3 h-0.5 w-full overflow-hidden rounded-full bg-primary-light">
-                <div
-                  className="h-full bg-primary transition-[width] duration-[1500ms] ease-linear"
-                  style={{ width: draining ? "0%" : "100%" }}
-                />
-              </div>
-            )}
-
             {current?.id ? (
               <div className="mt-3 flex justify-end">
                 <a
@@ -1500,7 +1475,12 @@ if (err || !meta) {
                   <button
                     type="button"
                     onClick={goNext}
-                    className="inline-flex items-center justify-center rounded-2xl bg-secondary px-4 py-2 text-sm font-extrabold text-foreground hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-card"
+                    className={cn(
+                      "inline-flex items-center justify-center rounded-2xl px-4 py-2 text-sm font-extrabold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-card",
+                      isRevealed
+                        ? "bg-[#5B35D5] text-white hover:bg-[#4526B8]"
+                        : "bg-secondary text-foreground hover:opacity-90"
+                    )}
                   >
                     Next
                   </button>
