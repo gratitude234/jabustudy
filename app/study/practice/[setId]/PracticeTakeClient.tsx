@@ -36,6 +36,7 @@ import { cn, msToClock, normalize } from "@/lib/utils";
 import { publicUrl } from "@/lib/publicUrl";
 import { usePracticeEngine } from "./usePracticeEngine";
 import { supabase } from "@/lib/supabase";
+import type { AnswerConfidence, WrittenAnswerGrade } from "@/lib/types";
 
 type AnyOption = {
   id: string;
@@ -46,8 +47,22 @@ type AnyOption = {
   isCorrect?: boolean | null;
 };
 
+type WrittenGradeState =
+  | { status: "idle" }
+  | { status: "loading" }
+  | { status: "done"; grade: WrittenAnswerGrade; cached: boolean }
+  | { status: "error"; message: string };
+
 function getIsCorrect(o: AnyOption) {
   return Boolean(o.is_correct ?? o.correct ?? o.isCorrect ?? false);
+}
+
+function verdictLabel(verdict: WrittenAnswerGrade["verdict"]) {
+  if (verdict === "correct") return "Correct";
+  if (verdict === "mostly_correct") return "Mostly correct";
+  if (verdict === "partially_correct") return "Partially correct";
+  if (verdict === "unanswered") return "Unanswered";
+  return "Needs work";
 }
 
 const EXPLAIN_OPTION_KEYS = ["A", "B", "C", "D"] as const;
@@ -189,6 +204,49 @@ function hasStudyRef(ref: PracticeStudyRef) {
   return Boolean(ref?.chunkId?.trim() || ref?.topic?.trim() || ref?.instruction?.trim() || ref?.quote?.trim() || studyRefPage(ref?.page));
 }
 
+const CONFIDENCE_OPTIONS: Array<{ value: AnswerConfidence; label: string; desc: string }> = [
+  { value: "confident", label: "Got it", desc: "I can answer this again" },
+  { value: "unsure", label: "Partly", desc: "I need one more review" },
+  { value: "guessed", label: "Still weak", desc: "Keep this in revision" },
+];
+
+function ConfidencePicker({
+  value,
+  onChange,
+  compact = false,
+}: {
+  value: AnswerConfidence | null | undefined;
+  onChange: (value: AnswerConfidence) => void;
+  compact?: boolean;
+}) {
+  return (
+    <div className="rounded-2xl border border-border bg-card px-3 py-3">
+      <p className="text-xs font-extrabold text-foreground">How sure were you?</p>
+      <div className={cn("mt-2 grid gap-2", compact ? "sm:grid-cols-3" : "md:grid-cols-3")}>
+        {CONFIDENCE_OPTIONS.map((option) => {
+          const active = value === option.value;
+          return (
+            <button
+              key={option.value}
+              type="button"
+              onClick={() => onChange(option.value)}
+              className={cn(
+                "rounded-xl border px-3 py-2 text-left transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
+                active
+                  ? "border-[#5B35D5]/35 bg-[#EEEDFE] text-[#3B24A8] dark:border-[#5B35D5]/40 dark:bg-[#5B35D5]/10 dark:text-indigo-300"
+                  : "border-border bg-background text-foreground hover:bg-secondary/50"
+              )}
+            >
+              <span className="block text-xs font-extrabold">{option.label}</span>
+              <span className="mt-0.5 block text-[11px] font-medium text-muted-foreground">{option.desc}</span>
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 function PracticeGuidedHint({
   studyRef,
   sourceMaterial,
@@ -311,7 +369,7 @@ export default function PracticeTakeClient() {
   const engine = usePracticeEngine({
     setId,
     attemptFromUrl,
-    studyMode: isStudyMode,
+    studyMode: isStudyMode || isDueParam,
     dueQuestionIds: isDueParam ? dueQuestionIds : null,
   });
 
@@ -326,16 +384,21 @@ export default function PracticeTakeClient() {
     opts,
     answers,
     writtenAnswers,
+    writtenGrades,
+    confidences,
     writtenSaving,
     submitted,
     setSubmitted,
     attemptId,
     timeLeftMs,
     stats,
+    reviewItems,
     finalizing,
     weakSummary,
     choose,
+    setAnswerConfidence,
     writeAnswer,
+    setWrittenGrade,
     softReset,
     retryWeakQuestions,
     finalizeAttempt,
@@ -350,6 +413,8 @@ export default function PracticeTakeClient() {
 
   // Instant feedback: reveal correctness after first tap (per question)
   const [revealed, setRevealed] = useState<Record<string, boolean>>({});
+  const [writtenGradeStates, setWrittenGradeStates] = useState<Record<string, WrittenGradeState>>({});
+  const clearedGradeRef = useRef<Set<string>>(new Set());
 
   // Question navigator drawer
   const [navOpen, setNavOpen] = useState(false);
@@ -468,6 +533,7 @@ export default function PracticeTakeClient() {
 
   const total = stats.total;
   const isLast = questions.length > 0 && idx >= questions.length - 1;
+  const learningMode = studyMode || isDueMode || isRetryMode;
 
   const chosenId = current ? answers[current.id] : null;
   const currentQuestionType = current?.question_type === "short_answer" || current?.question_type === "theory"
@@ -475,8 +541,17 @@ export default function PracticeTakeClient() {
     : "mcq";
   const isWrittenCurrent = currentQuestionType !== "mcq";
   const currentWrittenAnswer = current ? writtenAnswers[current.id] ?? "" : "";
+  const currentConfidence = current ? confidences[current.id] ?? null : null;
   const currentMarkingPoints = Array.isArray(current?.marking_points) ? current.marking_points : [];
-  const writtenCompareOpen = current ? submitted || !!revealed[current.id] : false;
+  const currentGradeState: WrittenGradeState = current
+    ? writtenGradeStates[current.id] ??
+      (writtenGrades[current.id]
+        ? { status: "done", grade: writtenGrades[current.id], cached: true }
+        : { status: "idle" })
+    : { status: "idle" };
+  const writtenCompareOpen = current
+    ? submitted || (learningMode && !!revealed[current.id]) || currentGradeState.status !== "idle"
+    : false;
 
   const currentOptions = (opts as AnyOption[]) ?? [];
   const correctOptionId = useMemo(() => {
@@ -503,7 +578,7 @@ export default function PracticeTakeClient() {
     return index >= 0 ? optionKeyAt(index) : null;
   }, [currentOptions]);
 
-  const isRevealed = current ? !!revealed[current.id] && !isWrittenCurrent : false;
+  const isRevealed = current ? (learningMode && !!revealed[current.id]) && !isWrittenCurrent : false;
 
   const answeredPct = useMemo(() => {
     const t = Math.max(0, total || 0);
@@ -570,6 +645,8 @@ export default function PracticeTakeClient() {
 
   function resetAll() {
     setRevealed({});
+    setWrittenGradeStates({});
+    clearedGradeRef.current.clear();
     setStudyHintOpen({});
     setReadingRef(null);
     softReset();
@@ -588,11 +665,82 @@ export default function PracticeTakeClient() {
     if (submitted) return;
     if (isWrittenCurrent) return;
 
-    // lock a question after reveal (no changing answers)
-    if (revealed[current.id]) return;
+    // Learning/revision flows lock after feedback. Exam mode allows changes before submit.
+    if (learningMode && revealed[current.id]) return;
 
     choose(current.id, optionId);
-    setRevealed((m) => ({ ...m, [current.id]: true }));
+    if (learningMode) setRevealed((m) => ({ ...m, [current.id]: true }));
+  }
+
+  function clearStoredWrittenGrade(questionId: string) {
+    if (!attemptId || clearedGradeRef.current.has(questionId)) return;
+    clearedGradeRef.current.add(questionId);
+    void supabase
+      .from("study_attempt_answers")
+      .update({
+        ai_grade_score: null,
+        ai_grade_max_score: null,
+        ai_grade_verdict: null,
+        ai_grade_feedback: null,
+        ai_grade_matched_points: [],
+        ai_grade_missing_points: [],
+        ai_grade_improved_answer: null,
+        ai_grade_provider: null,
+        ai_grade_model: null,
+        ai_grade_answer_hash: null,
+        ai_graded_at: null,
+      } as any)
+      .eq("attempt_id", attemptId)
+      .eq("question_id", questionId);
+  }
+
+  function onWrittenAnswerChange(questionId: string, value: string) {
+    writeAnswer(questionId, value);
+    if (writtenGradeStates[questionId]?.status === "done" || writtenGrades[questionId]) {
+      clearStoredWrittenGrade(questionId);
+    }
+    setWrittenGrade(questionId, null);
+    setWrittenGradeStates((prev) => ({ ...prev, [questionId]: { status: "idle" } }));
+    setRevealed((prev) => {
+      if (!prev[questionId]) return prev;
+      const next = { ...prev };
+      delete next[questionId];
+      return next;
+    });
+  }
+
+  async function gradeWrittenAnswer(questionId: string) {
+    if (!attemptId || !current) return;
+    const answer = (writtenAnswers[questionId] ?? "").trim();
+    if (!answer) return;
+
+    setRevealed((prev) => ({ ...prev, [questionId]: true }));
+    setWrittenGradeStates((prev) => ({ ...prev, [questionId]: { status: "loading" } }));
+
+    try {
+      const res = await fetch("/api/ai/grade-written-answer", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ attemptId, questionId, answer }),
+      });
+      const data = await res.json().catch(() => null) as
+        | { ok?: boolean; grade?: WrittenAnswerGrade; cached?: boolean; message?: string; error?: string }
+        | null;
+
+      if (!res.ok || !data?.ok || !data.grade) {
+        throw new Error(data?.message || data?.error || "Could not grade this answer.");
+      }
+
+      clearedGradeRef.current.delete(questionId);
+      setWrittenGrade(questionId, data.grade);
+      setWrittenGradeStates((prev) => ({
+        ...prev,
+        [questionId]: { status: "done", grade: data.grade!, cached: Boolean(data.cached) },
+      }));
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : "Could not grade this answer.";
+      setWrittenGradeStates((prev) => ({ ...prev, [questionId]: { status: "error", message } }));
+    }
   }
 
   // Keyboard shortcuts: A/B/C/D to select, Enter/ArrowRight to advance
@@ -609,13 +757,13 @@ export default function PracticeTakeClient() {
         if (current?.question_type === "short_answer" || current?.question_type === "theory") return;
         const option = opts[optionIndex] as AnyOption | undefined;
         if (!option) return;
-        if (current && revealed[current.id]) return;
+        if (current && learningMode && revealed[current.id]) return;
         choose(current!.id, option.id);
-        setRevealed((m) => ({ ...m, [current!.id]: true }));
+        if (learningMode) setRevealed((m) => ({ ...m, [current!.id]: true }));
         return;
       }
 
-      if (e.key === "ArrowRight" || (e.key === "Enter" && current && revealed[current.id] && current.question_type !== "short_answer" && current.question_type !== "theory")) {
+      if (e.key === "ArrowRight" || (e.key === "Enter" && current && (learningMode ? revealed[current.id] : answers[current.id]) && current.question_type !== "short_answer" && current.question_type !== "theory")) {
         if (!isLast) {
           setIdx((v) => Math.min(questions.length - 1, v + 1));
         } else {
@@ -632,7 +780,7 @@ export default function PracticeTakeClient() {
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [opts, current, revealed, submitted, navOpen, isLast, questions.length, choose, setIdx]);
+  }, [opts, current, revealed, submitted, navOpen, isLast, questions.length, choose, setIdx, learningMode, answers]);
 
   if (dueFetching || (isDueParam && !engineReady)) {
     return (
@@ -699,6 +847,12 @@ if (err || !meta) {
   }
 
   const resultPct = stats.scoredTotal > 0 ? Math.round((stats.correct / stats.scoredTotal) * 100) : 0;
+  const retryWeakCount = reviewItems.filter((item) => {
+    const isWritten = item.q.question_type === "short_answer" || item.q.question_type === "theory";
+    if (isWritten) return false;
+    if (item.isWrong || item.isUnanswered) return true;
+    return item.confidence === "unsure" || item.confidence === "guessed";
+  }).length;
 
   return (
     <div className="pb-28 md:pb-6">
@@ -730,10 +884,10 @@ if (err || !meta) {
           </button>
 
           <div className="flex items-center gap-2">
-            {studyMode ? (
+            {learningMode ? (
               <span className="inline-flex items-center gap-1.5 rounded-full border border-[#5B35D5]/25 bg-[#EEEDFE] px-2.5 py-2 text-xs font-extrabold text-[#3B24A8] dark:border-[#5B35D5]/30 dark:bg-[#5B35D5]/10 dark:text-indigo-300">
                 <GraduationCap className="h-4 w-4" />
-                Study
+                {isDueMode ? "Due" : isRetryMode ? "Retry" : "Study"}
               </span>
             ) : typeof timeLeftMs === "number" ? (
               <div className="flex flex-col items-end gap-1">
@@ -800,9 +954,13 @@ if (err || !meta) {
                 <p className="truncate text-sm font-extrabold text-foreground">{normalize(meta.title)}</p>
               </div>
               <p className="mt-0.5 text-[12px] font-semibold text-muted-foreground">
-                Answered <span className="tabular-nums">{stats.answered}</span>{" "}
-                <span className="text-muted-foreground">•</span>{" "}
-                MCQ correct <span className="tabular-nums">{stats.correct}</span>
+                Answered <span className="tabular-nums">{stats.answered}</span>
+                {!learningMode ? (
+                  <>
+                    {" "}<span className="text-muted-foreground">•</span>{" "}
+                    feedback after submit
+                  </>
+                ) : null}
               </p>
             </div>
 
@@ -904,14 +1062,14 @@ if (err || !meta) {
             {/* Action buttons */}
             <div className="space-y-2 bg-[#3B1FA8] px-5 py-4">
               {/* Primary CTA */}
-              {stats.scoredTotal > 0 && stats.correct < stats.scoredTotal ? (
+              {retryWeakCount > 0 ? (
                 <button
                   type="button"
                   onClick={() => { setRevealed({}); setStudyHintOpen({}); retryWeakQuestions(); }}
                   className="flex w-full items-center justify-center gap-2 rounded-2xl bg-white px-4 py-3 text-sm font-extrabold text-[#5B35D5] transition hover:bg-white/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white"
                 >
                   <RotateCcw className="h-4 w-4" />
-                  Retry weak ({stats.scoredTotal - stats.correct})
+                  Retry weak ({retryWeakCount})
                 </button>
               ) : (
                 <button
@@ -985,6 +1143,92 @@ if (err || !meta) {
             </div>
           </div>
 
+          {reviewItems.length > 0 ? (
+            <Card className="rounded-3xl">
+              <div className="mb-3">
+                <p className="text-sm font-extrabold text-foreground">Review answers</p>
+                <p className="text-xs text-muted-foreground">Explanations and confidence update your revision queue.</p>
+              </div>
+              <div className="space-y-3">
+                {reviewItems.map((item) => {
+                  const isWritten = item.q.question_type === "short_answer" || item.q.question_type === "theory";
+                  const answeredCorrectly = !isWritten && item.chosenOpt?.id && item.correctOpt?.id && item.chosenOpt.id === item.correctOpt.id;
+                  return (
+                    <div key={item.q.id} className="rounded-2xl border border-border bg-background p-3">
+                      <div className="flex items-start gap-2">
+                        <span
+                          className={cn(
+                            "mt-0.5 grid h-6 w-6 shrink-0 place-items-center rounded-full border text-[11px] font-extrabold",
+                            isWritten
+                              ? "border-[#5B35D5]/30 bg-[#EEEDFE] text-[#3B24A8]"
+                              : answeredCorrectly
+                              ? "border-emerald-500 bg-emerald-500 text-white"
+                              : item.chosen
+                              ? "border-rose-500 bg-rose-500 text-white"
+                              : "border-border bg-card text-muted-foreground"
+                          )}
+                        >
+                          {item.index + 1}
+                        </span>
+                        <div className="min-w-0 flex-1">
+                          <p className="whitespace-pre-wrap text-sm font-extrabold leading-snug text-foreground">
+                            {normalize(String(item.q.prompt ?? ""))}
+                          </p>
+                          {!isWritten ? (
+                            <div className="mt-2 space-y-1 text-xs leading-relaxed">
+                              <p className="text-muted-foreground">
+                                Your answer: <span className="font-semibold text-foreground">{item.chosenOpt?.text ?? "Skipped"}</span>
+                              </p>
+                              <p className="text-muted-foreground">
+                                Correct answer: <span className="font-semibold text-emerald-700 dark:text-emerald-300">{item.correctOpt?.text ?? "Not set"}</span>
+                              </p>
+                            </div>
+                          ) : (
+                            <div className="mt-2 space-y-2">
+                              <div className="rounded-xl border border-border bg-card p-2">
+                                <p className="text-[11px] font-extrabold text-muted-foreground">Your answer</p>
+                                <p className="mt-1 whitespace-pre-wrap text-sm leading-relaxed text-foreground">{item.writtenAnswer.trim() || "Skipped"}</p>
+                              </div>
+                              {item.writtenGrade ? (
+                                <div className="rounded-xl border border-emerald-500/25 bg-emerald-500/10 p-2">
+                                  <div className="flex flex-wrap items-center justify-between gap-2">
+                                    <p className="text-[11px] font-extrabold text-emerald-700 dark:text-emerald-300">AI feedback</p>
+                                    <span className="rounded-full border border-emerald-500/30 bg-background px-2 py-0.5 text-[11px] font-extrabold text-foreground">
+                                      {item.writtenGrade.score}/{item.writtenGrade.maxScore} - {verdictLabel(item.writtenGrade.verdict)}
+                                    </span>
+                                  </div>
+                                  <p className="mt-1 text-sm leading-relaxed text-foreground">{item.writtenGrade.feedback}</p>
+                                </div>
+                              ) : null}
+                              <div className="rounded-xl border border-[#5B35D5]/20 bg-[#EEEDFE] p-2 dark:border-[#5B35D5]/30 dark:bg-[#5B35D5]/10">
+                                <p className="text-[11px] font-extrabold text-[#3B24A8] dark:text-indigo-300">Model answer</p>
+                                <p className="mt-1 whitespace-pre-wrap text-sm leading-relaxed text-foreground">
+                                  {item.q.model_answer?.trim() || item.q.explanation?.trim() || "No model answer provided yet."}
+                                </p>
+                              </div>
+                            </div>
+                          )}
+                          {item.q.explanation ? (
+                            <p className="mt-2 whitespace-pre-wrap rounded-xl border border-border bg-card p-2 text-xs leading-relaxed text-muted-foreground">
+                              {item.q.explanation}
+                            </p>
+                          ) : null}
+                          <div className="mt-3">
+                            <ConfidencePicker
+                              compact
+                              value={item.confidence}
+                              onChange={(value) => setAnswerConfidence(item.q.id, value)}
+                            />
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </Card>
+          ) : null}
+
           {/* ── Streak milestone ────────────────────────────────────────────── */}
           {streakMilestone && (
             <div className="overflow-hidden rounded-3xl border border-amber-300/50 bg-amber-50 shadow-sm dark:border-amber-700/40 dark:bg-amber-950/20">
@@ -1024,7 +1268,7 @@ if (err || !meta) {
           )}
 
           {/* ── Weak questions ──────────────────────────────────────────────── */}
-          {weakSummary && weakSummary.filter((r) => !r.wasCorrect).length > 0 ? (
+          {weakSummary && weakSummary.filter((r) => r.reviewReason).length > 0 ? (
             <Card className="rounded-3xl">
               <div className="mb-4 flex items-center gap-3">
                 <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-[#5B35D5]/[0.07] text-[#5B35D5] dark:text-indigo-300">
@@ -1033,14 +1277,14 @@ if (err || !meta) {
                 <div>
                   <p className="text-sm font-extrabold text-foreground">Weak questions</p>
                   <p className="text-xs text-muted-foreground">
-                    {weakSummary.filter((r) => !r.wasCorrect).length} added to your review queue
+                    {weakSummary.filter((r) => r.reviewReason).length} added to your review queue
                   </p>
                 </div>
               </div>
 
               <div className="space-y-2">
                 {weakSummary
-                  .filter((r) => !r.wasCorrect)
+                  .filter((r) => r.reviewReason)
                   .slice(0, 5)
                   .map((r) => (
                     <div key={r.questionId} className="rounded-xl border border-border bg-background p-3">
@@ -1055,7 +1299,7 @@ if (err || !meta) {
                       </div>
                       <div className="mt-2 flex items-center gap-2 pl-4">
                         <span className="rounded-full bg-rose-50 px-2 py-0.5 text-[10px] font-extrabold text-rose-600 dark:bg-rose-950/30 dark:text-rose-400">
-                          ×{r.missCount} missed
+                          {r.reviewReason === "low_confidence" ? "needs review" : `×${r.missCount} missed`}
                         </span>
                         {r.nextDueAt && (
                           <span className="text-[10px] text-muted-foreground">
@@ -1088,9 +1332,9 @@ if (err || !meta) {
                       </div>
                     </div>
                   ))}
-                {weakSummary.filter((r) => !r.wasCorrect).length > 5 && (
+                {weakSummary.filter((r) => r.reviewReason).length > 5 && (
                   <p className="pl-4 text-[11px] text-muted-foreground">
-                    +{weakSummary.filter((r) => !r.wasCorrect).length - 5} more tracked
+                    +{weakSummary.filter((r) => r.reviewReason).length - 5} more tracked
                   </p>
                 )}
               </div>
@@ -1125,7 +1369,7 @@ if (err || !meta) {
               Keep going
             </p>
             <div className="divide-y divide-border">
-              {stats.scoredTotal > 0 && stats.correct < stats.scoredTotal && (
+              {retryWeakCount > 0 && (
                 <button
                   type="button"
                   onClick={() => { setRevealed({}); setStudyHintOpen({}); retryWeakQuestions(); }}
@@ -1135,7 +1379,7 @@ if (err || !meta) {
                     <RotateCcw className="h-4 w-4 text-rose-500" />
                   </div>
                   <div className="flex-1">
-                    <p className="text-sm font-semibold text-foreground">Retry weak ({stats.scoredTotal - stats.correct})</p>
+                    <p className="text-sm font-semibold text-foreground">Retry weak ({retryWeakCount})</p>
                     <p className="text-xs text-muted-foreground">Focus on what you missed</p>
                   </div>
                   <ChevronRight className="h-4 w-4 text-muted-foreground/40" />
@@ -1261,13 +1505,13 @@ if (err || !meta) {
               <p className="text-[12px] font-semibold text-muted-foreground">
                 {isWrittenCurrent
                   ? currentQuestionType === "theory"
-                    ? "Write your answer, then compare it with the model answer."
-                    : "Type a concise answer, then compare it with the model answer."
+                    ? "Write your answer, then let AI grade it against the marking points."
+                    : "Type a concise answer, then let AI grade it against the model answer."
                   : isRevealed
                   ? "Review the feedback, then tap Next when you're ready."
-                  : studyMode
-                  ? "Study mode — explanation shown after each answer."
-                  : "Tap an option to see if it’s right."}
+                  : learningMode
+                  ? "Pick an answer to reveal feedback and explanation."
+                  : "Choose an answer. Feedback appears after you submit."}
               </p>
 
               {!isWrittenCurrent && isRevealed ? (
@@ -1307,7 +1551,7 @@ if (err || !meta) {
               <div className="mt-4 space-y-3">
                 <textarea
                   value={currentWrittenAnswer}
-                  onChange={(e) => writeAnswer(current.id, e.target.value)}
+                  onChange={(e) => onWrittenAnswerChange(current.id, e.target.value)}
                   rows={currentQuestionType === "theory" ? 8 : 4}
                   className="w-full resize-y rounded-2xl border border-border bg-background px-4 py-3 text-sm leading-relaxed text-foreground outline-none transition focus:border-[#5B35D5] focus:ring-2 focus:ring-[#5B35D5]/20"
                   placeholder={currentQuestionType === "theory" ? "Write your theory answer here..." : "Type your answer here..."}
@@ -1318,17 +1562,25 @@ if (err || !meta) {
                   </span>
                   <button
                     type="button"
-                    onClick={() => setRevealed((m) => ({ ...m, [current.id]: true }))}
-                    disabled={!currentWrittenAnswer.trim()}
+                    onClick={() => void gradeWrittenAnswer(current.id)}
+                    disabled={!currentWrittenAnswer.trim() || currentGradeState.status === "loading"}
                     className={cn(
                       "inline-flex items-center gap-2 rounded-2xl border px-3 py-2 text-xs font-extrabold transition",
-                      currentWrittenAnswer.trim()
+                      currentWrittenAnswer.trim() && currentGradeState.status !== "loading"
                         ? "border-[#5B35D5]/30 bg-[#EEEDFE] text-[#3B24A8] hover:bg-[#E2DFFE]"
                         : "border-border bg-background text-muted-foreground opacity-60"
                     )}
                   >
-                    <BookOpen className="h-3.5 w-3.5" />
-                    Compare answer
+                    {currentGradeState.status === "loading" ? (
+                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    ) : (
+                      <BookOpen className="h-3.5 w-3.5" />
+                    )}
+                    {currentGradeState.status === "loading"
+                      ? "Grading..."
+                      : currentGradeState.status === "done"
+                        ? "Refresh grade"
+                        : "Grade answer"}
                   </button>
                 </div>
 
@@ -1340,6 +1592,59 @@ if (err || !meta) {
                         {currentWrittenAnswer.trim() || "No answer submitted."}
                       </p>
                     </div>
+                    {currentGradeState.status === "loading" ? (
+                      <div className="flex items-center gap-3 rounded-2xl border border-[#5B35D5]/20 bg-[#EEEDFE] p-3 text-[#3B24A8] dark:border-[#5B35D5]/30 dark:bg-[#5B35D5]/10 dark:text-indigo-300">
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                        <p className="text-sm font-semibold">AI is grading your answer...</p>
+                      </div>
+                    ) : currentGradeState.status === "error" ? (
+                      <div className="rounded-2xl border border-rose-500/25 bg-rose-500/10 p-3">
+                        <p className="text-xs font-extrabold text-rose-700 dark:text-rose-300">AI grading failed</p>
+                        <p className="mt-1 text-sm text-foreground">{currentGradeState.message}</p>
+                      </div>
+                    ) : currentGradeState.status === "done" ? (
+                      <div className="rounded-2xl border border-emerald-500/25 bg-emerald-500/10 p-3">
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                          <p className="text-xs font-extrabold text-emerald-700 dark:text-emerald-300">AI feedback</p>
+                          <span className="rounded-full border border-emerald-500/30 bg-background px-2.5 py-1 text-xs font-extrabold text-foreground">
+                            {currentGradeState.grade.score}/{currentGradeState.grade.maxScore} - {verdictLabel(currentGradeState.grade.verdict)}
+                          </span>
+                        </div>
+                        <p className="mt-2 text-sm leading-relaxed text-foreground">{currentGradeState.grade.feedback}</p>
+                        {currentGradeState.grade.matchedPoints.length > 0 ? (
+                          <div className="mt-3">
+                            <p className="text-xs font-extrabold text-emerald-700 dark:text-emerald-300">You covered</p>
+                            <ul className="mt-1 list-disc space-y-1 pl-5 text-sm leading-relaxed text-foreground">
+                              {currentGradeState.grade.matchedPoints.map((point, pointIndex) => (
+                                <li key={`${point}-${pointIndex}`}>{point}</li>
+                              ))}
+                            </ul>
+                          </div>
+                        ) : null}
+                        {currentGradeState.grade.missingPoints.length > 0 ? (
+                          <div className="mt-3">
+                            <p className="text-xs font-extrabold text-amber-700 dark:text-amber-300">Missing points</p>
+                            <ul className="mt-1 list-disc space-y-1 pl-5 text-sm leading-relaxed text-foreground">
+                              {currentGradeState.grade.missingPoints.map((point, pointIndex) => (
+                                <li key={`${point}-${pointIndex}`}>{point}</li>
+                              ))}
+                            </ul>
+                          </div>
+                        ) : null}
+                        {currentGradeState.grade.improvedAnswer ? (
+                          <div className="mt-3">
+                            <p className="text-xs font-extrabold text-emerald-700 dark:text-emerald-300">Improved answer</p>
+                            <p className="mt-1 whitespace-pre-wrap text-sm leading-relaxed text-foreground">
+                              {currentGradeState.grade.improvedAnswer}
+                            </p>
+                          </div>
+                        ) : null}
+                        <p className="mt-3 text-[11px] font-semibold text-muted-foreground">
+                          AI feedback only - official score stays MCQ-only.
+                          {currentGradeState.cached ? " Loaded from saved feedback." : ""}
+                        </p>
+                      </div>
+                    ) : null}
                     <div className="rounded-2xl border border-[#5B35D5]/20 bg-[#EEEDFE] p-3 dark:border-[#5B35D5]/30 dark:bg-[#5B35D5]/10">
                       <p className="text-xs font-extrabold text-[#3B24A8] dark:text-indigo-300">Model answer</p>
                       <p className="mt-1 whitespace-pre-wrap text-sm leading-relaxed text-foreground">
@@ -1356,6 +1661,10 @@ if (err || !meta) {
                         </div>
                       ) : null}
                     </div>
+                    <ConfidencePicker
+                      value={currentConfidence}
+                      onChange={(value) => setAnswerConfidence(current.id, value)}
+                    />
                   </div>
                 ) : null}
               </div>
@@ -1490,12 +1799,12 @@ if (err || !meta) {
                     onClick={handleSubmitClick}
                     className={cn(
                       "inline-flex items-center justify-center gap-2 rounded-2xl px-4 py-2 text-sm font-extrabold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-card",
-                      studyMode
+                      learningMode
                         ? "bg-[#5B35D5] text-white hover:bg-[#4526B8]"
                         : "bg-secondary text-foreground"
                     )}
                   >
-                    {studyMode ? (
+                    {learningMode ? (
                       <><GraduationCap className="h-4 w-4" /> Finish session</>
                     ) : (
                       <><Send className="h-4 w-4" /> Submit</>
@@ -1509,12 +1818,38 @@ if (err || !meta) {
           {/* ── Explanation Panel — appears after student answers ────────── */}
           {isRevealed && current ? (
             <div className="space-y-2">
+              <ConfidencePicker
+                value={currentConfidence}
+                onChange={(value) => setAnswerConfidence(current.id, value)}
+              />
               {current.explanation ? (
                 <div className="rounded-2xl border border-[#5B35D5]/20 bg-[#EEEDFE] px-3 py-3 dark:border-[#5B35D5]/30 dark:bg-[#5B35D5]/10">
                   <p className="text-xs font-extrabold text-[#3B24A8] dark:text-indigo-300 mb-1">Explanation</p>
                   <p className="whitespace-pre-wrap text-sm leading-relaxed text-foreground">
                     {current.explanation}
                   </p>
+                </div>
+              ) : null}
+              {current.source_topic || current.study_ref?.topic || current.study_ref?.page || current.study_ref?.quote ? (
+                <div className="rounded-2xl border border-border bg-card px-3 py-3">
+                  <p className="text-xs font-extrabold text-foreground">Source focus</p>
+                  <div className="mt-1.5 flex flex-wrap gap-2">
+                    {current.source_topic || current.study_ref?.topic ? (
+                      <span className="rounded-full border border-border bg-background px-2 py-1 text-[11px] font-semibold text-muted-foreground">
+                        {current.source_topic ?? current.study_ref?.topic}
+                      </span>
+                    ) : null}
+                    {current.study_ref?.page ? (
+                      <span className="rounded-full border border-border bg-background px-2 py-1 text-[11px] font-semibold text-muted-foreground">
+                        Page {current.study_ref.page}
+                      </span>
+                    ) : null}
+                  </div>
+                  {current.study_ref?.quote ? (
+                    <p className="mt-2 line-clamp-3 text-xs leading-relaxed text-muted-foreground">
+                      {current.study_ref.quote}
+                    </p>
+                  ) : null}
                 </div>
               ) : null}
               {explanationOptions && chosenOptionKey && correctOptionKey ? (

@@ -40,4 +40,26 @@ export type QuizOption = {
   position: number | null;
 };
 
+export type AnswerConfidence = "confident" | "unsure" | "guessed";
+
+export type WrittenAnswerGradeVerdict =
+  | "correct"
+  | "mostly_correct"
+  | "partially_correct"
+  | "incorrect"
+  | "unanswered";
+
+export type WrittenAnswerGrade = {
+  score: number;
+  maxScore: number;
+  verdict: WrittenAnswerGradeVerdict;
+  feedback: string;
+  matchedPoints: string[];
+  missingPoints: string[];
+  improvedAnswer: string | null;
+  gradedAt: string;
+  provider: string | null;
+  model: string | null;
+};
+
 export type ReviewTab = "all" | "wrong" | "flagged" | "unanswered";

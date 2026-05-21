@@ -7,6 +7,7 @@ import { useParams, useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import { Card, EmptyState } from "../../_components/StudyUI";
 import { BetterExplanationInline, type BetterExplanationOptionKey } from "../../_components/BetterExplanationInline";
+import type { WrittenAnswerGrade } from "@/lib/types";
 import {
   AlertTriangle,
   ArrowLeft,
@@ -103,6 +104,59 @@ type OptionRow = {
 };
 
 type ReviewTab = "wrong" | "flagged" | "unanswered" | "all";
+
+function cleanString(value: unknown, maxLength = 4000) {
+  if (typeof value !== "string") return "";
+  return value.trim().slice(0, maxLength);
+}
+
+function cleanArray(value: unknown, maxItems = 8) {
+  if (!Array.isArray(value)) return [];
+  return value
+    .map((item) => cleanString(item, 500))
+    .filter(Boolean)
+    .slice(0, maxItems);
+}
+
+function writtenGradeFromRow(row: any): WrittenAnswerGrade | null {
+  if (row?.ai_grade_score == null || !row?.ai_graded_at) return null;
+  const score = Number(row.ai_grade_score);
+  if (!Number.isFinite(score)) return null;
+  const verdict = row.ai_grade_verdict === "correct" ||
+    row.ai_grade_verdict === "mostly_correct" ||
+    row.ai_grade_verdict === "partially_correct" ||
+    row.ai_grade_verdict === "incorrect" ||
+    row.ai_grade_verdict === "unanswered"
+      ? row.ai_grade_verdict
+      : score >= 9
+        ? "correct"
+        : score >= 7
+          ? "mostly_correct"
+          : score >= 4
+            ? "partially_correct"
+            : "incorrect";
+
+  return {
+    score: Math.round(Math.max(0, Math.min(10, score)) * 10) / 10,
+    maxScore: Number(row.ai_grade_max_score) || 10,
+    verdict,
+    feedback: cleanString(row.ai_grade_feedback, 3000),
+    matchedPoints: cleanArray(row.ai_grade_matched_points),
+    missingPoints: cleanArray(row.ai_grade_missing_points),
+    improvedAnswer: cleanString(row.ai_grade_improved_answer, 3000) || null,
+    gradedAt: cleanString(row.ai_graded_at, 80),
+    provider: cleanString(row.ai_grade_provider, 80) || null,
+    model: cleanString(row.ai_grade_model, 120) || null,
+  };
+}
+
+function verdictLabel(verdict: WrittenAnswerGrade["verdict"]) {
+  if (verdict === "correct") return "Correct";
+  if (verdict === "mostly_correct") return "Mostly correct";
+  if (verdict === "partially_correct") return "Partially correct";
+  if (verdict === "unanswered") return "Unanswered";
+  return "Needs work";
+}
 
 function questionTypeOf(q: Pick<QuestionRow, "question_type"> | null | undefined) {
   return q?.question_type === "short_answer" || q?.question_type === "theory" ? q.question_type : "mcq";
@@ -404,6 +458,7 @@ export default function AttemptReviewClient() {
   const [optionsByQ, setOptionsByQ] = useState<Record<string, OptionRow[]>>({});
   const [answers, setAnswers] = useState<Record<string, string>>({});
   const [writtenAnswers, setWrittenAnswers] = useState<Record<string, string>>({});
+  const [writtenGrades, setWrittenGrades] = useState<Record<string, WrittenAnswerGrade>>({});
   const [prevPct, setPrevPct] = useState<number | null>(null);
 
   const [tab, setTab] = useState<ReviewTab>("all");
@@ -490,7 +545,7 @@ export default function AttemptReviewClient() {
             : Promise.resolve({ data: [], error: null }),
           supabase
             .from("study_attempt_answers")
-            .select("question_id,selected_option_id,text_answer")
+            .select("question_id,selected_option_id,text_answer,ai_grade_score,ai_grade_max_score,ai_grade_verdict,ai_grade_feedback,ai_grade_matched_points,ai_grade_missing_points,ai_grade_improved_answer,ai_grade_provider,ai_grade_model,ai_graded_at")
             .eq("attempt_id", attemptId),
         ]);
 
@@ -510,12 +565,17 @@ export default function AttemptReviewClient() {
 
         const aMap: Record<string, string> = {};
         const wMap: Record<string, string> = {};
+        const gMap: Record<string, WrittenAnswerGrade> = {};
         for (const r of (aRes.data ?? []) as any[]) {
           if (r?.question_id && r?.selected_option_id) {
             aMap[String(r.question_id)] = String(r.selected_option_id);
           }
           if (r?.question_id && typeof r?.text_answer === "string") {
             wMap[String(r.question_id)] = String(r.text_answer);
+          }
+          const grade = writtenGradeFromRow(r);
+          if (r?.question_id && grade) {
+            gMap[String(r.question_id)] = grade;
           }
         }
 
@@ -574,6 +634,7 @@ export default function AttemptReviewClient() {
           setOptionsByQ(grouped);
           setAnswers(aMap);
           setWrittenAnswers(wMap);
+          setWrittenGrades(gMap);
           setFlagged(localFlags);
           setExpOpen(expSeed);
           setUnderstood(understoodMap);
@@ -662,6 +723,7 @@ export default function AttemptReviewClient() {
   const selectedOpts = selected ? optionsByQ[selected.id] ?? [] : [];
   const selectedIsWritten = isWrittenQuestion(selected);
   const selectedWrittenAnswer = selected ? writtenAnswers[selected.id] ?? "" : "";
+  const selectedWrittenGrade = selected ? writtenGrades[selected.id] ?? null : null;
   const selectedMarkingPoints = Array.isArray(selected?.marking_points) ? selected.marking_points : [];
   const chosenId = selected ? answers[selected.id] : undefined;
   const chosenOpt = selected ? selectedOpts.find((o) => o.id === chosenId) ?? null : null;
@@ -1090,6 +1152,46 @@ export default function AttemptReviewClient() {
                       {selectedWrittenAnswer.trim() || "No answer submitted."}
                     </p>
                   </div>
+                  {selectedWrittenGrade ? (
+                    <div className="rounded-2xl border border-emerald-500/25 bg-emerald-500/10 p-4">
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <p className="text-xs font-medium text-emerald-700 dark:text-emerald-300">AI feedback</p>
+                        <span className="rounded-full border border-emerald-500/30 bg-background px-2.5 py-1 text-xs font-medium text-foreground">
+                          {selectedWrittenGrade.score}/{selectedWrittenGrade.maxScore} - {verdictLabel(selectedWrittenGrade.verdict)}
+                        </span>
+                      </div>
+                      <p className="mt-2 text-sm leading-relaxed text-foreground">{selectedWrittenGrade.feedback}</p>
+                      {selectedWrittenGrade.matchedPoints.length > 0 ? (
+                        <div className="mt-3">
+                          <p className="text-xs font-medium text-emerald-700 dark:text-emerald-300">Covered points</p>
+                          <ul className="mt-2 list-disc space-y-1 pl-5 text-sm leading-relaxed text-foreground">
+                            {selectedWrittenGrade.matchedPoints.map((point, pointIndex) => (
+                              <li key={`${point}-${pointIndex}`}>{point}</li>
+                            ))}
+                          </ul>
+                        </div>
+                      ) : null}
+                      {selectedWrittenGrade.missingPoints.length > 0 ? (
+                        <div className="mt-3">
+                          <p className="text-xs font-medium text-amber-700 dark:text-amber-300">Missing points</p>
+                          <ul className="mt-2 list-disc space-y-1 pl-5 text-sm leading-relaxed text-foreground">
+                            {selectedWrittenGrade.missingPoints.map((point, pointIndex) => (
+                              <li key={`${point}-${pointIndex}`}>{point}</li>
+                            ))}
+                          </ul>
+                        </div>
+                      ) : null}
+                      {selectedWrittenGrade.improvedAnswer ? (
+                        <div className="mt-3">
+                          <p className="text-xs font-medium text-emerald-700 dark:text-emerald-300">Improved answer</p>
+                          <p className="mt-2 whitespace-pre-wrap text-sm leading-relaxed text-foreground">
+                            {selectedWrittenGrade.improvedAnswer}
+                          </p>
+                        </div>
+                      ) : null}
+                      <p className="mt-3 text-[11px] font-medium text-muted-brand">AI feedback only - official score stays MCQ-only.</p>
+                    </div>
+                  ) : null}
                   <div className="rounded-2xl border border-primary/20 bg-primary-light p-4 dark:border-primary/30 dark:bg-primary/10">
                     <p className="text-xs font-medium text-primary-text dark:text-indigo-300">Model answer</p>
                     <p className="mt-2 whitespace-pre-wrap text-sm leading-relaxed text-foreground">
