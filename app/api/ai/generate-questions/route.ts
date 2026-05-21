@@ -297,6 +297,13 @@ function mimeTypeFromPath(path: string): string | null {
   return map[ext] ?? null;
 }
 
+function computeBatches(total: number): number[] {
+  const numBatches = Math.min(3, Math.ceil(total / 3));
+  const base = Math.floor(total / numBatches);
+  const rem = total % numBatches;
+  return Array.from({ length: numBatches }, (_, i) => base + (i < rem ? 1 : 0));
+}
+
 type DirectGenResult = {
   questions: GeneratedQuestion[];
   ai: Record<string, unknown>;
@@ -305,38 +312,60 @@ type DirectGenResult = {
 async function runDirectGeneration(args: {
   material: StudyMaterialRow;
   filePath: string;
-  systemPrompt: string;
-  formatInstruction: ReturnType<typeof questionFormatInstruction>;
+  totalCount: number;
+  buildPrompt: (count: number, priorQuestions: string[]) => { prompt: string; maxTokens: number };
   onStatus?: (message: string, phase?: string) => void;
+  onQuestion?: (question: GeneratedQuestion) => void;
 }): Promise<DirectGenResult> {
-  const { material, filePath, systemPrompt, formatInstruction, onStatus } = args;
+  const { material, filePath, totalCount, buildPrompt, onStatus, onQuestion } = args;
 
-  // Reuse cached Gemini file URI for PDFs/images — skip download and base64 encoding
+  // Reuse cached Gemini file URI — skip download and base64 encoding
   const cachedFileUri = material.gemini_file_uri?.trim() ?? "";
   const cachedMimeType = cachedFileUri ? mimeTypeFromPath(filePath) : null;
 
   if (cachedFileUri && cachedMimeType) {
-    onStatus?.("Using the indexed source file with the AI model.", "file-uri");
-    const parts: AiContentBlock[] = [
-      { type: "file", mimeType: cachedMimeType, fileUri: cachedFileUri },
-      { type: "text", text: systemPrompt },
-    ];
-    const result = await generateJson<{ questions: unknown[] }>({
-      messages: [userMessage(parts)],
-      temperature: 0.3,
-      maxTokens: formatInstruction.maxTokens,
-      timeoutMs: AI_QUESTION_TIMEOUT_MS,
-      modelRole: "document",
-    });
-    if (!result.ok) throw new Error(result.error ?? "AI request failed.");
-    if (!Array.isArray(result.data.questions) || result.data.questions.length === 0) {
-      throw new Error("AI returned no questions.");
-    }
-    const questions = normalizeGeneratedQuestions(result.data.questions);
-    if (questions.length === 0) throw new Error("AI returned no valid questions.");
-    return {
-      questions,
-      ai: {
+    onStatus?.("Preparing questions from your document.", "file-uri");
+    const batches = computeBatches(totalCount);
+    const allQuestions: GeneratedQuestion[] = [];
+    let lastAi: Record<string, unknown> = {};
+
+    for (let i = 0; i < batches.length; i++) {
+      const batchCount = batches[i];
+      const priorQuestions = allQuestions.map((q) => q.question);
+      const { prompt, maxTokens } = buildPrompt(batchCount, priorQuestions);
+
+      if (batches.length > 1) {
+        onStatus?.(
+          `Generating questions ${allQuestions.length + 1}–${allQuestions.length + batchCount}…`,
+          "file-uri-batch"
+        );
+      }
+
+      const parts: AiContentBlock[] = [
+        { type: "file", mimeType: cachedMimeType, fileUri: cachedFileUri },
+        { type: "text", text: prompt },
+      ];
+      const result = await generateJson<{ questions: unknown[] }>({
+        messages: [userMessage(parts)],
+        temperature: 0.3,
+        maxTokens,
+        timeoutMs: AI_QUESTION_TIMEOUT_MS,
+        modelRole: "document",
+      });
+      if (!result.ok) {
+        if (allQuestions.length > 0) break;
+        throw new Error(result.error ?? "AI request failed.");
+      }
+      if (!Array.isArray(result.data.questions) || result.data.questions.length === 0) {
+        if (allQuestions.length > 0) break;
+        throw new Error("AI returned no questions.");
+      }
+      const batch = normalizeGeneratedQuestions(result.data.questions);
+      for (const q of batch) {
+        allQuestions.push(q);
+        onQuestion?.(q);
+      }
+      lastAi = {
         provider: result.provider,
         model: result.model,
         fallbackProvider: result.fallbackProvider,
@@ -347,13 +376,16 @@ async function runDirectGeneration(args: {
         repairProvider: result.repairProvider,
         repairModel: result.repairModel,
         inputMode: "file-uri",
-        reason: `Generated ${formatInstruction.label} questions from cached Gemini file URI.`,
-      },
-    };
+        reason: `Generated ${totalCount} questions${batches.length > 1 ? ` in ${batches.length} batches` : ""} from cached Gemini file URI.`,
+      };
+    }
+
+    if (allQuestions.length === 0) throw new Error("AI returned no valid questions.");
+    return { questions: allQuestions, ai: lastAi };
   }
 
   // Resolve signed download URL
-  onStatus?.("Preparing the material file for reading.", "prepare-file");
+  onStatus?.("Preparing your document.", "prepare-file");
   const admin = adminSupabase;
   const { data: signed } = await admin.storage
     .from("study-materials")
@@ -363,7 +395,7 @@ async function runDirectGeneration(args: {
 
   let fileBuffer: ArrayBuffer;
   try {
-    onStatus?.("Downloading the material securely.", "download-file");
+    onStatus?.("Fetching the material file.", "download-file");
     const fetchRes = await fetch(downloadUrl, { signal: AbortSignal.timeout(30_000) });
     if (!fetchRes.ok) throw new Error(`HTTP ${fetchRes.status}`);
     fileBuffer = await fetchRes.arrayBuffer();
@@ -380,24 +412,44 @@ async function runDirectGeneration(args: {
   if (content.kind === "unsupported") throw new Error(content.message);
 
   if (content.kind === "text") {
-    onStatus?.("Generating questions from the extracted text.", "ai-generate");
     const truncated = truncateText(content.text, QUESTION_GEN_TEXT_CHARS);
-    const result = await generateJson<{ questions: unknown[] }>({
-      messages: [userMessage(`DOCUMENT CONTENT:\n\n${truncated}\n\n${systemPrompt}`)],
-      temperature: 0.3,
-      maxTokens: formatInstruction.maxTokens,
-      timeoutMs: AI_QUESTION_TIMEOUT_MS,
-      modelRole: "generation",
-    });
-    if (!result.ok) throw new Error(result.error ?? "AI request failed.");
-    if (!Array.isArray(result.data.questions) || result.data.questions.length === 0) {
-      throw new Error("AI returned no questions.");
-    }
-    const questions = normalizeGeneratedQuestions(result.data.questions);
-    if (questions.length === 0) throw new Error("AI returned no valid questions.");
-    return {
-      questions,
-      ai: {
+    const batches = computeBatches(totalCount);
+    const allQuestions: GeneratedQuestion[] = [];
+    let lastAi: Record<string, unknown> = {};
+
+    for (let i = 0; i < batches.length; i++) {
+      const batchCount = batches[i];
+      const priorQuestions = allQuestions.map((q) => q.question);
+      const { prompt, maxTokens } = buildPrompt(batchCount, priorQuestions);
+
+      onStatus?.(
+        batches.length > 1
+          ? `Generating questions ${allQuestions.length + 1}–${allQuestions.length + batchCount}…`
+          : "Generating your questions…",
+        "ai-generate-text"
+      );
+
+      const result = await generateJson<{ questions: unknown[] }>({
+        messages: [userMessage(`DOCUMENT CONTENT:\n\n${truncated}\n\n${prompt}`)],
+        temperature: 0.3,
+        maxTokens,
+        timeoutMs: AI_QUESTION_TIMEOUT_MS,
+        modelRole: "generation",
+      });
+      if (!result.ok) {
+        if (allQuestions.length > 0) break;
+        throw new Error(result.error ?? "AI request failed.");
+      }
+      if (!Array.isArray(result.data.questions) || result.data.questions.length === 0) {
+        if (allQuestions.length > 0) break;
+        throw new Error("AI returned no questions.");
+      }
+      const batch = normalizeGeneratedQuestions(result.data.questions);
+      for (const q of batch) {
+        allQuestions.push(q);
+        onQuestion?.(q);
+      }
+      lastAi = {
         provider: result.provider,
         model: result.model,
         fallbackProvider: result.fallbackProvider,
@@ -408,22 +460,27 @@ async function runDirectGeneration(args: {
         repairProvider: result.repairProvider,
         repairModel: result.repairModel,
         inputMode: "extracted-text",
-        reason: `Generated ${formatInstruction.label} questions from extracted document text.`,
-      },
-    };
+        reason: `Generated questions from extracted document text.`,
+      };
+    }
+
+    if (allQuestions.length === 0) throw new Error("AI returned no valid questions.");
+    return { questions: allQuestions, ai: lastAi };
   }
 
   if (content.kind !== "inline") throw new Error("Unexpected content kind.");
 
-  onStatus?.("Sending the file directly to the AI model.", "ai-generate-file");
+  // Inline path: single call — no batching to avoid re-encoding the file multiple times
+  onStatus?.("Reading your document…", "ai-generate-file");
+  const { prompt: inlinePrompt, maxTokens: inlineMaxTokens } = buildPrompt(totalCount, []);
   const parts: AiContentBlock[] = [
     { type: "inline", mimeType: content.mimeType, data: content.base64, name: "study material" },
-    { type: "text", text: systemPrompt },
+    { type: "text", text: inlinePrompt },
   ];
   const result = await generateJson<{ questions: unknown[] }>({
     messages: [userMessage(parts)],
     temperature: 0.3,
-    maxTokens: formatInstruction.maxTokens,
+    maxTokens: inlineMaxTokens,
     timeoutMs: AI_QUESTION_TIMEOUT_MS,
     modelRole: "document",
   });
@@ -433,6 +490,9 @@ async function runDirectGeneration(args: {
   }
   const questions = normalizeGeneratedQuestions(result.data.questions);
   if (questions.length === 0) throw new Error("AI returned no valid questions.");
+  for (const q of questions) {
+    onQuestion?.(q);
+  }
   return {
     questions,
     ai: {
@@ -446,7 +506,7 @@ async function runDirectGeneration(args: {
       repairProvider: result.repairProvider,
       repairModel: result.repairModel,
       inputMode: "inline-file",
-      reason: content.reason ?? `Generated ${formatInstruction.label} questions from the inline file.`,
+      reason: content.reason ?? `Generated questions from the inline file.`,
     },
   };
 }
@@ -518,14 +578,14 @@ async function handleGenerateQuestionsRequest(req: NextRequest) {
     .filter(Boolean)
     .join("\n");
 
-  const cappedCoveredQuestions = coveredQuestions.slice(-20);
-  const coveredInstruction = cappedCoveredQuestions.length > 0
-    ? `\n\nThe following questions have ALREADY been generated from this document. Do NOT repeat these topics or ask similar questions. Identify sections or concepts in the document that are NOT covered by these questions and generate new questions from those parts:\n${cappedCoveredQuestions.map((q, i) => `${i + 1}. ${q}`).join("\n")}`
-    : "";
-  const formatInstruction = questionFormatInstruction(questionFormat, questionCount);
-
-  const systemPrompt = `You are an exam question generator for Nigerian university students.
-${formatInstruction.text}
+  const buildPrompt = (batchCount: number, priorBatchQuestions: string[]) => {
+    const fmt = questionFormatInstruction(questionFormat, batchCount);
+    const allCovered = [...coveredQuestions.slice(-20), ...priorBatchQuestions].slice(-20);
+    const coveredInstruction = allCovered.length > 0
+      ? `\n\nThe following questions have ALREADY been generated from this document. Do NOT repeat these topics or ask similar questions. Identify sections or concepts in the document that are NOT covered by these questions and generate new questions from those parts:\n${allCovered.map((q, i) => `${i + 1}. ${q}`).join("\n")}`
+      : "";
+    const prompt = `You are an exam question generator for Nigerian university students.
+${fmt.text}
 Do not add any knowledge from outside the document.
 ${difficultyInstruction}${focusInstruction ? `\n${focusInstruction}` : ""}${coveredInstruction}
 Include a short explanation (1-2 sentences) for each question, citing the part of the document it came from.
@@ -569,6 +629,8 @@ Return ONLY a valid JSON object with no markdown, no backticks, no preamble:
     }
   ]
 }`;
+    return { prompt, maxTokens: fmt.maxTokens };
+  };
 
   // ── Stream NDJSON response ─────────────────────────────────────────────────
   const encoder = new TextEncoder();
@@ -674,15 +736,11 @@ Return ONLY a valid JSON object with no markdown, no backticks, no preamble:
         const directResult = await runDirectGeneration({
           material,
           filePath,
-          systemPrompt,
-          formatInstruction,
+          totalCount: questionCount,
+          buildPrompt,
           onStatus: emitStatus,
+          onQuestion: (q) => emit({ type: "question", question: q }),
         });
-
-        emitStatus("Finalizing generated questions.", "finalize");
-        for (const q of directResult.questions) {
-          emit({ type: "question", question: q });
-        }
         emit({ type: "done", ai: directResult.ai });
       } catch (error) {
         try {
