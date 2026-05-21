@@ -704,14 +704,14 @@ export function usePracticeEngine({
       // Fetch existing row to accumulate points and increment attempts
       const { data: existingActivity } = await supabase
         .from("study_daily_activity")
-        .select("points, attempts")
+        .select("attempts_count, questions_answered, correct_answers")
         .eq("user_id", userId)
         .eq("activity_date", activityDate)
         .maybeSingle();
 
-      const prevPoints = (existingActivity as any)?.points ?? 0;
-      const prevAttempts = (existingActivity as any)?.attempts ?? 0;
-      const earnedPracticePoints = scoredQuestions.length > 0 ? Math.max(1, correct) : 0;
+      const prevAttempts = (existingActivity as any)?.attempts_count ?? 0;
+      const prevAnswered = (existingActivity as any)?.questions_answered ?? 0;
+      const prevCorrect = (existingActivity as any)?.correct_answers ?? 0;
 
       await supabase
         .from("study_daily_activity")
@@ -719,9 +719,9 @@ export function usePracticeEngine({
           {
             user_id: userId,
             activity_date: activityDate,
-            did_practice: true,
-            points: prevPoints + earnedPracticePoints,
-            attempts: prevAttempts + 1,
+            attempts_count: prevAttempts + 1,
+            questions_answered: prevAnswered + scoredQuestions.length,
+            correct_answers: prevCorrect + correct,
             updated_at: submittedIso,
           } as any,
           { onConflict: "user_id,activity_date" }

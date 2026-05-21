@@ -744,7 +744,7 @@ export default function HistoryClient() {
           // Daily activity (30 days)
           supabase
             .from("study_daily_activity")
-            .select("activity_date,did_practice,points")
+            .select("activity_date,attempts_count,correct_answers")
             .eq("user_id", uid)
             .gte("activity_date", thirtyDaysAgo)
             .order("activity_date", { ascending: true }),
@@ -834,8 +834,8 @@ export default function HistoryClient() {
         const rawAct = (actRes.data ?? []) as any[];
         const parsedAct: ActivityDay[] = rawAct.map((r) => ({
           date: r.activity_date as string,
-          did_practice: Boolean(r.did_practice),
-          points: r.points ?? 0,
+          did_practice: Number(r.attempts_count ?? 0) > 0,
+          points: r.correct_answers ?? 0,
         }));
         if (!cancelled) setActivityDays(parsedAct);
 

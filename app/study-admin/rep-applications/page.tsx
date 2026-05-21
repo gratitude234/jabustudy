@@ -233,7 +233,7 @@ export default function StudyAdminRepApplicationsPage() {
       .from("study_daily_activity")
       .select("user_id", { count: "exact", head: true })
       .eq("user_id", app.user_id)
-      .eq("did_practice", true);
+      .gt("attempts_count", 0);
 
     setEngagementMap((prev) => ({
       ...prev,

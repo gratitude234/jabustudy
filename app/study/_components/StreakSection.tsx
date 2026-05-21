@@ -35,13 +35,13 @@ export function StreakSection() {
         const since = new Date(Date.now() + 3_600_000 - 28 * 86_400_000).toISOString().slice(0, 10);
         const { data } = await supabase
           .from("study_daily_activity")
-          .select("activity_date,did_practice")
+          .select("activity_date,attempts_count")
           .eq("user_id", user.id)
           .gte("activity_date", since);
         if (!cancelled && data) {
           const s = new Set<string>();
-          for (const r of data as { activity_date: string; did_practice: boolean }[]) {
-            if (r?.did_practice === true && r?.activity_date) s.add(String(r.activity_date));
+          for (const r of data as { activity_date: string; attempts_count: number | null }[]) {
+            if ((r?.attempts_count ?? 0) > 0 && r?.activity_date) s.add(String(r.activity_date));
           }
           setActiveDays(s);
         }

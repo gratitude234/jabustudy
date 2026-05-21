@@ -99,7 +99,7 @@ async function fetchAtRiskUsers(): Promise<AtRiskRow[]> {
     .from("study_daily_activity")
     .select("user_id")
     .eq("activity_date", yestKey)
-    .eq("did_practice", true);
+    .gt("attempts_count", 0);
 
   if (ystErr || !ystRows?.length) return [];
 
@@ -109,7 +109,7 @@ async function fetchAtRiskUsers(): Promise<AtRiskRow[]> {
     .from("study_daily_activity")
     .select("user_id")
     .eq("activity_date", todayKey)
-    .eq("did_practice", true)
+    .gt("attempts_count", 0)
     .in("user_id", ystUserIds);
 
   const doneToday = new Set(
@@ -124,10 +124,10 @@ async function fetchAtRiskUsers(): Promise<AtRiskRow[]> {
 
   const { data: actRows, error: actErr } = await admin
     .from("study_daily_activity")
-    .select("user_id, activity_date, did_practice")
+    .select("user_id, activity_date")
     .in("user_id", atRiskIds)
     .gte("activity_date", since)
-    .eq("did_practice", true)
+    .gt("attempts_count", 0)
     .order("activity_date", { ascending: false });
 
   if (actErr) return [];

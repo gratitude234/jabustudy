@@ -4,8 +4,8 @@
 // CREATE OR REPLACE VIEW public.study_leaderboard_weekly_v AS
 // SELECT
 //   user_id,
-//   SUM(points) AS total_points,
-//   COUNT(*) FILTER (WHERE did_practice) AS active_days
+//   SUM(correct_answers) AS total_points,
+//   COUNT(*) FILTER (WHERE attempts_count > 0) AS active_days
 // FROM public.study_daily_activity
 // WHERE activity_date >= date_trunc('week', now())
 // GROUP BY user_id;

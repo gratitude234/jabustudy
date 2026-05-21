@@ -221,7 +221,7 @@ export async function POST(req: Request) {
     .select("user_id")
     .in("user_id", userIds)
     .eq("activity_date", todayWAT)
-    .eq("did_practice", true);
+    .gt("attempts_count", 0);
 
   if (reviewedError) {
     return NextResponse.json(

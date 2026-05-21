@@ -384,16 +384,29 @@ export default function PracticeTakeClient() {
       try {
         const { data: { user } } = await supabase.auth.getUser();
         if (!user) return;
-        const today = new Date().toISOString().slice(0, 10);
+        const today = new Date(Date.now() + 3_600_000).toISOString().slice(0, 10);
+        const since = new Date(Date.now() + 3_600_000 - 90 * 86_400_000).toISOString().slice(0, 10);
         const { data } = await supabase
           .from("study_daily_activity")
-          .select("streak_count, did_practice")
+          .select("activity_date,attempts_count")
           .eq("user_id", user.id)
-          .eq("activity_date", today)
-          .maybeSingle();
-        if (data?.did_practice && typeof data?.streak_count === "number") {
-          setStreakCount(data.streak_count);
-          const nextMilestone = getStreakMilestone(data.streak_count);
+          .gte("activity_date", since)
+          .order("activity_date", { ascending: false });
+
+        const activeDates = new Set(
+          ((data ?? []) as { activity_date: string | null; attempts_count: number | null }[])
+            .filter((row) => row.activity_date && (row.attempts_count ?? 0) > 0)
+            .map((row) => String(row.activity_date))
+        );
+        if (activeDates.has(today)) {
+          let count = 0;
+          let cursorMs = Date.now() + 3_600_000;
+          while (activeDates.has(new Date(cursorMs).toISOString().slice(0, 10))) {
+            count += 1;
+            cursorMs -= 86_400_000;
+          }
+          setStreakCount(count);
+          const nextMilestone = getStreakMilestone(count);
           if (nextMilestone) setStreakMilestone(nextMilestone);
         }
       } catch {

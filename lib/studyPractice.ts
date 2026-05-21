@@ -67,6 +67,16 @@ export async function upsertDailyPracticeActivity(points: number) {
 
   const activityDate = watToday(); // YYYY-MM-DD in WAT (UTC+1)
 
+  const { data: existingActivity } = await supabase
+    .from("study_daily_activity")
+    .select("attempts_count,correct_answers")
+    .eq("user_id", userId)
+    .eq("activity_date", activityDate)
+    .maybeSingle();
+
+  const prevAttempts = (existingActivity as any)?.attempts_count ?? 0;
+  const prevCorrect = (existingActivity as any)?.correct_answers ?? 0;
+
   // Try to upsert; ignore errors if table isn't created yet.
   await supabase
     .from("study_daily_activity")
@@ -74,8 +84,8 @@ export async function upsertDailyPracticeActivity(points: number) {
       {
         user_id: userId,
         activity_date: activityDate,
-        did_practice: true,
-        points: points,
+        attempts_count: prevAttempts + 1,
+        correct_answers: prevCorrect + points,
         updated_at: new Date().toISOString(),
       } as any,
       { onConflict: "user_id,activity_date" }
@@ -95,7 +105,7 @@ export async function get14DayActivity(days = 14): Promise<Set<string>> {
 
   const { data, error } = await supabase
     .from("study_daily_activity")
-    .select("activity_date,did_practice")
+    .select("activity_date,attempts_count")
     .eq("user_id", userId)
     .gte("activity_date", sinceDate)
     .order("activity_date", { ascending: false });
@@ -104,7 +114,7 @@ export async function get14DayActivity(days = 14): Promise<Set<string>> {
 
   const active = new Set<string>();
   for (const r of data as any[]) {
-    if (r?.activity_date && r?.did_practice === true) {
+    if (r?.activity_date && Number(r?.attempts_count ?? 0) > 0) {
       active.add(String(r.activity_date));
     }
   }
@@ -122,7 +132,7 @@ export async function getPracticeStreak(): Promise<{ streak: number; didPractice
 
   const { data, error } = await supabase
     .from("study_daily_activity")
-    .select("activity_date,did_practice")
+    .select("activity_date,attempts_count")
     .eq("user_id", userId)
     .gte("activity_date", sinceDate)
     .order("activity_date", { ascending: false });
@@ -131,7 +141,7 @@ export async function getPracticeStreak(): Promise<{ streak: number; didPractice
 
   const map = new Map<string, boolean>();
   for (const r of data as any[]) {
-    if (r?.activity_date) map.set(String(r.activity_date), Boolean(r.did_practice));
+    if (r?.activity_date) map.set(String(r.activity_date), Number(r.attempts_count ?? 0) > 0);
   }
 
   const todayKey     = watToday();
