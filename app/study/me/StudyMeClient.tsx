@@ -269,7 +269,7 @@ function StudyMeInner() {
         right={
           <div className="flex flex-wrap items-center justify-end gap-2">
             <Link
-              href="/study/onboarding"
+              href="/study/onboarding?mode=edit&next=/study/me"
               className="inline-flex items-center gap-2 rounded-2xl border border-border bg-card px-3 py-2 text-sm font-semibold text-foreground no-underline shadow-sm transition hover:bg-secondary/40"
             >
               <Settings className="h-4 w-4" />

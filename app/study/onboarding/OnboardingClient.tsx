@@ -305,6 +305,7 @@ export default function OnboardingClient() {
     const raw = (sp.get("next") ?? "/study").trim();
     return raw.startsWith("/") ? raw : "/study";
   }, [sp]);
+  const isEditMode = sp.get("mode") === "edit";
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -457,7 +458,7 @@ export default function OnboardingClient() {
 
       // Only consider onboarding done if the user picked from the official list (has IDs)
       const alreadyDone = !!(d?.level && d?.semester && d?.faculty_id && d?.department_id);
-      if (alreadyDone) {
+      if (alreadyDone && !isEditMode) {
         router.replace(next);
         return;
       }
@@ -474,7 +475,7 @@ export default function OnboardingClient() {
       // Smart default step
       const step1Ready = typeof d?.faculty_id === "string" && typeof d?.department_id === "string";
       const step2Ready = typeof d?.level === "number" && typeof d?.semester === "string" && !!d?.semester;
-      setStep(step2Ready ? 3 : step1Ready ? 2 : 1);
+      setStep(isEditMode ? 1 : step2Ready ? 3 : step1Ready ? 2 : 1);
 
       setLoading(false);
       setLoading(false);
@@ -483,7 +484,7 @@ export default function OnboardingClient() {
     return () => {
       mounted = false;
     };
-  }, [router, next]);
+  }, [router, next, isEditMode]);
 
   // Load departments when faculty changes (official mode)
   useEffect(() => {
@@ -636,7 +637,7 @@ export default function OnboardingClient() {
         localStorage.removeItem("jabuStudy_browseWithoutSetup");
       } catch {}
 
-      router.replace("/study");
+      router.replace(next);
       router.refresh();
       return;
 
@@ -735,10 +736,12 @@ export default function OnboardingClient() {
       <div className="flex items-start justify-between gap-3 px-1">
         <div className="min-w-0">
           <p className="font-[family-name:var(--font-bricolage)] text-2xl font-extrabold tracking-tight text-foreground">
-            Set up Jabu Study
+            {isEditMode ? "Edit study profile" : "Set up Jabu Study"}
           </p>
           <p className="mt-1.5 text-sm text-muted-brand">
-            Quick setup so we can show the right materials + practice sets for you.
+            {isEditMode
+              ? "Update the academic details used for your materials, practice sets and recommendations."
+              : "Quick setup so we can show the right materials + practice sets for you."}
           </p>
         </div>
 
@@ -750,7 +753,7 @@ export default function OnboardingClient() {
               onClick={skip}
               className="text-xs font-semibold text-muted-brand underline underline-offset-4 hover:text-foreground"
             >
-              Skip
+              {isEditMode ? "Cancel" : "Skip"}
             </button>
           </div>
         )}
@@ -879,7 +882,7 @@ export default function OnboardingClient() {
                 onClick={skip}
                 className="inline-flex items-center gap-2 rounded-2xl border border-border bg-background px-4 py-3 text-sm font-extrabold text-foreground hover:bg-secondary/50"
               >
-                Skip for now <ArrowRight className="h-4 w-4" />
+                {isEditMode ? "Cancel" : "Skip for now"} <ArrowRight className="h-4 w-4" />
               </button>
 
               <button
@@ -1046,13 +1049,13 @@ export default function OnboardingClient() {
                 )}
               >
                 {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <ArrowRight className="h-4 w-4" />}
-                Finish setup
+                {isEditMode ? "Save changes" : "Finish setup"}
               </button>
             </div>
 
             <div className="mt-3 text-center">
               <Link href={next} className="text-xs font-extrabold text-muted-foreground hover:text-foreground">
-                Continue without saving
+                {isEditMode ? "Cancel changes" : "Continue without saving"}
               </Link>
             </div>
           </Card>

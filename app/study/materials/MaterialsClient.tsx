@@ -1031,7 +1031,7 @@ export default function MaterialsClient() {
       value: c.course_code,
       label: `${c.course_code} — ${(c.course_title ?? "").toString().trim()}`.trim(),
     }));
-  }, [courses, draftDept, draftFaculty]);
+  }, [courses, draftDept, draftDeptId, draftFaculty, draftFacultyId, draftLevel]);
 
   // Fetch materials (paged, supports load more)
   async function fetchPage(nextPage: number) {
@@ -1261,8 +1261,10 @@ export default function MaterialsClient() {
       return true;
     });
 
+    const visibleCourses = hasFastLanePrefs ? filtered : filtered.length ? filtered : courses;
+
     const map = new Map<string, { id: string; code: string; title: string | null; count?: number }>();
-    for (const course of filtered.length ? filtered : courses) {
+    for (const course of visibleCourses) {
       const code = (course.course_code ?? "").toString().trim().toUpperCase();
       if (!code || map.has(code)) continue;
       map.set(code, {
