@@ -16,6 +16,7 @@ import {
   bedrockText,
   isBedrockConfigured,
 } from "./bedrock";
+import { currentAiUsageContext, recordAiUsageEvent } from "@/lib/aiUsage";
 
 export type { AiChatMessage, AiContentBlock, AiFileBlock, AiModelRole } from "./gemini";
 
@@ -113,7 +114,35 @@ function sleep(ms: number) {
 function isTransientAiError(error: unknown) {
   const code = errorCode(error);
   const status = errorStatus(error);
-  return code === "network" || code === "timeout" || code === "server" || status === 429 || status === 503;
+  return code === "network" || code === "timeout" || code === "server" || status === 503;
+}
+
+function isQuotaAiError(error: unknown) {
+  return errorStatus(error) === 429;
+}
+
+function quotaExceededMessage(error: unknown) {
+  const message = errorMessage(error);
+  return `AI quota exceeded. ${message}`;
+}
+
+async function logAiUsage(params: {
+  operation: string;
+  provider?: AiProvider;
+  model?: string;
+  status: "success" | "failure";
+  error?: string;
+}) {
+  const context = currentAiUsageContext();
+  if (!context) return;
+  await recordAiUsageEvent({
+    ...context,
+    provider: params.provider ?? null,
+    model: params.model ?? null,
+    status: params.status,
+    errorCode: params.error ? params.operation : null,
+    errorMessage: params.error ?? null,
+  });
 }
 
 function configured(provider: AiProvider) {
@@ -298,6 +327,13 @@ async function withProviderFallback<T>(
           primaryFailureReason = errorMessage(error);
         }
         logAiFailure(provider, operation, error);
+        if (isQuotaAiError(error)) {
+          return {
+            error: quotaExceededMessage(error),
+            provider,
+            model: modelFor(provider, config),
+          };
+        }
         if (attempt === 0 && isTransientAiError(error)) continue;
         break;
       }
@@ -356,8 +392,21 @@ ${clipped}`;
 export async function generateText(config: AiRequestConfig): Promise<AiTextResult> {
   const result = await withProviderFallback("generateText", config, (provider) => callTextProvider(provider, config));
   if ("error" in result) {
+    await logAiUsage({
+      operation: "generateText",
+      provider: result.provider,
+      model: result.model,
+      status: "failure",
+      error: result.error,
+    });
     return { ok: false, error: result.error, provider: result.provider, model: result.model };
   }
+  await logAiUsage({
+    operation: "generateText",
+    provider: result.provider,
+    model: result.model,
+    status: "success",
+  });
   return {
     ok: true,
     text: result.text,
@@ -374,9 +423,22 @@ export async function generateJson<T>(config: AiRequestConfig): Promise<AiJsonRe
   const jsonConfig: AiRequestConfig = { ...config, responseMimeType: "application/json" };
   const result = await withProviderFallback("generateJson", jsonConfig, (provider) => callTextProvider(provider, jsonConfig));
   if ("error" in result) {
+    await logAiUsage({
+      operation: "generateJson",
+      provider: result.provider,
+      model: result.model,
+      status: "failure",
+      error: result.error,
+    });
     return { ok: false, error: result.error, provider: result.provider, model: result.model };
   }
   try {
+    await logAiUsage({
+      operation: "generateJson",
+      provider: result.provider,
+      model: result.model,
+      status: "success",
+    });
     return {
       ok: true,
       data: parseJsonText<T>(result.text),
@@ -436,8 +498,21 @@ export async function generateJson<T>(config: AiRequestConfig): Promise<AiJsonRe
 export async function streamText(config: AiRequestConfig): Promise<AiStreamResult> {
   const result = await withProviderFallback("streamText", config, (provider) => callStreamProvider(provider, config));
   if ("error" in result) {
+    await logAiUsage({
+      operation: "streamText",
+      provider: result.provider,
+      model: result.model,
+      status: "failure",
+      error: result.error,
+    });
     return { ok: false, error: result.error, provider: result.provider, model: result.model };
   }
+  await logAiUsage({
+    operation: "streamText",
+    provider: result.provider,
+    model: result.model,
+    status: "success",
+  });
   return {
     ok: true,
     stream: result.stream,

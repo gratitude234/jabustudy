@@ -8,6 +8,13 @@ export const maxDuration = 60;
 import { NextRequest } from "next/server";
 import { streamText, userMessage } from "@/lib/ai";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import {
+  aiLimitFromEnv,
+  aiRateLimitMessage,
+  checkAiUsageLimit,
+  recordBlockedAiUsage,
+  withAiUsageContext,
+} from "@/lib/aiUsage";
 
 function jsonErr(message: string, status: number) {
   return new Response(JSON.stringify({ error: message }), {
@@ -45,6 +52,23 @@ export async function POST(req: NextRequest) {
   } = body;
 
   if (!courses.length) return jsonErr("At least one course is required", 400);
+
+  const usageContext = {
+    userId: user.id,
+    endpoint: "study-plan",
+    route: "/api/ai/study-plan",
+    metadata: { courseCount: courses.length, weeksUntilExam, dailyHours },
+  };
+  const limit = await checkAiUsageLimit({
+    userId: user.id,
+    endpoint: usageContext.endpoint,
+    limit: aiLimitFromEnv("AI_LIMIT_STUDY_PLAN_PER_DAY", 5),
+    windowMs: 24 * 60 * 60 * 1000,
+  });
+  if (!limit.allowed) {
+    await recordBlockedAiUsage(usageContext, "Daily study plan limit reached.");
+    return jsonErr(aiRateLimitMessage(limit), 429);
+  }
 
   const weeks = Math.max(1, Math.min(weeksUntilExam, 12));
 
@@ -103,13 +127,13 @@ Include these days per week: ${includedDays.join(", ")}.
 Keep tasks short (under 10 words each). Keep theme and weeklyGoal under 12 words each.`;
 
   const tokenBudget = Math.min(6000, weeks * includedDays.length * 150 + 500);
-  const result = await streamText({
+  const result = await withAiUsageContext(usageContext, () => streamText({
     messages: [userMessage(prompt)],
     temperature: 0.5,
     maxTokens: tokenBudget,
     timeoutMs: 55_000,
     modelRole: "fast",
-  });
+  }));
 
   if (!result.ok) return jsonErr(result.error, 502);
 

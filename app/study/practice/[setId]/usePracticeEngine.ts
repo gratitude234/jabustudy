@@ -560,7 +560,7 @@ export function usePracticeEngine({
         user_id: userId,
         question_id: q.id,
         text_answer: writtenAnswers[q.id] ?? "",
-        updated_at: now,
+        answered_at: now,
       }));
 
       supabase
@@ -589,7 +589,7 @@ export function usePracticeEngine({
             user_id: userId,
             question_id: qid,
             selected_option_id: oid,
-            updated_at: new Date().toISOString(),
+            answered_at: new Date().toISOString(),
           } as any,
           { onConflict: "attempt_id,question_id" }
         );
@@ -746,7 +746,7 @@ export function usePracticeEngine({
             user_id: userId,
             question_id: q.id,
             text_answer: writtenAnswers[q.id] ?? "",
-            updated_at: submittedIso,
+            answered_at: submittedIso,
           })) as any[],
           { onConflict: "attempt_id,question_id" }
         );

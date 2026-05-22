@@ -6,6 +6,13 @@ import { NextRequest, NextResponse } from "next/server";
 import { generateJson, userMessage } from "@/lib/ai";
 import { adminSupabase } from "@/lib/supabase/admin";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import {
+  aiLimitFromEnv,
+  aiRateLimitMessage,
+  checkAiUsageLimit,
+  recordBlockedAiUsage,
+  withAiUsageContext,
+} from "@/lib/aiUsage";
 
 type OptionKey = "A" | "B" | "C" | "D";
 
@@ -264,11 +271,31 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ explanation: cached, cached: true });
   }
 
+  const usageContext = {
+    userId: user.id,
+    endpoint: "explain",
+    route: "/api/ai/explain",
+    metadata: { questionId, isCorrect, chosenOptionKey, correctOptionKey },
+  };
+  const limit = await checkAiUsageLimit({
+    userId: user.id,
+    endpoint: usageContext.endpoint,
+    limit: aiLimitFromEnv("AI_LIMIT_EXPLAIN_PER_DAY", 30),
+    windowMs: 24 * 60 * 60 * 1000,
+  });
+  if (!limit.allowed) {
+    await recordBlockedAiUsage(usageContext, "Daily explanation limit reached.");
+    return NextResponse.json(
+      { error: aiRateLimitMessage(limit), code: "AI_RATE_LIMITED" },
+      { status: 429, headers: { "Retry-After": String(limit.retryAfterSeconds) } }
+    );
+  }
+
   const studyRef = cleanStudyRef(body.studyRef) ?? dbStudyRef;
   const sourceTopic = cleanString(body.sourceTopic, 240) ?? dbSourceTopic;
   const basicExplanation = cleanString(body.basicExplanation, 1600) ?? dbBasicExplanation;
 
-  const result = await generateJson<BetterExplanation>({
+  const result = await withAiUsageContext(usageContext, () => generateJson<BetterExplanation>({
     messages: [userMessage(buildPrompt({
       questionPrompt,
       options,
@@ -286,7 +313,7 @@ export async function POST(req: NextRequest) {
     timeoutMs: 45_000,
     modelRole: "fast",
     model: EXPLAIN_MODEL,
-  });
+  }));
 
   if (!result.ok) {
     return NextResponse.json({ error: result.error }, { status: 502 });

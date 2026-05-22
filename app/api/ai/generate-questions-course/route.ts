@@ -24,6 +24,13 @@ import {
   duplicateGateErrorResponse,
 } from "@/lib/studyDuplicateGate";
 import { validateSourceBackedQuestions } from "@/lib/studyQuestionGrounding";
+import {
+  aiLimitFromEnv,
+  aiRateLimitMessage,
+  checkAiUsageLimit,
+  recordBlockedAiUsage,
+  withAiUsageContext,
+} from "@/lib/aiUsage";
 
 const DEFAULT_QUESTION_COUNT = 10;
 const MAX_QUESTION_COUNT = 15;
@@ -171,6 +178,28 @@ export async function POST(req: NextRequest) {
     });
   }
 
+  const usageContext = {
+    userId: user.id,
+    endpoint: "generate-questions-course",
+    route: "/api/ai/generate-questions-course",
+    courseId,
+    requestedCount: questionCount,
+    metadata: { generationIntent, topicId, subtopicId },
+  };
+  const limit = await checkAiUsageLimit({
+    userId: user.id,
+    endpoint: usageContext.endpoint,
+    limit: aiLimitFromEnv("AI_LIMIT_GENERATE_COURSE_PER_DAY", 1),
+    windowMs: 24 * 60 * 60 * 1000,
+  });
+  if (!limit.allowed) {
+    await recordBlockedAiUsage(usageContext, "Daily course question generation limit reached.");
+    return NextResponse.json(
+      { error: aiRateLimitMessage(limit), code: "AI_RATE_LIMITED" },
+      { status: 429, headers: { "Retry-After": String(limit.retryAfterSeconds) } }
+    );
+  }
+
   // ── Fetch course ───────────────────────────────────────────────────────────
   // ── Fetch top materials: past questions first, then others ─────────────────
   const [pastQsRes, othersRes] = await Promise.all([
@@ -254,7 +283,7 @@ export async function POST(req: NextRequest) {
     const countForMaterial = Math.max(1, Math.ceil(remainingQuestions / remainingMaterials));
 
     try {
-      const generation = await generateCoverageAwareQuestions({
+      const generation = await withAiUsageContext(usageContext, () => generateCoverageAwareQuestions({
         materialId: material.id,
         materialTitle: material.title ?? "Untitled material",
         count: countForMaterial,
@@ -263,7 +292,7 @@ export async function POST(req: NextRequest) {
         topicId,
         subtopicId,
         coveredQuestions: questions.map((question) => question.question),
-      });
+      }));
 
       if (!generation?.questions.length) continue;
 

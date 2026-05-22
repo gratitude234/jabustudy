@@ -7,6 +7,14 @@ import { NextRequest, NextResponse } from "next/server";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { generateJson, userMessage } from "@/lib/ai";
 import { adminSupabase } from "@/lib/supabase/admin";
+import {
+  aiLimitFromEnv,
+  aiRateLimitMessage,
+  checkAiUsageLimit,
+  recordBlockedAiUsage,
+  withAiUsageContext,
+  type AiUsageContext,
+} from "@/lib/aiUsage";
 
 type MaterialSummary = {
   overview: string;
@@ -20,6 +28,7 @@ export async function POST(req: NextRequest) {
   const authHeader = req.headers.get("authorization") ?? "";
   const bearerToken = authHeader.startsWith("Bearer ") ? authHeader.slice(7).trim() : "";
   const isInternalCall = bearerToken === process.env.SUPABASE_SERVICE_ROLE_KEY && bearerToken.length > 0;
+  let userId: string | null = null;
 
   if (!isInternalCall) {
     // Original session-based auth for client calls
@@ -28,6 +37,7 @@ export async function POST(req: NextRequest) {
     if (!user) {
       return NextResponse.json({ error: "Unauthorised" }, { status: 401 });
     }
+    userId = user.id;
   }
 
   // ── Parse body ─────────────────────────────────────────────────────────────
@@ -68,6 +78,27 @@ export async function POST(req: NextRequest) {
     }
   }
 
+  const usageContext: AiUsageContext = {
+    userId,
+    endpoint: "summarize",
+    route: "/api/ai/summarize",
+    materialId,
+    metadata: { internal: isInternalCall, materialType, courseCode },
+  };
+  const limit = await checkAiUsageLimit({
+    userId,
+    endpoint: usageContext.endpoint,
+    limit: aiLimitFromEnv("AI_LIMIT_SUMMARIZE_PER_DAY", isInternalCall ? 80 : 10),
+    windowMs: 24 * 60 * 60 * 1000,
+  });
+  if (!limit.allowed) {
+    await recordBlockedAiUsage(usageContext, "Daily summary generation limit reached.");
+    return NextResponse.json(
+      { error: aiRateLimitMessage(limit), code: "AI_RATE_LIMITED" },
+      { status: 429, headers: { "Retry-After": String(limit.retryAfterSeconds) } }
+    );
+  }
+
   // ── Build prompt ───────────────────────────────────────────────────────────
   const typeLabel: Record<string, string> = {
     past_question: "Past Examination Questions",
@@ -98,13 +129,13 @@ Respond ONLY with valid JSON — no markdown, no backticks, no explanation outsi
 }`;
 
   // ── Call Gemini ────────────────────────────────────────────────────────────
-  const result = await generateJson<MaterialSummary>({
+  const result = await withAiUsageContext(usageContext, () => generateJson<MaterialSummary>({
     messages: [userMessage(prompt)],
     temperature: 0.4,
     maxTokens: 500,
     timeoutMs: 45_000,
     modelRole: "fast",
-  });
+  }));
 
   if (!result.ok) {
     return NextResponse.json({ error: result.error }, { status: 502 });

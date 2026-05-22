@@ -16,6 +16,14 @@ import {
 } from "@/lib/extractMaterialContent";
 import { saveGeneratedPracticeSet } from "@/lib/aiGeneratedPractice";
 import { generateCoverageAwareQuestions, type StudyGenerationIntent } from "@/lib/studyQuestionGeneration";
+import {
+  aiLimitFromEnv,
+  aiRateLimitMessage,
+  checkAiUsageLimit,
+  recordBlockedAiUsage,
+  withAiUsageContext,
+  type AiUsageContext,
+} from "@/lib/aiUsage";
 
 const QUESTION_GEN_TEXT_CHARS = 24_000;
 const AI_QUESTION_TIMEOUT_MS =
@@ -299,7 +307,8 @@ function mimeTypeFromPath(path: string): string | null {
 }
 
 function computeBatches(total: number): number[] {
-  const numBatches = Math.min(3, Math.ceil(total / 3));
+  if (total <= 10) return [total];
+  const numBatches = 2;
   const base = Math.floor(total / numBatches);
   const rem = total % numBatches;
   return Array.from({ length: numBatches }, (_, i) => base + (i < rem ? 1 : 0));
@@ -553,7 +562,10 @@ async function handleGenerateQuestionsRequest(req: NextRequest) {
   const topicId = typeof body.topicId === "string" && body.topicId.trim() ? body.topicId.trim() : null;
   const subtopicId = typeof body.subtopicId === "string" && body.subtopicId.trim() ? body.subtopicId.trim() : null;
   if (!materialId) return NextResponse.json({ error: "Missing materialId" }, { status: 400 });
-  const questionCount = Math.max(1, Math.min(MAX_QUESTION_COUNT, Math.floor(Number(count) || 10)));
+  const requestedQuestionCount = Math.max(1, Math.min(MAX_QUESTION_COUNT, Math.floor(Number(count) || 10)));
+  const questionCount = questionFormat === "mcq"
+    ? Math.min(requestedQuestionCount, aiLimitFromEnv("AI_MAX_MCQ_QUESTIONS_PER_REQUEST", 6))
+    : requestedQuestionCount;
   const effectiveDifficulty = generationIntent === "hard" || generationIntent === "past_question_style" ? "hard" : difficulty;
 
   // ── Fetch material ─────────────────────────────────────────────────────────
@@ -569,6 +581,34 @@ async function handleGenerateQuestionsRequest(req: NextRequest) {
   const material = mat as StudyMaterialRow;
   const filePath = material.file_path;
   if (!filePath) return NextResponse.json({ error: "No file attached to this material." }, { status: 400 });
+
+  const usageContext: AiUsageContext = {
+    userId: user.id,
+    endpoint: "generate-questions",
+    route: "/api/ai/generate-questions",
+    materialId,
+    requestedCount: questionCount,
+    metadata: {
+      questionFormat,
+      difficulty: effectiveDifficulty,
+      generationIntent,
+      topicId,
+      subtopicId,
+    },
+  };
+  const limit = await checkAiUsageLimit({
+    userId: user.id,
+    endpoint: usageContext.endpoint,
+    limit: aiLimitFromEnv("AI_LIMIT_GENERATE_QUESTIONS_PER_DAY", 4),
+    windowMs: 24 * 60 * 60 * 1000,
+  });
+  if (!limit.allowed) {
+    await recordBlockedAiUsage(usageContext, "Daily question generation limit reached.");
+    return NextResponse.json(
+      { error: aiRateLimitMessage(limit), code: "AI_RATE_LIMITED" },
+      { status: 429, headers: { "Retry-After": String(limit.retryAfterSeconds) } }
+    );
+  }
 
   // ── Build prompt components ────────────────────────────────────────────────
   const difficultyInstruction = {
@@ -640,6 +680,7 @@ Return ONLY a valid JSON object with no markdown, no backticks, no preamble:
 
   const stream = new ReadableStream({
     async start(controller) {
+      await withAiUsageContext(usageContext, async () => {
       const emit = (obj: object) => {
         controller.enqueue(encoder.encode(JSON.stringify(obj) + "\n"));
       };
@@ -791,6 +832,7 @@ Return ONLY a valid JSON object with no markdown, no backticks, no preamble:
       } finally {
         controller.close();
       }
+      });
     },
   });
 

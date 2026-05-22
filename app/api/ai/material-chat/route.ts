@@ -14,6 +14,14 @@ import {
   truncateText,
 } from "@/lib/extractMaterialContent";
 import { geminiModelName } from "@/lib/ai/gemini";
+import {
+  aiLimitFromEnv,
+  aiRateLimitMessage,
+  checkAiUsageLimit,
+  recordAiUsageEvent,
+  recordBlockedAiUsage,
+  type AiUsageContext,
+} from "@/lib/aiUsage";
 
 const FILE_UPLOAD_URL = "https://generativelanguage.googleapis.com/upload/v1beta/files";
 
@@ -134,6 +142,27 @@ export async function POST(req: NextRequest) {
   const filePath = material.file_path;
   if (!filePath) return NextResponse.json({ error: "No file attached to this material." }, { status: 400 });
 
+  const usageContext: AiUsageContext = {
+    userId: user.id,
+    endpoint: "material-chat",
+    route: "/api/ai/material-chat",
+    materialId,
+    metadata: { historyTurns: history.length, messageChars: message.trim().length },
+  };
+  const limit = await checkAiUsageLimit({
+    userId: user.id,
+    endpoint: usageContext.endpoint,
+    limit: aiLimitFromEnv("AI_LIMIT_MATERIAL_CHAT_PER_HOUR", 20),
+    windowMs: 60 * 60 * 1000,
+  });
+  if (!limit.allowed) {
+    await recordBlockedAiUsage(usageContext, "Hourly material chat limit reached.");
+    return NextResponse.json(
+      { error: aiRateLimitMessage(limit), code: "AI_RATE_LIMITED" },
+      { status: 429, headers: { "Retry-After": String(limit.retryAfterSeconds) } }
+    );
+  }
+
   const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) return NextResponse.json({ error: "AI service not configured." }, { status: 500 });
 
@@ -188,6 +217,14 @@ For lists, put each item on its own line with a dash prefix (e.g. "- item").`;
         );
       } catch (e: unknown) {
         console.error("[material-chat] Gemini file upload error:", e instanceof Error ? e.message : e);
+        await recordAiUsageEvent({
+          ...usageContext,
+          provider: "gemini",
+          model: "files-api",
+          status: "failure",
+          errorCode: "upload",
+          errorMessage: e instanceof Error ? e.message : "Gemini file upload failed.",
+        });
         return NextResponse.json({ error: "Chat failed." }, { status: 500 });
       }
 
@@ -285,14 +322,37 @@ For lists, put each item on its own line with a dash prefix (e.g. "- item").`;
     });
   } catch (e: unknown) {
     console.error("[material-chat] Gemini fetch error:", e instanceof Error ? e.message : e);
+    await recordAiUsageEvent({
+      ...usageContext,
+      provider: "gemini",
+      model: geminiMaterialChatModelName(),
+      status: "failure",
+      errorCode: "network",
+      errorMessage: e instanceof Error ? e.message : "Gemini fetch failed.",
+    });
     return NextResponse.json({ error: "Chat failed." }, { status: 500 });
   }
 
   if (!geminiRes.ok) {
     const errText = await geminiRes.text().catch(() => geminiRes.statusText);
     console.error("[material-chat] Gemini error:", errText);
+    await recordAiUsageEvent({
+      ...usageContext,
+      provider: "gemini",
+      model: geminiMaterialChatModelName(),
+      status: "failure",
+      errorCode: String(geminiRes.status),
+      errorMessage: errText,
+    });
     return NextResponse.json({ error: "Chat failed." }, { status: 500 });
   }
+
+  await recordAiUsageEvent({
+    ...usageContext,
+    provider: "gemini",
+    model: geminiMaterialChatModelName(),
+    status: "success",
+  });
 
   // ── Stream response back to client ────────────────────────────────────────
   const encoder = new TextEncoder();

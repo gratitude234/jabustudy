@@ -1776,28 +1776,6 @@ if (err || !meta) {
                   </p>
                 </div>
               ) : null}
-              {current.source_topic || current.study_ref?.topic || current.study_ref?.page || current.study_ref?.quote ? (
-                <div className="rounded-2xl border border-border bg-card px-3 py-3">
-                  <p className="text-xs font-extrabold text-foreground">Source focus</p>
-                  <div className="mt-1.5 flex flex-wrap gap-2">
-                    {current.source_topic || current.study_ref?.topic ? (
-                      <span className="rounded-full border border-border bg-background px-2 py-1 text-[11px] font-semibold text-muted-foreground">
-                        {current.source_topic ?? current.study_ref?.topic}
-                      </span>
-                    ) : null}
-                    {current.study_ref?.page ? (
-                      <span className="rounded-full border border-border bg-background px-2 py-1 text-[11px] font-semibold text-muted-foreground">
-                        Page {current.study_ref.page}
-                      </span>
-                    ) : null}
-                  </div>
-                  {current.study_ref?.quote ? (
-                    <p className="mt-2 line-clamp-3 text-xs leading-relaxed text-muted-foreground">
-                      {current.study_ref.quote}
-                    </p>
-                  ) : null}
-                </div>
-              ) : null}
               {explanationOptions && chosenOptionKey && correctOptionKey ? (
                 <BetterExplanationInline
                   questionId={current.id}

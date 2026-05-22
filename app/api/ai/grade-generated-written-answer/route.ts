@@ -2,6 +2,12 @@ import { NextRequest, NextResponse } from "next/server";
 import { generateJson, userMessage } from "@/lib/ai";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import type { WrittenAnswerGrade, WrittenAnswerGradeVerdict } from "@/lib/types";
+import {
+  aiLimitFromEnv,
+  checkAiUsageLimit,
+  recordBlockedAiUsage,
+  withAiUsageContext,
+} from "@/lib/aiUsage";
 
 export const maxDuration = 60;
 
@@ -146,7 +152,24 @@ export async function POST(req: NextRequest) {
   }
   if (answer.length < 5) return jsonError("Write a little more before asking AI to grade it.", 400, "ANSWER_TOO_SHORT");
 
-  const result = await generateJson<RawGrade>({
+  const usageContext = {
+    userId: user.id,
+    endpoint: "grade-generated-written-answer",
+    route: "/api/ai/grade-generated-written-answer",
+    metadata: { questionType, answerChars: answer.length },
+  };
+  const limit = await checkAiUsageLimit({
+    userId: user.id,
+    endpoint: usageContext.endpoint,
+    limit: aiLimitFromEnv("AI_LIMIT_GRADE_GENERATED_WRITTEN_PER_DAY", 30),
+    windowMs: 24 * 60 * 60 * 1000,
+  });
+  if (!limit.allowed) {
+    await recordBlockedAiUsage(usageContext, "Daily generated written-answer grading limit reached.");
+    return jsonError(`AI limit reached (${limit.used}/${limit.limit}). Try again later.`, 429, "AI_RATE_LIMITED");
+  }
+
+  const result = await withAiUsageContext(usageContext, () => generateJson<RawGrade>({
     messages: [userMessage(buildPrompt({
       questionType,
       prompt,
@@ -158,7 +181,7 @@ export async function POST(req: NextRequest) {
     maxTokens: 700,
     timeoutMs: 45_000,
     modelRole: "fast",
-  });
+  }));
 
   if (!result.ok) return jsonError(result.error, 502, "AI_ERROR");
 
