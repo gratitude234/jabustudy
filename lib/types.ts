@@ -6,6 +6,12 @@ export type QuizSet = {
   level: string | null;
   time_limit_minutes: number | null;
   source_material_id?: string | null;
+  published?: boolean | null;
+  created_by?: string | null;
+  visibility?: string | null;
+  draft_status?: "draft" | "kept" | "discarded" | null;
+  draft_expires_at?: string | null;
+  generation_config?: Record<string, unknown> | null;
 };
 
 export type QuizQuestion = {

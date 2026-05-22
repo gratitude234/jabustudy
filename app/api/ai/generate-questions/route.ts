@@ -14,6 +14,7 @@ import {
   extractMaterialContent,
   truncateText,
 } from "@/lib/extractMaterialContent";
+import { saveGeneratedPracticeSet } from "@/lib/aiGeneratedPractice";
 import { generateCoverageAwareQuestions, type StudyGenerationIntent } from "@/lib/studyQuestionGeneration";
 
 const QUESTION_GEN_TEXT_CHARS = 24_000;
@@ -534,6 +535,7 @@ async function handleGenerateQuestionsRequest(req: NextRequest) {
     focus?: string;
     questionFormat?: string;
     coveredQuestions?: string[];
+    persistDraft?: boolean;
     generationIntent?: string;
     topicId?: string | null;
     subtopicId?: string | null;
@@ -546,6 +548,7 @@ async function handleGenerateQuestionsRequest(req: NextRequest) {
 
   const { materialId, count = 10, difficulty = "mixed", focus, coveredQuestions = [] } = body;
   const questionFormat = normalizeQuestionFormat(body.questionFormat);
+  const persistDraft = body.persistDraft === true;
   const generationIntent = normalizeGenerationIntent(body.generationIntent);
   const topicId = typeof body.topicId === "string" && body.topicId.trim() ? body.topicId.trim() : null;
   const subtopicId = typeof body.subtopicId === "string" && body.subtopicId.trim() ? body.subtopicId.trim() : null;
@@ -643,6 +646,26 @@ Return ONLY a valid JSON object with no markdown, no backticks, no preamble:
       const emitStatus = (message: string, phase?: string) => {
         emit({ type: "status", message, phase });
       };
+      const persistDraftIfNeeded = async (questions: GeneratedQuestion[], ai: Record<string, unknown>) => {
+        if (!persistDraft) return null;
+        emitStatus("Saving your AI practice draft.", "persist-draft");
+        return saveGeneratedPracticeSet({
+          userId: user.id,
+          materialId,
+          questions,
+          asDraft: true,
+          generationConfig: {
+            count: questionCount,
+            difficulty: effectiveDifficulty,
+            focus: focus || null,
+            questionFormat,
+            generationIntent,
+            topicId,
+            subtopicId,
+            ai,
+          },
+        });
+      };
 
       try {
         emitStatus("Starting question generation.", "start");
@@ -659,6 +682,7 @@ Return ONLY a valid JSON object with no markdown, no backticks, no preamble:
               difficulty: effectiveDifficulty,
               focus,
               coveredQuestions,
+              ownerUserId: user.id,
               generationIntent,
               topicId,
               subtopicId,
@@ -680,30 +704,38 @@ Return ONLY a valid JSON object with no markdown, no backticks, no preamble:
               const kindSummary = Object.entries(coverageResult.questionKindCounts)
                 .map(([kind, value]) => `${value} ${kind.replace(/_/g, " ")}`)
                 .join(", ");
+              const ai = {
+                provider: coverageResult.ai?.provider ?? "gemini",
+                model: coverageResult.ai?.model ?? process.env.GEMINI_MODEL_GENERATION?.trim() ?? process.env.GEMINI_MODEL?.trim() ?? "gemini-2.5-flash",
+                fallbackProvider: coverageResult.ai?.fallbackProvider,
+                fallbackReason: coverageResult.ai?.fallbackReason,
+                modelFallbackFrom: coverageResult.ai?.modelFallbackFrom,
+                modelFallbackReason: coverageResult.ai?.modelFallbackReason,
+                inputMode: "coverage-aware",
+                reason: `Coverage-aware generation covered ${coverageResult.topicsCovered} topic(s)${kindSummary ? `: ${kindSummary}` : ""}.`,
+                coverage: {
+                  topicsCovered: coverageResult.topicsCovered,
+                  questionKindCounts: coverageResult.questionKindCounts,
+                  cognitiveLevelCounts: coverageResult.cognitiveLevelCounts,
+                  chunksLoaded: coverageResult.chunksLoaded,
+                  chunksCatalogued: coverageResult.chunksCatalogued,
+                  courseMap: coverageResult.coverage,
+                  intent: coverageResult.coverage?.intent ?? generationIntent,
+                  intentLabel: coverageResult.coverage?.intentLabel,
+                  targetedTopic: coverageResult.coverage?.targetedTopic,
+                  reason: coverageResult.coverage?.reason,
+                },
+              };
+              const draft = await persistDraftIfNeeded(coverageResult.questions as GeneratedQuestion[], ai);
               emit({
                 type: "done",
-                ai: {
-                  provider: coverageResult.ai?.provider ?? "gemini",
-                  model: coverageResult.ai?.model ?? process.env.GEMINI_MODEL_GENERATION?.trim() ?? process.env.GEMINI_MODEL?.trim() ?? "gemini-2.5-flash",
-                  fallbackProvider: coverageResult.ai?.fallbackProvider,
-                  fallbackReason: coverageResult.ai?.fallbackReason,
-                  modelFallbackFrom: coverageResult.ai?.modelFallbackFrom,
-                  modelFallbackReason: coverageResult.ai?.modelFallbackReason,
-                  inputMode: "coverage-aware",
-                  reason: `Coverage-aware generation covered ${coverageResult.topicsCovered} topic(s)${kindSummary ? `: ${kindSummary}` : ""}.`,
-                  coverage: {
-                    topicsCovered: coverageResult.topicsCovered,
-                    questionKindCounts: coverageResult.questionKindCounts,
-                    cognitiveLevelCounts: coverageResult.cognitiveLevelCounts,
-                    chunksLoaded: coverageResult.chunksLoaded,
-                    chunksCatalogued: coverageResult.chunksCatalogued,
-                    courseMap: coverageResult.coverage,
-                    intent: coverageResult.coverage?.intent ?? generationIntent,
-                    intentLabel: coverageResult.coverage?.intentLabel,
-                    targetedTopic: coverageResult.coverage?.targetedTopic,
-                    reason: coverageResult.coverage?.reason,
-                  },
-                },
+                ai,
+                draftSetId: draft?.setId,
+                savedCount: draft?.savedCount,
+                requestedCount: draft?.requestedCount,
+                repaired: draft?.repaired,
+                replacedCount: draft?.replacedCount,
+                skippedCount: draft?.skippedCount,
               });
               return;
             }
@@ -741,7 +773,17 @@ Return ONLY a valid JSON object with no markdown, no backticks, no preamble:
           onStatus: emitStatus,
           onQuestion: (q) => emit({ type: "question", question: q }),
         });
-        emit({ type: "done", ai: directResult.ai });
+        const draft = await persistDraftIfNeeded(directResult.questions, directResult.ai);
+        emit({
+          type: "done",
+          ai: directResult.ai,
+          draftSetId: draft?.setId,
+          savedCount: draft?.savedCount,
+          requestedCount: draft?.requestedCount,
+          repaired: draft?.repaired,
+          replacedCount: draft?.replacedCount,
+          skippedCount: draft?.skippedCount,
+        });
       } catch (error) {
         try {
           emit({ type: "error", message: routeErrorMessage(error) });

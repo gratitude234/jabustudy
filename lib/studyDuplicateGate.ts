@@ -22,14 +22,22 @@ export type DuplicateCheckQuestion = {
   id?: string;
   question?: string | null;
   prompt?: string | null;
+  questionType?: string | null;
+  question_type?: string | null;
   options?: { A?: string; B?: string; C?: string; D?: string } | null;
   answer?: "A" | "B" | "C" | "D" | string | null;
+  modelAnswer?: string | null;
+  model_answer?: string | null;
+  markingPoints?: string[] | null;
+  marking_points?: string[] | null;
   questionFingerprint?: string | null;
   question_fingerprint?: string | null;
   sourceChunkId?: string | null;
   source_chunk_id?: string | null;
   questionKind?: string | null;
   question_kind?: string | null;
+  sourceTopic?: string | null;
+  source_topic?: string | null;
 };
 
 export type DuplicateMatch = {
@@ -52,10 +60,14 @@ type ExistingQuestionRow = {
   id: string;
   set_id: string | null;
   prompt: string | null;
+  question_type: string | null;
+  model_answer: string | null;
+  marking_points: unknown;
   source_chunk_id: string | null;
   source_material_id: string | null;
   question_kind: string | null;
   question_fingerprint: string | null;
+  source_topic: string | null;
   ai_generated: boolean | null;
   generation_meta: unknown;
   study_ref: unknown;
@@ -98,6 +110,7 @@ export async function assertQuestionsNotDuplicateForCourse(args: {
   courseId?: string;
   courseCode?: string | null;
   quizSetId?: string;
+  ownerUserId?: string;
   questions: DuplicateCheckQuestion[];
   excludeQuestionIds?: string[];
 }) {
@@ -111,7 +124,7 @@ export async function assertQuestionsNotDuplicateForCourse(args: {
   const existing = await loadExistingQuestions(context, {
     excludeQuestionIds: args.excludeQuestionIds,
     excludeQuizSetId: args.quizSetId,
-  });
+  }, args.ownerUserId);
 
   for (const incomingQuestion of incoming) {
     for (const existingQuestion of existing) {
@@ -126,7 +139,7 @@ export async function assertQuestionsNotDuplicateForCourse(args: {
 export async function assertQuizSetNotDuplicateForCourse(quizSetId: string) {
   const { data, error } = await adminSupabase
     .from("study_quiz_questions")
-    .select("id,set_id,prompt,source_chunk_id,source_material_id,question_kind,question_fingerprint,ai_generated,generation_meta,study_ref,study_quiz_options(text,is_correct,position)")
+    .select("id,set_id,prompt,question_type,model_answer,marking_points,source_chunk_id,source_material_id,question_kind,question_fingerprint,source_topic,ai_generated,generation_meta,study_ref,study_quiz_options(text,is_correct,position)")
     .eq("set_id", quizSetId);
 
   if (error) throw error;
@@ -195,7 +208,7 @@ function findWithinBatchDuplicates(questions: ComparableQuestion[]) {
   const duplicates: DuplicateMatch[] = [];
   for (let i = 0; i < questions.length; i++) {
     for (let j = i + 1; j < questions.length; j++) {
-      const match = compareQuestions(questions[i], questions[j], true);
+      const match = compareQuestions(questions[j], questions[i], true);
       if (match) duplicates.push(match);
     }
   }
@@ -315,7 +328,8 @@ async function loadCourseMaterialIds(courseId: string | null, courseCode: string
 
 async function loadExistingQuestions(
   context: CourseContext,
-  exclude: { excludeQuestionIds?: string[]; excludeQuizSetId?: string }
+  exclude: { excludeQuestionIds?: string[]; excludeQuizSetId?: string },
+  ownerUserId?: string
 ) {
   const byId = new Map<string, ExistingQuestionRow>();
 
@@ -328,10 +342,25 @@ async function loadExistingQuestions(
     }
   }
 
+  if (ownerUserId) {
+    const setIds = await loadOwnerQuizSetIds(context, ownerUserId);
+    if (!setIds.length) return [];
+
+    const { data, error } = await adminSupabase
+      .from("study_quiz_questions")
+      .select("id,set_id,prompt,question_type,model_answer,marking_points,source_chunk_id,source_material_id,question_kind,question_fingerprint,source_topic,ai_generated,generation_meta,study_ref,study_quiz_options(text,is_correct,position)")
+      .in("set_id", setIds)
+      .limit(3000);
+    if (error) throw error;
+    await addRows(data as unknown as ExistingQuestionRow[]);
+
+    return [...byId.values()].map((row) => toComparable(existingRowToQuestion(row), undefined, row.id, row.set_id));
+  }
+
   if (context.materialIds.length) {
     const { data, error } = await adminSupabase
       .from("study_quiz_questions")
-      .select("id,set_id,prompt,source_chunk_id,source_material_id,question_kind,question_fingerprint,ai_generated,generation_meta,study_ref,study_quiz_options(text,is_correct,position)")
+      .select("id,set_id,prompt,question_type,model_answer,marking_points,source_chunk_id,source_material_id,question_kind,question_fingerprint,source_topic,ai_generated,generation_meta,study_ref,study_quiz_options(text,is_correct,position)")
       .in("source_material_id", context.materialIds)
       .limit(3000);
     if (error) throw error;
@@ -349,7 +378,7 @@ async function loadExistingQuestions(
     if (setIds.length) {
       const { data, error } = await adminSupabase
         .from("study_quiz_questions")
-        .select("id,set_id,prompt,source_chunk_id,source_material_id,question_kind,question_fingerprint,ai_generated,generation_meta,study_ref,study_quiz_options(text,is_correct,position)")
+        .select("id,set_id,prompt,question_type,model_answer,marking_points,source_chunk_id,source_material_id,question_kind,question_fingerprint,source_topic,ai_generated,generation_meta,study_ref,study_quiz_options(text,is_correct,position)")
         .in("set_id", setIds)
         .limit(3000);
       if (error) throw error;
@@ -360,16 +389,48 @@ async function loadExistingQuestions(
   return [...byId.values()].map((row) => toComparable(existingRowToQuestion(row), undefined, row.id, row.set_id));
 }
 
+async function loadOwnerQuizSetIds(context: CourseContext, ownerUserId: string) {
+  const byId = new Set<string>();
+
+  if (context.courseCode) {
+    const { data, error } = await adminSupabase
+      .from("study_quiz_sets")
+      .select("id")
+      .eq("created_by", ownerUserId)
+      .eq("course_code", context.courseCode)
+      .limit(1000);
+    if (error) throw error;
+    for (const set of (data ?? []) as Array<{ id: string }>) byId.add(set.id);
+  }
+
+  if (context.materialIds.length) {
+    const { data, error } = await adminSupabase
+      .from("study_quiz_sets")
+      .select("id")
+      .eq("created_by", ownerUserId)
+      .in("source_material_id", context.materialIds)
+      .limit(1000);
+    if (error) throw error;
+    for (const set of (data ?? []) as Array<{ id: string }>) byId.add(set.id);
+  }
+
+  return [...byId];
+}
+
 function existingRowToQuestion(row: ExistingQuestionRow): DuplicateCheckQuestion {
   const correct = (row.study_quiz_options ?? []).find((option) => option.is_correct);
   return {
     id: row.id,
     prompt: row.prompt,
+    question_type: row.question_type,
     options: correct?.text ? { A: correct.text } : null,
     answer: correct?.text ? "A" : null,
+    model_answer: row.model_answer,
+    marking_points: cleanStringArray(row.marking_points),
     question_fingerprint: row.question_fingerprint,
     source_chunk_id: row.source_chunk_id,
     question_kind: row.question_kind,
+    source_topic: row.source_topic,
   };
 }
 
@@ -384,6 +445,13 @@ function toComparable(
   existingSetId?: string | null
 ): ComparableQuestion {
   const prompt = cleanString(question.question) ?? cleanString(question.prompt) ?? "";
+  const questionType = normalizeQuestionType(question);
+  const sourceTopic = cleanString(question.sourceTopic) ?? cleanString(question.source_topic) ?? "";
+  const answerConcept = correctAnswerConcept(question, questionType);
+  const fingerprint =
+    cleanString(question.questionFingerprint) ??
+    cleanString(question.question_fingerprint) ??
+    questionFingerprint(prompt, answerConcept, sourceTopic);
   return {
     id: existingId ?? question.id,
     setId: existingSetId,
@@ -391,15 +459,27 @@ function toComparable(
     prompt,
     normalizedPrompt: normalizeForCompare(prompt),
     keywords: keywordSet(prompt),
-    fingerprint: cleanString(question.questionFingerprint) ?? cleanString(question.question_fingerprint) ?? "",
+    fingerprint,
     sourceChunkId: cleanString(question.sourceChunkId) ?? cleanString(question.source_chunk_id) ?? "",
-    questionKind: normalizeForCompare(cleanString(question.questionKind) ?? cleanString(question.question_kind) ?? ""),
-    answerConcept: correctAnswerConcept(question),
+    questionKind: normalizeForCompare(cleanString(question.questionKind) ?? cleanString(question.question_kind) ?? questionType),
+    answerConcept,
     generatedOrSourceBacked: true,
   };
 }
 
-function correctAnswerConcept(question: DuplicateCheckQuestion) {
+function normalizeQuestionType(question: DuplicateCheckQuestion) {
+  const value = cleanString(question.questionType) ?? cleanString(question.question_type);
+  return value === "short_answer" || value === "theory" ? value : "mcq";
+}
+
+function correctAnswerConcept(question: DuplicateCheckQuestion, questionType: string) {
+  if (questionType === "short_answer" || questionType === "theory") {
+    return normalizeForCompare([
+      cleanString(question.modelAnswer) ?? cleanString(question.model_answer) ?? "",
+      ...cleanStringArray(question.markingPoints ?? question.marking_points),
+    ].filter(Boolean).join(" "));
+  }
+
   const answer = cleanString(question.answer);
   const options = question.options ?? {};
   const answerText =
@@ -413,8 +493,23 @@ function cleanString(value: unknown) {
   return typeof value === "string" && value.trim().length > 0 ? value.trim() : undefined;
 }
 
+function cleanStringArray(value: unknown) {
+  if (!Array.isArray(value)) return [];
+  return value
+    .map((item) => cleanString(item))
+    .filter((item): item is string => Boolean(item));
+}
+
 function normalizeForCompare(value: string) {
   return value.toLowerCase().replace(/[^a-z0-9\s]/g, " ").replace(/\s+/g, " ").trim();
+}
+
+function questionFingerprint(question: string, answerConcept: string, sourceTopic: string) {
+  const source = `${sourceTopic} ${question} ${answerConcept}`;
+  const words = normalizeForCompare(source)
+    .split(" ")
+    .filter((word) => word.length > 3 && !STOP_WORDS.has(word));
+  return [...new Set(words)].sort().slice(0, 18).join("-");
 }
 
 function keywordSet(value: string) {
