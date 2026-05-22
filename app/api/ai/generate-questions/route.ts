@@ -597,6 +597,7 @@ Return ONLY a valid JSON object with no markdown, no backticks, no preamble:
               difficulty: effectiveDifficulty,
               focus,
               coveredQuestions,
+              ownerUserId: user.id,
               generationIntent,
               topicId,
               subtopicId,

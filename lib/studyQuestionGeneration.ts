@@ -216,12 +216,32 @@ async function loadIndexedChunks(materialId: string): Promise<MaterialChunk[]> {
   return ((data ?? []) as MaterialChunk[]).filter((chunk) => chunk.text?.trim().length > 0);
 }
 
-async function loadExistingQuestionMemory(materialId: string) {
-  const { data, error } = await adminSupabase
+async function loadExistingQuestionMemory(materialId: string, ownerUserId?: string) {
+  let query = adminSupabase
     .from("study_quiz_questions")
     .select("prompt,question_fingerprint,source_topic")
     .eq("source_material_id", materialId)
     .limit(60);
+
+  if (ownerUserId) {
+    const { data: sets, error: setError } = await adminSupabase
+      .from("study_quiz_sets")
+      .select("id")
+      .eq("created_by", ownerUserId)
+      .eq("source_material_id", materialId)
+      .limit(100);
+
+    if (setError) {
+      console.warn("[question-v2] existing question memory failed:", setError.message);
+      return [];
+    }
+
+    const setIds = ((sets ?? []) as Array<{ id: string }>).map((set) => set.id);
+    if (!setIds.length) return [];
+    query = query.in("set_id", setIds);
+  }
+
+  const { data, error } = await query;
 
   if (error) {
     console.warn("[question-v2] existing question memory failed:", error.message);
@@ -708,6 +728,7 @@ export async function generateCoverageAwareQuestions(args: {
   difficulty: Difficulty;
   focus?: string;
   coveredQuestions?: string[];
+  ownerUserId?: string;
   generationIntent?: StudyGenerationIntent | null;
   topicId?: string | null;
   subtopicId?: string | null;
@@ -730,7 +751,7 @@ export async function generateCoverageAwareQuestions(args: {
       console.warn("[question-v2] coverage plan unavailable:", error instanceof Error ? error.message : error);
       return null;
     }),
-    loadExistingQuestionMemory(args.materialId),
+    loadExistingQuestionMemory(args.materialId, args.ownerUserId),
   ]);
 
   let topics: OutlineTopic[] = [];

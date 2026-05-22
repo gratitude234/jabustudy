@@ -7,6 +7,7 @@ import { useEffect, useRef, useState } from "react";
 import {
   ArrowLeft,
   ArrowRight,
+  BookOpen,
   Bookmark,
   BookmarkCheck,
   CheckCircle2,
@@ -35,6 +36,7 @@ import { toggleSaved } from "@/lib/studySaved";
 import { supabase } from "@/lib/supabase";
 import { BetterExplanationInline, type BetterExplanationOptionKey } from "@/app/study/_components/BetterExplanationInline";
 import { GuidedSourceModal, type GuidedStudyRef } from "@/app/study/_components/GuidedSourceModal";
+import type { WrittenAnswerGrade } from "@/lib/types";
 
 type QuestionType = "mcq" | "short_answer" | "theory";
 type QuestionFormat = "mcq" | "mixed" | "written";
@@ -85,6 +87,12 @@ type GeneratedWrittenQuestion = {
 };
 
 type GeneratedQuestion = GeneratedMcqQuestion | GeneratedWrittenQuestion;
+
+type WrittenGradeState =
+  | { status: "idle" }
+  | { status: "loading" }
+  | { status: "done"; grade: WrittenAnswerGrade }
+  | { status: "error"; message: string };
 
 function isBetterExplanationOptionKey(value: string | undefined): value is BetterExplanationOptionKey {
   return value === "A" || value === "B" || value === "C" || value === "D";
@@ -282,6 +290,14 @@ function questionTypeLabel(type: QuestionType) {
   if (type === "short_answer") return "Short answer";
   if (type === "theory") return "Theory";
   return "Objective";
+}
+
+function verdictLabel(verdict: WrittenAnswerGrade["verdict"]) {
+  if (verdict === "correct") return "Correct";
+  if (verdict === "mostly_correct") return "Mostly correct";
+  if (verdict === "partially_correct") return "Partially correct";
+  if (verdict === "unanswered") return "Unanswered";
+  return "Needs work";
 }
 
 function formatQuestionFormat(format: QuestionFormat) {
@@ -793,6 +809,7 @@ export default function MaterialDetailClient({
   const [answers, setAnswers] = useState<Record<number, { chosen: string; correct: boolean; skipped: boolean }>>({});
   const [writtenAnswers, setWrittenAnswers] = useState<Record<number, string>>({});
   const [writtenCompared, setWrittenCompared] = useState<Record<number, boolean>>({});
+  const [writtenGradeStates, setWrittenGradeStates] = useState<Record<number, WrittenGradeState>>({});
   const [retryPool, setRetryPool] = useState<GeneratedQuestion[] | null>(null);
   const syncedQuizMissesRef = useRef<string | null>(null);
 
@@ -991,6 +1008,7 @@ export default function MaterialDetailClient({
       setAnswers({});
       setWrittenAnswers({});
       setWrittenCompared({});
+      setWrittenGradeStates({});
       setCurrentQuestionIndex(0);
       setRetryPool(null);
       setHintShown({});
@@ -1041,6 +1059,7 @@ export default function MaterialDetailClient({
       setAnswers({});
       setWrittenAnswers({});
       setWrittenCompared({});
+      setWrittenGradeStates({});
       setCurrentQuestionIndex(0);
       setRetryPool(null);
       setHintShown({});
@@ -1053,6 +1072,44 @@ export default function MaterialDetailClient({
     } finally {
       setGeneratingMore(false);
       setStreamingQuestions([]);
+    }
+  }
+
+  async function gradeGeneratedWrittenAnswer(questionIndex: number, question: GeneratedWrittenQuestion) {
+    const answer = (writtenAnswers[questionIndex] ?? "").trim();
+    if (!answer) return;
+
+    setWrittenCompared((prev) => ({ ...prev, [questionIndex]: true }));
+    setWrittenGradeStates((prev) => ({ ...prev, [questionIndex]: { status: "loading" } }));
+
+    try {
+      const res = await fetch("/api/ai/grade-generated-written-answer", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          materialId: m.id,
+          questionType: question.question_type,
+          question: question.question,
+          modelAnswer: question.model_answer,
+          markingPoints: question.marking_points,
+          answer,
+        }),
+      });
+      const data = await res.json().catch(() => null) as
+        | { ok?: boolean; grade?: WrittenAnswerGrade; message?: string; error?: string }
+        | null;
+
+      if (!res.ok || !data?.ok || !data.grade) {
+        throw new Error(data?.message || data?.error || "Could not grade this answer.");
+      }
+
+      setWrittenGradeStates((prev) => ({
+        ...prev,
+        [questionIndex]: { status: "done", grade: data.grade! },
+      }));
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : "Could not grade this answer.";
+      setWrittenGradeStates((prev) => ({ ...prev, [questionIndex]: { status: "error", message } }));
     }
   }
 
@@ -1345,6 +1402,7 @@ export default function MaterialDetailClient({
         const currentQuestionType = currentQ ? questionTypeOf(currentQ) : "mcq";
         const currentWrittenAnswer = writtenAnswers[currentQuestionIndex] ?? "";
         const currentWrittenCompared = Boolean(writtenCompared[currentQuestionIndex]);
+        const currentGradeState: WrittenGradeState = writtenGradeStates[currentQuestionIndex] ?? { status: "idle" };
         const answered = currentQ
           ? currentQuestionType === "mcq"
             ? currentAnswer !== undefined
@@ -1671,9 +1729,8 @@ export default function MaterialDetailClient({
                           onChange={(e) => {
                             const value = e.target.value;
                             setWrittenAnswers((prev) => ({ ...prev, [currentQuestionIndex]: value }));
-                            if (!value.trim()) {
-                              setWrittenCompared((prev) => ({ ...prev, [currentQuestionIndex]: false }));
-                            }
+                            setWrittenCompared((prev) => ({ ...prev, [currentQuestionIndex]: false }));
+                            setWrittenGradeStates((prev) => ({ ...prev, [currentQuestionIndex]: { status: "idle" } }));
                           }}
                           placeholder="Type your answer here..."
                           rows={currentQuestionType === "theory" ? 8 : 5}
@@ -1681,24 +1738,92 @@ export default function MaterialDetailClient({
                         />
                         <button
                           type="button"
-                          disabled={!currentWrittenAnswer.trim()}
-                          onClick={() => setWrittenCompared((prev) => ({ ...prev, [currentQuestionIndex]: true }))}
-                          className="inline-flex items-center justify-center rounded-2xl border border-primary bg-primary-light px-4 py-2.5 text-sm font-semibold text-primary-text transition hover:opacity-90 disabled:opacity-40 focus-visible:outline-none"
+                          disabled={currentWrittenAnswer.trim().length < 5 || currentGradeState.status === "loading"}
+                          onClick={() => void gradeGeneratedWrittenAnswer(currentQuestionIndex, currentQ)}
+                          className="inline-flex items-center justify-center gap-2 rounded-2xl border border-primary bg-primary-light px-4 py-2.5 text-sm font-semibold text-primary-text transition hover:opacity-90 disabled:opacity-40 focus-visible:outline-none"
                         >
-                          Compare answer
+                          {currentGradeState.status === "loading" ? (
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                          ) : (
+                            <BookOpen className="h-4 w-4" />
+                          )}
+                          {currentGradeState.status === "loading"
+                            ? "Grading..."
+                            : currentGradeState.status === "done"
+                              ? "Refresh grade"
+                              : "Grade answer"}
                         </button>
                         {currentWrittenCompared && (
-                          <div className="space-y-3 rounded-2xl border border-primary/20 bg-primary-light/60 px-4 py-3">
+                          <div className="space-y-3">
+                            <div className="rounded-2xl border border-border bg-background px-4 py-3">
+                              <p className="text-xs font-extrabold uppercase tracking-wide text-muted-brand">Your answer</p>
+                              <p className="mt-1 whitespace-pre-wrap text-sm leading-relaxed text-foreground">
+                                {currentWrittenAnswer.trim() || "No answer submitted."}
+                              </p>
+                            </div>
+                            {currentGradeState.status === "loading" ? (
+                              <div className="flex items-center gap-3 rounded-2xl border border-primary/20 bg-primary-light/60 px-4 py-3 text-primary-text">
+                                <Loader2 className="h-4 w-4 animate-spin" />
+                                <p className="text-sm font-semibold">AI is grading your answer...</p>
+                              </div>
+                            ) : currentGradeState.status === "error" ? (
+                              <div className="rounded-2xl border border-rose-500/25 bg-rose-500/10 px-4 py-3">
+                                <p className="text-xs font-extrabold text-rose-700 dark:text-rose-300">AI grading failed</p>
+                                <p className="mt-1 text-sm text-foreground">{currentGradeState.message}</p>
+                              </div>
+                            ) : currentGradeState.status === "done" ? (
+                              <div className="rounded-2xl border border-emerald-500/25 bg-emerald-500/10 px-4 py-3">
+                                <div className="flex flex-wrap items-center justify-between gap-2">
+                                  <p className="text-xs font-extrabold text-emerald-700 dark:text-emerald-300">AI feedback</p>
+                                  <span className="rounded-full border border-emerald-500/30 bg-background px-2.5 py-1 text-xs font-extrabold text-foreground">
+                                    {currentGradeState.grade.score}/{currentGradeState.grade.maxScore} - {verdictLabel(currentGradeState.grade.verdict)}
+                                  </span>
+                                </div>
+                                <p className="mt-2 text-sm leading-relaxed text-foreground">{currentGradeState.grade.feedback}</p>
+                                {currentGradeState.grade.matchedPoints.length > 0 ? (
+                                  <div className="mt-3">
+                                    <p className="text-xs font-extrabold text-emerald-700 dark:text-emerald-300">You covered</p>
+                                    <ul className="mt-1 list-disc space-y-1 pl-5 text-sm leading-relaxed text-foreground">
+                                      {currentGradeState.grade.matchedPoints.map((point, pointIndex) => (
+                                        <li key={`${point}-${pointIndex}`}>{point}</li>
+                                      ))}
+                                    </ul>
+                                  </div>
+                                ) : null}
+                                {currentGradeState.grade.missingPoints.length > 0 ? (
+                                  <div className="mt-3">
+                                    <p className="text-xs font-extrabold text-amber-700 dark:text-amber-300">Missing points</p>
+                                    <ul className="mt-1 list-disc space-y-1 pl-5 text-sm leading-relaxed text-foreground">
+                                      {currentGradeState.grade.missingPoints.map((point, pointIndex) => (
+                                        <li key={`${point}-${pointIndex}`}>{point}</li>
+                                      ))}
+                                    </ul>
+                                  </div>
+                                ) : null}
+                                {currentGradeState.grade.improvedAnswer ? (
+                                  <div className="mt-3">
+                                    <p className="text-xs font-extrabold text-emerald-700 dark:text-emerald-300">Improved answer</p>
+                                    <p className="mt-1 whitespace-pre-wrap text-sm leading-relaxed text-foreground">
+                                      {currentGradeState.grade.improvedAnswer}
+                                    </p>
+                                  </div>
+                                ) : null}
+                                <p className="mt-3 text-[11px] font-semibold text-muted-brand">
+                                  AI feedback only - save this set to Practice Library if you want persistent grading history.
+                                </p>
+                              </div>
+                            ) : null}
+                            <div className="rounded-2xl border border-primary/20 bg-primary-light/60 px-4 py-3">
                             <div>
                               <p className="text-xs font-extrabold uppercase tracking-wide text-primary-text/80">Model answer</p>
-                              <p className="mt-1 text-sm leading-relaxed text-primary-text">{currentQ.model_answer}</p>
+                              <p className="mt-1 whitespace-pre-wrap text-sm leading-relaxed text-primary-text">{currentQ.model_answer}</p>
                             </div>
                             {currentQ.marking_points.length > 0 && (
                               <div>
                                 <p className="text-xs font-extrabold uppercase tracking-wide text-primary-text/80">Marking points</p>
-                                <ul className="mt-1 space-y-1 text-sm leading-relaxed text-primary-text">
+                                <ul className="mt-1 list-disc space-y-1 pl-5 text-sm leading-relaxed text-primary-text">
                                   {currentQ.marking_points.map((point, index) => (
-                                    <li key={`${point}-${index}`}>- {point}</li>
+                                    <li key={`${point}-${index}`}>{point}</li>
                                   ))}
                                 </ul>
                               </div>
@@ -1708,6 +1833,7 @@ export default function MaterialDetailClient({
                                 <span className="font-semibold">Note: </span>{currentQ.explanation}
                               </p>
                             )}
+                            </div>
                           </div>
                         )}
                       </div>
@@ -1857,6 +1983,7 @@ export default function MaterialDetailClient({
                         setAnswers({});
                         setWrittenAnswers({});
                         setWrittenCompared({});
+                        setWrittenGradeStates({});
                         setCurrentQuestionIndex(0);
                         setHintShown({});
                         syncedQuizMissesRef.current = null;

@@ -232,6 +232,7 @@ export async function POST(req: NextRequest) {
   try {
     await assertQuestionsNotDuplicateForCourse({
       materialId,
+      ownerUserId: user.id,
       questions: allMcq ? questionsToSave : mcqQuestions,
     });
   } catch (error: unknown) {

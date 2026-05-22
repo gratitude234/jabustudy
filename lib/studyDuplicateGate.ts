@@ -98,6 +98,7 @@ export async function assertQuestionsNotDuplicateForCourse(args: {
   courseId?: string;
   courseCode?: string | null;
   quizSetId?: string;
+  ownerUserId?: string;
   questions: DuplicateCheckQuestion[];
   excludeQuestionIds?: string[];
 }) {
@@ -111,7 +112,7 @@ export async function assertQuestionsNotDuplicateForCourse(args: {
   const existing = await loadExistingQuestions(context, {
     excludeQuestionIds: args.excludeQuestionIds,
     excludeQuizSetId: args.quizSetId,
-  });
+  }, args.ownerUserId);
 
   for (const incomingQuestion of incoming) {
     for (const existingQuestion of existing) {
@@ -315,7 +316,8 @@ async function loadCourseMaterialIds(courseId: string | null, courseCode: string
 
 async function loadExistingQuestions(
   context: CourseContext,
-  exclude: { excludeQuestionIds?: string[]; excludeQuizSetId?: string }
+  exclude: { excludeQuestionIds?: string[]; excludeQuizSetId?: string },
+  ownerUserId?: string
 ) {
   const byId = new Map<string, ExistingQuestionRow>();
 
@@ -326,6 +328,21 @@ async function loadExistingQuestions(
       if (!looksGeneratedOrSourceBacked(row)) continue;
       byId.set(row.id, row);
     }
+  }
+
+  if (ownerUserId) {
+    const setIds = await loadOwnerQuizSetIds(context, ownerUserId);
+    if (!setIds.length) return [];
+
+    const { data, error } = await adminSupabase
+      .from("study_quiz_questions")
+      .select("id,set_id,prompt,source_chunk_id,source_material_id,question_kind,question_fingerprint,ai_generated,generation_meta,study_ref,study_quiz_options(text,is_correct,position)")
+      .in("set_id", setIds)
+      .limit(3000);
+    if (error) throw error;
+    await addRows(data as unknown as ExistingQuestionRow[]);
+
+    return [...byId.values()].map((row) => toComparable(existingRowToQuestion(row), undefined, row.id, row.set_id));
   }
 
   if (context.materialIds.length) {
@@ -358,6 +375,34 @@ async function loadExistingQuestions(
   }
 
   return [...byId.values()].map((row) => toComparable(existingRowToQuestion(row), undefined, row.id, row.set_id));
+}
+
+async function loadOwnerQuizSetIds(context: CourseContext, ownerUserId: string) {
+  const byId = new Set<string>();
+
+  if (context.courseCode) {
+    const { data, error } = await adminSupabase
+      .from("study_quiz_sets")
+      .select("id")
+      .eq("created_by", ownerUserId)
+      .eq("course_code", context.courseCode)
+      .limit(1000);
+    if (error) throw error;
+    for (const set of (data ?? []) as Array<{ id: string }>) byId.add(set.id);
+  }
+
+  if (context.materialIds.length) {
+    const { data, error } = await adminSupabase
+      .from("study_quiz_sets")
+      .select("id")
+      .eq("created_by", ownerUserId)
+      .in("source_material_id", context.materialIds)
+      .limit(1000);
+    if (error) throw error;
+    for (const set of (data ?? []) as Array<{ id: string }>) byId.add(set.id);
+  }
+
+  return [...byId];
 }
 
 function existingRowToQuestion(row: ExistingQuestionRow): DuplicateCheckQuestion {
