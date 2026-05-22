@@ -43,24 +43,63 @@ const MIN_EXTRACTED_PDF_CHARS = 120;
 let pdfWorkerConfigured = false;
 type PDFParseConstructor = typeof import("pdf-parse").PDFParse;
 
-async function ensurePdfCanvasPolyfills() {
-  const target = globalThis as typeof globalThis & Record<string, unknown> & {
-    DOMMatrix?: unknown;
-    ImageData?: unknown;
-    Path2D?: unknown;
-  };
+class _DOMMatrix {
+  a = 1; b = 0; c = 0; d = 1; e = 0; f = 0;
+  constructor(values?: number[]) {
+    if (Array.isArray(values) && values.length === 6) {
+      [this.a, this.b, this.c, this.d, this.e, this.f] = values;
+    }
+  }
+  multiply(m: _DOMMatrix): _DOMMatrix {
+    return new _DOMMatrix([
+      this.a * m.a + this.c * m.b, this.b * m.a + this.d * m.b,
+      this.a * m.c + this.c * m.d, this.b * m.c + this.d * m.d,
+      this.a * m.e + this.c * m.f + this.e, this.b * m.e + this.d * m.f + this.f,
+    ]);
+  }
+  translate(tx: number, ty: number) { return this.multiply(new _DOMMatrix([1, 0, 0, 1, tx, ty])); }
+  scale(sx: number, sy = sx) { return this.multiply(new _DOMMatrix([sx, 0, 0, sy, 0, 0])); }
+  inverse(): _DOMMatrix {
+    const det = this.a * this.d - this.b * this.c;
+    if (!det) return new _DOMMatrix();
+    return new _DOMMatrix([this.d / det, -this.b / det, -this.c / det, this.a / det,
+      (this.c * this.f - this.d * this.e) / det, (this.b * this.e - this.a * this.f) / det]);
+  }
+  transformPoint(p: { x?: number; y?: number } = {}) {
+    const x = p.x ?? 0; const y = p.y ?? 0;
+    return { x: this.a * x + this.c * y + this.e, y: this.b * x + this.d * y + this.f, z: 0, w: 1 };
+  }
+}
+class _ImageData {
+  width: number; height: number; data: Uint8ClampedArray;
+  constructor(width: number, height: number) {
+    this.width = width; this.height = height;
+    this.data = new Uint8ClampedArray(width * height * 4);
+  }
+}
+class _Path2D {
+  moveTo() {} lineTo() {} closePath() {} rect() {} arc() {}
+  bezierCurveTo() {} quadraticCurveTo() {} ellipse() {}
+}
 
-  if (target.DOMMatrix && target.ImageData && target.Path2D) return;
+async function ensurePdfCanvasPolyfills() {
+  const g = globalThis as Record<string, unknown>;
+
+  if (g["DOMMatrix"] && g["ImageData"] && g["Path2D"]) return;
 
   try {
     const runtimeRequire = new Function("moduleName", "return require(moduleName)") as (moduleName: string) => any;
     const canvas = runtimeRequire("@napi-rs/canvas");
-    target.DOMMatrix ??= canvas.DOMMatrix;
-    target.ImageData ??= canvas.ImageData;
-    target.Path2D ??= canvas.Path2D;
+    g["DOMMatrix"] ??= canvas.DOMMatrix;
+    g["ImageData"] ??= canvas.ImageData;
+    g["Path2D"] ??= canvas.Path2D;
   } catch {
-    // pdfjs will surface a clearer runtime warning/error if these are required.
+    // Fall back to minimal pure-JS polyfills — sufficient for pdfjs text extraction.
   }
+
+  g["DOMMatrix"] ??= _DOMMatrix;
+  g["ImageData"] ??= _ImageData;
+  g["Path2D"] ??= _Path2D;
 }
 
 function shouldExtractPdfText(): boolean {
