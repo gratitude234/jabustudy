@@ -1125,6 +1125,16 @@ export default function MaterialDetailClient({
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "Failed to save questions.");
       setSavedSetId(data.setId);
+      if (data.repaired || data.skippedCount > 0) {
+        const savedCount = Number(data.savedCount ?? generatedQuestions.length);
+        const replacedCount = Number(data.replacedCount ?? 0);
+        const skippedCount = Number(data.skippedCount ?? 0);
+        const details = [
+          replacedCount > 0 ? `replaced ${replacedCount}` : "",
+          skippedCount > 0 ? `skipped ${skippedCount}` : "",
+        ].filter(Boolean).join(", ");
+        showToast(`Saved ${savedCount} questions${details ? ` (${details} duplicate${replacedCount + skippedCount === 1 ? "" : "s"})` : ""}`);
+      }
       syncedQuizMissesRef.current = null;
     } catch (e: unknown) {
       setSaveQsError(e instanceof Error ? e.message : "Failed to save questions.");
