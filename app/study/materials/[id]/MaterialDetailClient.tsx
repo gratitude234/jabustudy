@@ -1214,6 +1214,14 @@ export default function MaterialDetailClient({
     } finally { setSavingQs(false); }
   }
 
+  function closeAiPracticeWorkspace() {
+    if (quizState === "loading") {
+      setGenerationStatus("Your AI draft is still being saved. Practice will open when it is ready.");
+      return;
+    }
+    setQuizState("idle");
+  }
+
   const MetaPill = ({ children }: { children: React.ReactNode }) => (
     <span className="inline-flex items-center rounded-full border border-white/20 bg-white/10 px-2.5 py-0.5 text-[11px] font-medium text-white/90">
       {children}
@@ -1535,14 +1543,21 @@ export default function MaterialDetailClient({
         const scoreRingPct = mcqCount === 0 ? 0 : Math.round((correctCount / mcqCount) * 100);
         const scoreRingOffset = scoreRingCirc * (1 - scoreRingPct / 100);
         const scoreRingColor = scoreRingPct >= 80 ? "#22c55e" : scoreRingPct >= 60 ? "#f59e0b" : "#ef4444";
+        const closeDisabled = quizState === "loading";
 
         return (
           <>
-            <div className="fixed inset-0 z-40 bg-black/50" onClick={() => setQuizState("idle")} />
-            <div className="fixed inset-x-0 bottom-0 z-50 flex max-h-[92vh] flex-col rounded-t-3xl bg-card shadow-2xl">
-              {/* Sheet header */}
-              <div className="flex items-center justify-between border-b border-border px-4 py-4">
-                <div>
+            <div
+              className="fixed inset-0 z-40 bg-black/55 backdrop-blur-[2px]"
+              onClick={closeAiPracticeWorkspace}
+            />
+            <div className="fixed inset-0 z-50 flex flex-col bg-card shadow-2xl md:inset-x-6 md:bottom-auto md:top-6 md:mx-auto md:h-[calc(100vh-3rem)] md:max-w-4xl md:overflow-hidden md:rounded-3xl md:border md:border-border">
+              {/* Workspace header */}
+              <div className="flex shrink-0 items-start justify-between gap-3 border-b border-border px-4 py-4 md:px-6">
+                <div className="min-w-0">
+                  <p className="text-[11px] font-bold uppercase tracking-wider text-muted-brand">
+                    AI practice workspace
+                  </p>
                   <p className="text-sm font-bold text-foreground">
                     {quizState === "config" ? "Configure Questions" :
                      quizState === "loading" ? "Generating…" :
@@ -1580,15 +1595,18 @@ export default function MaterialDetailClient({
                     </p>
                   )}
                 </div>
-                <button type="button" onClick={() => setQuizState("idle")}
-                  className="grid h-8 w-8 place-items-center rounded-full border border-border bg-background text-muted-brand hover:bg-secondary/50 focus-visible:outline-none">
+                <button type="button" onClick={closeAiPracticeWorkspace} disabled={closeDisabled}
+                  className="grid h-9 w-9 shrink-0 place-items-center rounded-full border border-border bg-background text-muted-brand transition hover:bg-secondary/50 disabled:cursor-not-allowed disabled:opacity-45 focus-visible:outline-none"
+                  aria-label={closeDisabled ? "Generation is still saving" : "Close AI practice workspace"}
+                  title={closeDisabled ? "Generation is still saving" : "Close"}
+                >
                   <X className="h-4 w-4" />
                 </button>
               </div>
 
               {/* ── Panel A: Config ── */}
               {quizState === "config" && (
-                <div className="flex-1 overflow-y-auto px-4 py-5 space-y-6">
+                <div className="flex-1 space-y-6 overflow-y-auto px-4 py-5 md:px-6">
                   <div>
                     <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-muted-brand">Number of questions</p>
                     <div className="flex gap-2">
@@ -1685,7 +1703,7 @@ export default function MaterialDetailClient({
 
                   {genQsError && <p className="text-center text-xs text-red-500">{genQsError}</p>}
 
-                  <div className="pb-4">
+                  <div className="sticky bottom-0 -mx-4 bg-card px-4 pb-[max(1rem,env(safe-area-inset-bottom))] pt-2 md:-mx-6 md:px-6">
                     <button type="button" onClick={handleGenerateQuestions}
                       className="inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-primary px-4 py-3.5 text-sm font-semibold text-white transition hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary">
                       <Sparkles className="h-4 w-4" />
@@ -1697,7 +1715,7 @@ export default function MaterialDetailClient({
 
               {/* ── Panel B: Loading ── */}
               {quizState === "loading" && (
-                <div className="flex flex-1 flex-col items-center justify-center gap-5 px-5 py-16 text-center">
+                <div className="flex flex-1 flex-col items-center justify-center gap-5 px-5 py-16 text-center md:px-6">
                   <div className="grid h-14 w-14 place-items-center rounded-2xl bg-primary-light text-primary">
                     <Loader2 className="h-7 w-7 animate-spin" />
                   </div>
