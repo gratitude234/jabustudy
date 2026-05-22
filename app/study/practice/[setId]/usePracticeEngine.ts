@@ -628,7 +628,6 @@ export function usePracticeEngine({
   function softReset() {
     // Clear retry-weak filter so the full set is shown again
     setRetryWeakIds(null);
-    setConfidences({});
     // Clear per-question UI state (revealed answers, etc.) by resetting
     // session-level state. The load useEffect will re-run on resetKey change
     // and reset answers/flags/timer itself.
@@ -675,10 +674,9 @@ export function usePracticeEngine({
     }
 
     setRetryWeakIds(weakIds);
-      setAnswers({});
-      setWrittenAnswers({});
-      setWrittenGrades({});
-      setConfidences({});
+    setAnswers({});
+    setWrittenAnswers({});
+    setWrittenGrades({});
     setFlagged({});
     setIdx(0);
     setSubmitted(false);

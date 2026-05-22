@@ -7,6 +7,7 @@ import { useParams, useRouter, useSearchParams } from "next/navigation";
 import {
   AlertTriangle,
   ArrowLeft,
+  ArrowRight,
   ExternalLink,
   FileText,
   Flag,
@@ -840,7 +841,7 @@ if (err || !meta) {
   }).length;
 
   return (
-    <div className="pb-28 md:pb-6">
+    <div className="pb-32 md:pb-6">
       <GuidedSourceModal
         open={Boolean(readingRef?.open)}
         onResume={() => setReadingRef(null)}
@@ -927,38 +928,22 @@ if (err || !meta) {
           </div>
         </div>
 
-        <div className="mt-3">
-          <div className="flex items-end justify-between gap-3">
-            <div className="min-w-0">
-              <div className="flex items-center gap-1.5 min-w-0">
-                {isDueMode && (
-                  <span className="shrink-0 inline-flex items-center gap-1 rounded-full border border-[#5B35D5]/25 bg-[#EEEDFE] px-2 py-0.5 text-[10px] font-extrabold text-[#3B24A8] dark:border-[#5B35D5]/30 dark:bg-[#5B35D5]/10 dark:text-indigo-300">
-                    Due
-                  </span>
-                )}
-                <p className="truncate text-sm font-extrabold text-foreground">{normalize(meta.title)}</p>
-              </div>
-              <p className="mt-0.5 text-[12px] font-semibold text-muted-foreground">
-                Answered <span className="tabular-nums">{stats.answered}</span>
-                {!learningMode ? (
-                  <>
-                    {" "}<span className="text-muted-foreground">•</span>{" "}
-                    feedback after submit
-                  </>
-                ) : null}
-              </p>
+        <div className="mt-2">
+          <div className="flex items-center justify-between gap-2">
+            <div className="flex min-w-0 items-center gap-1.5">
+              {isDueMode && (
+                <span className="shrink-0 inline-flex items-center gap-1 rounded-full border border-[#5B35D5]/25 bg-[#EEEDFE] px-2 py-0.5 text-[10px] font-extrabold text-[#3B24A8] dark:border-[#5B35D5]/30 dark:bg-[#5B35D5]/10 dark:text-indigo-300">
+                  Due
+                </span>
+              )}
+              <p className="truncate text-xs font-extrabold text-foreground">{normalize(meta.title)}</p>
             </div>
-
-          </div>
-
-          <div className="mt-2 h-2 w-full overflow-hidden rounded-full bg-secondary" aria-hidden="true">
-            <div className="h-full rounded-full bg-[#5B35D5]" style={{ width: `${answeredPct}%` }} />
-          </div>
-          <div className="mt-1 flex items-center justify-between text-[11px] font-semibold text-muted-foreground">
-            <span className="tabular-nums">{answeredPct}% done</span>
-            <span className="tabular-nums">
+            <span className="shrink-0 text-[11px] font-semibold text-muted-foreground tabular-nums">
               {stats.total - stats.answered} left
             </span>
+          </div>
+          <div className="mt-1.5 h-1.5 w-full overflow-hidden rounded-full bg-secondary" aria-hidden="true">
+            <div className="h-full rounded-full bg-[#5B35D5]" style={{ width: `${answeredPct}%` }} />
           </div>
         </div>
       </div>
@@ -1516,12 +1501,7 @@ if (err || !meta) {
           )}
 
           <Card className="rounded-3xl">
-            <p className="text-xs font-extrabold text-muted-foreground">
-              Question <span className="tabular-nums">{idx + 1}</span> of{" "}
-              <span className="tabular-nums">{total}</span>
-            </p>
-
-            <p className="mt-2 whitespace-pre-wrap text-base font-extrabold leading-snug text-foreground">
+            <p className="whitespace-pre-wrap text-base font-extrabold leading-snug text-foreground">
               {normalize(String(current?.prompt ?? ""))}
             </p>
 
@@ -1533,7 +1513,7 @@ if (err || !meta) {
                     ? "Write your answer, then let AI grade it against the marking points."
                     : "Type a concise answer, then let AI grade it against the model answer."
                   : isRevealed
-                  ? "Review the feedback, then tap Next when you're ready."
+                  ? "Scroll down for the explanation, then tap Next."
                   : learningMode
                   ? "Pick an answer to reveal feedback and explanation."
                   : "Choose an answer. Feedback appears after you submit."}
@@ -1783,57 +1763,6 @@ if (err || !meta) {
               </div>
             ) : null}
 
-            {/* Navigation + submit */}
-            <div className="mt-5 flex items-center justify-between gap-2">
-              <button
-                type="button"
-                onClick={goPrev}
-                disabled={idx === 0}
-                className={cn(
-                  "inline-flex items-center justify-center rounded-2xl border px-4 py-2 text-sm font-extrabold",
-                  "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-card",
-                  idx === 0
-                    ? "border-border/50 bg-background text-muted-foreground opacity-60"
-                    : "border-border bg-background text-foreground hover:bg-secondary/50"
-                )}
-              >
-                Prev
-              </button>
-
-              <div className="flex items-center gap-2">
-                {!isLast ? (
-                  <button
-                    type="button"
-                    onClick={goNext}
-                    className={cn(
-                      "inline-flex items-center justify-center rounded-2xl px-4 py-2 text-sm font-extrabold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-card",
-                      isRevealed
-                        ? "bg-[#5B35D5] text-white hover:bg-[#4526B8]"
-                        : "bg-secondary text-foreground hover:opacity-90"
-                    )}
-                  >
-                    Next
-                  </button>
-                ) : (
-                  <button
-                    type="button"
-                    onClick={handleSubmitClick}
-                    className={cn(
-                      "inline-flex items-center justify-center gap-2 rounded-2xl px-4 py-2 text-sm font-extrabold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-card",
-                      learningMode
-                        ? "bg-[#5B35D5] text-white hover:bg-[#4526B8]"
-                        : "bg-secondary text-foreground"
-                    )}
-                  >
-                    {learningMode ? (
-                      <><GraduationCap className="h-4 w-4" /> Finish session</>
-                    ) : (
-                      <><Send className="h-4 w-4" /> Submit</>
-                    )}
-                  </button>
-                )}
-              </div>
-            </div>
           </Card>
 
           {/* ── Explanation Panel — appears after student answers ────────── */}
@@ -1890,12 +1819,68 @@ if (err || !meta) {
         </div>
       )}
 
+      {/* ── Sticky bottom navigation ── */}
+      {!submitted && questions.length > 0 && current && (
+        <div className="fixed bottom-0 left-0 right-0 z-30 border-t border-border bg-background/95 backdrop-blur-sm px-4 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-3">
+          <div className="mx-auto flex max-w-2xl items-center gap-3">
+            <button
+              type="button"
+              onClick={goPrev}
+              disabled={idx === 0}
+              className={cn(
+                "inline-flex h-12 w-14 shrink-0 items-center justify-center rounded-2xl border transition",
+                "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring active:scale-95",
+                idx === 0
+                  ? "border-border/50 bg-background text-muted-foreground opacity-40"
+                  : "border-border bg-background text-foreground hover:bg-secondary/50"
+              )}
+            >
+              <ArrowLeft className="h-4 w-4" />
+            </button>
+
+            {!isLast ? (
+              <button
+                type="button"
+                onClick={goNext}
+                className={cn(
+                  "inline-flex h-12 flex-1 items-center justify-center gap-2 rounded-2xl text-sm font-extrabold transition active:scale-[0.98]",
+                  "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                  isRevealed
+                    ? "bg-[#5B35D5] text-white hover:bg-[#4526B8]"
+                    : "bg-secondary text-foreground hover:opacity-90"
+                )}
+              >
+                Next <ArrowRight className="h-4 w-4" />
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={handleSubmitClick}
+                className={cn(
+                  "inline-flex h-12 flex-1 items-center justify-center gap-2 rounded-2xl text-sm font-extrabold transition active:scale-[0.98]",
+                  "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                  learningMode
+                    ? "bg-[#5B35D5] text-white hover:bg-[#4526B8]"
+                    : "bg-secondary text-foreground hover:opacity-90"
+                )}
+              >
+                {learningMode ? (
+                  <><GraduationCap className="h-4 w-4" /> Finish session</>
+                ) : (
+                  <><Send className="h-4 w-4" /> Submit</>
+                )}
+              </button>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* ── Milestone toast ── */}
       {milestone && (
         <div
           role="status"
           aria-live="polite"
-          className="pointer-events-none fixed inset-x-0 bottom-24 z-50 flex justify-center px-4"
+          className="pointer-events-none fixed inset-x-0 bottom-28 z-50 flex justify-center px-4"
         >
           <div
             className={cn(
