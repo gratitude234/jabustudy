@@ -14,7 +14,6 @@ import {
   CheckCircle2,
   ChevronDown,
   ChevronUp,
-  Clock,
   Download,
   ExternalLink,
   File,
@@ -803,6 +802,7 @@ export default function MaterialDetailClient({
   const title = (m.title ?? course?.course_code ?? "Untitled material").trim();
   const fileUrl = m.file_path ? `/api/study/materials/${m.id}/download` : "";
   const hasFile = fileUrl.length > 0;
+  const aiSupported = isAiGenSupported(m);
 
   const [saved, setSaved] = useState(initialSaved);
   const [saving, setSaving] = useState(false);
@@ -1303,171 +1303,108 @@ export default function MaterialDetailClient({
         </Link>
       </div>
 
-      {/* ══ HERO CARD ══ */}
-      <div className="overflow-hidden rounded-3xl border border-border shadow-sm">
-
-        {/* Purple gradient banner */}
-        <div className="relative bg-gradient-to-br from-primary to-primary/60 px-5 pt-5 pb-6">
-          <div className="pointer-events-none absolute -top-10 -right-8 h-40 w-40 rounded-full bg-white/[0.06]" />
-          <div className="pointer-events-none absolute -bottom-8 left-4 h-24 w-24 rounded-full bg-white/[0.04]" />
-
-          {/* Context chips */}
-          <div className="relative mb-4 flex flex-wrap items-center gap-1.5">
-            {course?.course_code && <MetaPill>{course.course_code}</MetaPill>}
-            {course?.level && <MetaPill>{course.level}L</MetaPill>}
-            {course?.semester && <MetaPill>{course.semester} sem</MetaPill>}
-            {m.session && <MetaPill>{m.session}</MetaPill>}
-          </div>
-
-          {/* Icon + title */}
-          <div className="relative flex items-start gap-4">
-            <div className="grid h-12 w-12 shrink-0 place-items-center rounded-2xl bg-white/15 text-white">
-              <FileIcon kind={kind} />
+      {aiSupported && (
+        <div className="overflow-hidden rounded-3xl border border-primary/20 bg-card shadow-sm">
+          <div className="relative bg-gradient-to-br from-primary to-primary/65 px-5 pb-5 pt-5">
+            <div className="pointer-events-none absolute right-5 top-5 h-20 w-20 rounded-full border border-white/10" />
+            <div className="relative flex flex-wrap items-center gap-1.5">
+              {course?.course_code && <MetaPill>{course.course_code}</MetaPill>}
+              {course?.level && <MetaPill>{course.level}L</MetaPill>}
+              {course?.semester && <MetaPill>{course.semester} sem</MetaPill>}
+              {m.session && <MetaPill>{m.session}</MetaPill>}
             </div>
-            <div className="min-w-0 flex-1">
-              <div className="flex flex-wrap items-center gap-2">
-                <h1 className="font-[family-name:var(--font-bricolage)] text-xl font-bold leading-snug tracking-tight text-white">{title}</h1>
-                {m.verified && (
-                  <span className="inline-flex items-center gap-1 rounded-full bg-emerald-400/20 px-2 py-0.5 text-[11px] font-semibold text-emerald-100">
-                    <CheckCircle2 className="h-3 w-3" /> Verified
-                  </span>
-                )}
-                {m.featured && (
-                  <span className="inline-flex items-center gap-1 rounded-full bg-amber-400/20 px-2 py-0.5 text-[11px] font-semibold text-amber-100">
-                    <Star className="h-3 w-3" /> Featured
-                  </span>
-                )}
+            <div className="relative mt-5 flex items-start gap-4">
+              <div className="grid h-12 w-12 shrink-0 place-items-center rounded-2xl bg-white/15 text-white">
+                <Sparkles className="h-6 w-6" />
               </div>
-              <div className="mt-2 flex flex-wrap gap-1.5">
-                <MetaPill>{badge}</MetaPill>
-                {m.material_type && <MetaPill>{formatMaterialType(m.material_type)}</MetaPill>}
-                <MetaPill><Clock className="mr-1 h-2.5 w-2.5" />{timeAgo(m.created_at)}</MetaPill>
+              <div className="min-w-0 flex-1">
+                <div className="flex flex-wrap items-center gap-2">
+                  <h1 className="font-[family-name:var(--font-bricolage)] text-2xl font-bold leading-tight tracking-tight text-white">
+                    Generate Practice
+                  </h1>
+                  {m.verified && (
+                    <span className="inline-flex items-center gap-1 rounded-full bg-emerald-400/20 px-2 py-0.5 text-[11px] font-semibold text-emerald-100">
+                      <CheckCircle2 className="h-3 w-3" /> Verified
+                    </span>
+                  )}
+                  {m.featured && (
+                    <span className="inline-flex items-center gap-1 rounded-full bg-amber-400/20 px-2 py-0.5 text-[11px] font-semibold text-amber-100">
+                      <Star className="h-3 w-3" /> Featured
+                    </span>
+                  )}
+                </div>
+                <p className="mt-1 line-clamp-2 text-sm font-semibold text-white/85">From {title}</p>
+                <p className="mt-2 text-sm leading-relaxed text-white/75">Turn this material into practice questions.</p>
               </div>
             </div>
           </div>
 
-          {m.description && (
-            <p className="relative mt-3 text-sm leading-relaxed text-white/75">{m.description}</p>
-          )}
-        </div>
-
-        {/* Action area */}
-        <div className="space-y-4 bg-card px-5 pb-5 pt-4">
-          <div className="rounded-3xl border border-border bg-background p-3">
-            <div className="mb-3 flex items-start justify-between gap-3">
-              <div>
-                <p className="text-xs font-semibold uppercase tracking-wider text-muted-brand">File actions</p>
-                <p className="mt-1 text-sm font-semibold text-foreground">Download, save, or share this material.</p>
+          <div className="space-y-3 px-4 py-4">
+            {draftLoading ? (
+              <div className="rounded-2xl border border-primary/15 bg-primary-light/40 px-4 py-3 text-xs font-semibold text-primary">
+                Checking for saved AI drafts...
               </div>
-              <span className="shrink-0 rounded-full border border-border bg-card px-2.5 py-1 text-[11px] font-semibold text-muted-brand">
-                {badge}
+            ) : activeDraft ? (
+              <div className="space-y-3 rounded-2xl border border-primary/20 bg-primary-light/35 p-3">
+                <div>
+                  <p className="text-sm font-bold text-primary-text">Draft found</p>
+                  <p className="mt-0.5 text-xs text-primary/75">
+                    {activeDraft.questionsCount} question{activeDraft.questionsCount === 1 ? "" : "s"} saved from this material.
+                  </p>
+                </div>
+                <div className="grid gap-2 sm:grid-cols-3">
+                  <Link
+                    href={`/study/practice/${encodeURIComponent(activeDraft.setId)}${activeDraft.attempt?.id ? `?attempt=${encodeURIComponent(activeDraft.attempt.id)}` : ""}`}
+                    className="inline-flex items-center justify-center rounded-xl bg-primary px-3 py-2.5 text-xs font-bold text-white transition hover:opacity-90"
+                  >
+                    Resume draft
+                  </Link>
+                  <button
+                    type="button"
+                    onClick={() => void discardActiveDraft("new")}
+                    disabled={draftAction !== null}
+                    className="inline-flex items-center justify-center rounded-xl border border-primary/20 bg-background px-3 py-2.5 text-xs font-bold text-primary-text transition hover:bg-primary-light/70 disabled:opacity-60"
+                  >
+                    {draftAction === "new" ? "Starting..." : "Start new"}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => void discardActiveDraft("discard")}
+                    disabled={draftAction !== null}
+                    className="inline-flex items-center justify-center rounded-xl border border-border bg-background px-3 py-2.5 text-xs font-bold text-muted-brand transition hover:bg-secondary/50 disabled:opacity-60"
+                  >
+                    {draftAction === "discard" ? "Discarding..." : "Discard"}
+                  </button>
+                </div>
+              </div>
+            ) : null}
+
+            <button type="button"
+              onClick={() => { setConfigOpen(false); void handleGenerateQuestions(); }}
+              className="flex w-full items-center gap-3 rounded-2xl bg-primary px-4 py-4 text-left text-white shadow-sm transition hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 active:scale-[0.99]">
+              <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-white/15">
+                <Sparkles className="h-5 w-5" />
               </span>
-            </div>
-
-          {/* Primary action row */}
-          <div className="flex items-center gap-2">
-            <a href={hasFile ? `/api/study/materials/${m.id}/download` : "#"} download
-              onClick={(e) => { if (!hasFile) { e.preventDefault(); return; } handleDownload(); }}
-              className={cn(
-                "inline-flex flex-1 items-center justify-center gap-2 rounded-2xl px-4 py-3 text-sm font-semibold no-underline transition",
-                "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2",
-                !hasFile ? "pointer-events-none border border-border/60 bg-muted text-muted-brand"
-                  : "bg-primary text-white hover:opacity-90 active:scale-[0.98]"
-              )}>
-              <Download className="h-4 w-4" /> Download PDF
-            </a>
-
-            <button type="button" onClick={handleToggleSave} disabled={saving} aria-label={saved ? "Remove from library" : "Save to library"}
-              className={cn(
-                "inline-flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl border transition",
-                "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
-                saved ? "border-primary/30 bg-primary-light text-primary-text" : "border-border/60 bg-background text-foreground hover:bg-secondary/50",
-                saving ? "opacity-60" : ""
-              )}>
-              {saved ? <BookmarkCheck className="h-4 w-4" /> : <Bookmark className="h-4 w-4" />}
+              <div className="min-w-0 flex-1">
+                <p className="text-base font-bold">Generate {quizConfig.count} {formatQuestionFormat(quizConfig.questionFormat)} questions</p>
+                <p className="text-xs font-medium text-white/75">
+                  {quizConfig.difficulty === "hard" ? "Exam-hard" : quizConfig.difficulty === "easy" ? "Easy warm-up" : "Mixed difficulty"} · {generationModeCopy(generationMode, quizConfig)}
+                </p>
+              </div>
+              <ArrowRight className="h-4 w-4 shrink-0" />
             </button>
 
-            <button type="button" onClick={handleShare} aria-label="Share"
-              className="inline-flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl border border-border/60 bg-background text-foreground transition hover:bg-secondary/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2">
-              <Share2 className="h-4 w-4" />
+            <button
+              type="button"
+              onClick={() => setConfigOpen((o) => !o)}
+              className="flex w-full items-center justify-between rounded-xl border border-border bg-background px-4 py-3 text-sm font-semibold text-foreground transition hover:bg-secondary/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+            >
+              <span>Generator settings</span>
+              {configOpen ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
             </button>
-          </div>
 
-          <p className="mt-3 text-xs text-muted-brand">
-            {downloads.toLocaleString("en-NG")} downloads
-            {upvoteCount > 0 && ` · ${upvoteCount} found helpful`}
-          </p>
-
-          </div>
-
-          {/* AI feature cluster */}
-          {isAiGenSupported(m) && (
-          <div className="space-y-3 rounded-3xl border border-primary/20 bg-primary-light/40 p-3">
-            <div>
-              <p className="text-xs font-semibold uppercase tracking-wider text-primary">AI study tools</p>
-              <p className="mt-1 text-sm font-semibold text-primary-text">Turn this file into practice questions.</p>
-            </div>
-
-            <div className="space-y-2">
-              {draftLoading ? (
-                <div className="rounded-xl border border-primary/15 bg-background/70 px-4 py-3 text-xs font-semibold text-primary">
-                  Checking for saved AI drafts...
-                </div>
-              ) : activeDraft ? (
-                <div className="space-y-2 rounded-xl border border-primary/20 bg-background/80 p-3">
-                  <div>
-                    <p className="text-sm font-bold text-primary-text">AI practice draft found</p>
-                    <p className="mt-0.5 text-xs text-primary/70">
-                      {activeDraft.questionsCount} question{activeDraft.questionsCount === 1 ? "" : "s"} saved from this material.
-                    </p>
-                  </div>
-                  <div className="grid gap-2 sm:grid-cols-3">
-                    <Link
-                      href={`/study/practice/${encodeURIComponent(activeDraft.setId)}${activeDraft.attempt?.id ? `?attempt=${encodeURIComponent(activeDraft.attempt.id)}` : ""}`}
-                      className="inline-flex items-center justify-center rounded-xl bg-primary px-3 py-2 text-xs font-bold text-white transition hover:opacity-90"
-                    >
-                      Resume
-                    </Link>
-                    <button
-                      type="button"
-                      onClick={() => void discardActiveDraft("new")}
-                      disabled={draftAction !== null}
-                      className="inline-flex items-center justify-center rounded-xl border border-primary/20 bg-primary-light px-3 py-2 text-xs font-bold text-primary-text transition hover:bg-primary-light/80 disabled:opacity-60"
-                    >
-                      {draftAction === "new" ? "Starting..." : "Start new"}
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => void discardActiveDraft("discard")}
-                      disabled={draftAction !== null}
-                      className="inline-flex items-center justify-center rounded-xl border border-border bg-background px-3 py-2 text-xs font-bold text-muted-brand transition hover:bg-secondary/50 disabled:opacity-60"
-                    >
-                      {draftAction === "discard" ? "Discarding..." : "Discard"}
-                    </button>
-                  </div>
-                </div>
-              ) : null}
-              <button type="button"
-                onClick={() => { setConfigOpen(false); void handleGenerateQuestions(); }}
-                className="flex w-full items-center gap-3 rounded-xl border border-primary/20 bg-primary-light/70 px-4 py-3.5 text-left transition hover:bg-primary-light focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary">
-                <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-primary text-white">
-                  <Sparkles className="h-4 w-4" />
-                </span>
-                <div className="min-w-0 flex-1">
-                  <p className="text-sm font-bold text-primary-text">Generate Practice Questions</p>
-                  <p className="text-xs text-primary/70">Generate {quizConfig.count} {formatQuestionFormat(quizConfig.questionFormat)} questions</p>
-                </div>
-              </button>
-              <button
-                type="button"
-                onClick={() => setConfigOpen((o) => !o)}
-                className="flex w-full items-center justify-between px-1 py-1 text-xs font-semibold text-muted-brand hover:text-foreground transition focus-visible:outline-none"
-              >
-                <span>Customize</span>
-                {configOpen ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
-              </button>
-              {configOpen && (
-                <div className="space-y-4 pt-1">
+            {configOpen && (
+              <div className="space-y-4 rounded-2xl border border-border bg-background p-3">
                   <div>
                     <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-muted-brand">Number of questions</p>
                     <div className="flex gap-2">
@@ -1557,16 +1494,78 @@ export default function MaterialDetailClient({
                         className="w-full rounded-xl border border-border bg-background px-4 py-2.5 text-sm outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/20" />
                     </div>
                   )}
-                  {genQsError && <p className="text-center text-xs text-red-500">{genQsError}</p>}
-                </div>
-              )}
-              {genQsError && !configOpen && (
-                <p className="text-center text-xs text-red-500">{genQsError}</p>
+                {genQsError && <p className="text-center text-xs text-red-500">{genQsError}</p>}
+              </div>
+            )}
+            {genQsError && !configOpen && (
+              <p className="text-center text-xs text-red-500">{genQsError}</p>
+            )}
+          </div>
+        </div>
+      )}
+
+      <div className="rounded-2xl border border-border bg-card p-4">
+        <div className="flex items-start gap-3">
+          <div className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-secondary text-muted-brand">
+            <FileIcon kind={kind} />
+          </div>
+          <div className="min-w-0 flex-1">
+            <div className="flex flex-wrap items-center gap-2">
+              <p className="text-xs font-semibold uppercase tracking-wider text-muted-brand">Source file</p>
+              <span className="rounded-full border border-border bg-background px-2 py-0.5 text-[10px] font-semibold text-muted-brand">
+                {badge}
+              </span>
+              {m.material_type && (
+                <span className="rounded-full border border-border bg-background px-2 py-0.5 text-[10px] font-semibold text-muted-brand">
+                  {formatMaterialType(m.material_type)}
+                </span>
               )}
             </div>
-
+            <p className="mt-1 line-clamp-2 text-sm font-bold text-foreground">{title}</p>
+            <p className="mt-1 text-xs text-muted-brand">
+              {downloads.toLocaleString("en-NG")} downloads
+              {upvoteCount > 0 && ` · ${upvoteCount} found helpful`}
+              {" · "}
+              {timeAgo(m.created_at)}
+            </p>
           </div>
-          )}
+        </div>
+
+        {m.description && (
+          <p className="mt-3 line-clamp-3 text-sm leading-relaxed text-muted-brand">{m.description}</p>
+        )}
+
+        <div className="mt-4 grid grid-cols-[minmax(0,1fr)_auto_auto_auto] gap-2">
+          <a href={hasFile ? `/api/study/materials/${m.id}/download` : "#"} download
+            onClick={(e) => { if (!hasFile) { e.preventDefault(); return; } handleDownload(); }}
+            className={cn(
+              "inline-flex items-center justify-center gap-2 rounded-xl px-3 py-2.5 text-xs font-bold no-underline transition",
+              "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2",
+              !hasFile ? "pointer-events-none border border-border/60 bg-muted text-muted-brand"
+                : "border border-primary/20 bg-primary-light text-primary-text hover:bg-primary-light/80"
+            )}>
+            <Download className="h-4 w-4" /> Download
+          </a>
+
+          <button type="button" onClick={handleToggleSave} disabled={saving} aria-label={saved ? "Remove from library" : "Save to library"}
+            className={cn(
+              "inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border transition",
+              "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
+              saved ? "border-primary/30 bg-primary-light text-primary-text" : "border-border/60 bg-background text-foreground hover:bg-secondary/50",
+              saving ? "opacity-60" : ""
+            )}>
+            {saved ? <BookmarkCheck className="h-4 w-4" /> : <Bookmark className="h-4 w-4" />}
+          </button>
+
+          <button type="button" onClick={handleShare} aria-label="Share"
+            className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-border/60 bg-background text-foreground transition hover:bg-secondary/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2">
+            <Share2 className="h-4 w-4" />
+          </button>
+
+          <button type="button" onClick={() => setPreviewOpen(true)} disabled={!hasFile} aria-label="Open source preview"
+            className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-border/60 bg-background text-foreground transition hover:bg-secondary/50 disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2">
+            <ExternalLink className="h-4 w-4" />
+          </button>
         </div>
       </div>
 
@@ -1973,32 +1972,14 @@ export default function MaterialDetailClient({
                                 </span>
                               </div>
                               <p className="mt-2 text-sm leading-relaxed text-foreground">{currentGradeState.grade.feedback}</p>
-                              {currentGradeState.grade.matchedPoints.length > 0 ? (
-                                <div className="mt-3">
-                                  <p className="text-xs font-extrabold text-emerald-700 dark:text-emerald-300">You covered</p>
-                                  <ul className="mt-1 list-disc space-y-1 pl-5 text-sm leading-relaxed text-foreground">
-                                    {currentGradeState.grade.matchedPoints.map((point, pointIndex) => (
-                                      <li key={`${point}-${pointIndex}`}>{point}</li>
-                                    ))}
-                                  </ul>
-                                </div>
-                              ) : null}
                               {currentGradeState.grade.missingPoints.length > 0 ? (
                                 <div className="mt-3">
-                                  <p className="text-xs font-extrabold text-amber-700 dark:text-amber-300">Missing points</p>
+                                  <p className="text-xs font-extrabold text-amber-700 dark:text-amber-300">Focus on</p>
                                   <ul className="mt-1 list-disc space-y-1 pl-5 text-sm leading-relaxed text-foreground">
                                     {currentGradeState.grade.missingPoints.map((point, pointIndex) => (
                                       <li key={`${point}-${pointIndex}`}>{point}</li>
                                     ))}
                                   </ul>
-                                </div>
-                              ) : null}
-                              {currentGradeState.grade.improvedAnswer ? (
-                                <div className="mt-3">
-                                  <p className="text-xs font-extrabold text-emerald-700 dark:text-emerald-300">Improved answer</p>
-                                  <p className="mt-1 whitespace-pre-wrap text-sm leading-relaxed text-foreground">
-                                    {currentGradeState.grade.improvedAnswer}
-                                  </p>
                                 </div>
                               ) : null}
                               <p className="mt-3 text-[11px] font-semibold text-muted-brand">

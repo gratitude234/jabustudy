@@ -1616,32 +1616,14 @@ if (err || !meta) {
                           </span>
                         </div>
                         <p className="mt-2 text-sm leading-relaxed text-foreground">{currentGradeState.grade.feedback}</p>
-                        {currentGradeState.grade.matchedPoints.length > 0 ? (
-                          <div className="mt-3">
-                            <p className="text-xs font-extrabold text-emerald-700 dark:text-emerald-300">You covered</p>
-                            <ul className="mt-1 list-disc space-y-1 pl-5 text-sm leading-relaxed text-foreground">
-                              {currentGradeState.grade.matchedPoints.map((point, pointIndex) => (
-                                <li key={`${point}-${pointIndex}`}>{point}</li>
-                              ))}
-                            </ul>
-                          </div>
-                        ) : null}
                         {currentGradeState.grade.missingPoints.length > 0 ? (
                           <div className="mt-3">
-                            <p className="text-xs font-extrabold text-amber-700 dark:text-amber-300">Missing points</p>
+                            <p className="text-xs font-extrabold text-amber-700 dark:text-amber-300">Focus on</p>
                             <ul className="mt-1 list-disc space-y-1 pl-5 text-sm leading-relaxed text-foreground">
                               {currentGradeState.grade.missingPoints.map((point, pointIndex) => (
                                 <li key={`${point}-${pointIndex}`}>{point}</li>
                               ))}
                             </ul>
-                          </div>
-                        ) : null}
-                        {currentGradeState.grade.improvedAnswer ? (
-                          <div className="mt-3">
-                            <p className="text-xs font-extrabold text-emerald-700 dark:text-emerald-300">Improved answer</p>
-                            <p className="mt-1 whitespace-pre-wrap text-sm leading-relaxed text-foreground">
-                              {currentGradeState.grade.improvedAnswer}
-                            </p>
                           </div>
                         ) : null}
                         <p className="mt-3 text-[11px] font-semibold text-muted-foreground">

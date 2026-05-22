@@ -41,10 +41,16 @@ function cleanString(value: unknown, maxLength = 4000) {
   return value.trim().slice(0, maxLength);
 }
 
+function compactText(value: unknown, maxLength = 180) {
+  const text = cleanString(value, maxLength + 80).replace(/\s+/g, " ");
+  if (text.length <= maxLength) return text;
+  return `${text.slice(0, maxLength).trimEnd().replace(/[.,;:\s]+$/, "")}...`;
+}
+
 function cleanArray(value: unknown, maxItems = 8) {
   if (!Array.isArray(value)) return [];
   return value
-    .map((item) => cleanString(item, 500))
+    .map((item) => compactText(item, 90))
     .filter(Boolean)
     .slice(0, maxItems);
 }
@@ -76,7 +82,7 @@ function normalizeVerdict(value: unknown, score: number): WrittenAnswerGradeVerd
 function gradeFromRow(row: Record<string, any>): WrittenAnswerGrade | null {
   const score = normalizeScore(row.ai_grade_score);
   const gradedAt = cleanString(row.ai_graded_at, 80);
-  const feedback = cleanString(row.ai_grade_feedback, 3000);
+  const feedback = compactText(row.ai_grade_feedback);
   if (!gradedAt || !feedback || row.ai_grade_score == null) return null;
 
   return {
@@ -84,9 +90,9 @@ function gradeFromRow(row: Record<string, any>): WrittenAnswerGrade | null {
     maxScore: Number(row.ai_grade_max_score) || MAX_SCORE,
     verdict: normalizeVerdict(row.ai_grade_verdict, score),
     feedback,
-    matchedPoints: cleanArray(row.ai_grade_matched_points),
-    missingPoints: cleanArray(row.ai_grade_missing_points),
-    improvedAnswer: cleanString(row.ai_grade_improved_answer, 3000) || null,
+    matchedPoints: cleanArray(row.ai_grade_matched_points, 2),
+    missingPoints: cleanArray(row.ai_grade_missing_points, 3),
+    improvedAnswer: compactText(row.ai_grade_improved_answer, 220) || null,
     gradedAt,
     provider: cleanString(row.ai_grade_provider, 80) || null,
     model: cleanString(row.ai_grade_model, 120) || null,
@@ -95,7 +101,7 @@ function gradeFromRow(row: Record<string, any>): WrittenAnswerGrade | null {
 
 function normalizeGrade(raw: RawGrade, provider: string | undefined, model: string | undefined): WrittenAnswerGrade | null {
   const score = normalizeScore(raw.score);
-  const feedback = cleanString(raw.feedback, 3000);
+  const feedback = compactText(raw.feedback);
   if (!feedback) return null;
 
   return {
@@ -103,9 +109,9 @@ function normalizeGrade(raw: RawGrade, provider: string | undefined, model: stri
     maxScore: MAX_SCORE,
     verdict: normalizeVerdict(raw.verdict, score),
     feedback,
-    matchedPoints: cleanArray(raw.matchedPoints),
-    missingPoints: cleanArray(raw.missingPoints),
-    improvedAnswer: cleanString(raw.improvedAnswer, 3000) || null,
+    matchedPoints: cleanArray(raw.matchedPoints, 2),
+    missingPoints: cleanArray(raw.missingPoints, 3),
+    improvedAnswer: compactText(raw.improvedAnswer, 220) || null,
     gradedAt: new Date().toISOString(),
     provider: provider ?? null,
     model: model ?? null,
@@ -141,14 +147,20 @@ ${markingPoints}
 STUDENT ANSWER:
 ${args.studentAnswer}
 
+The app already shows the full model answer below your feedback. Keep your feedback small and useful:
+- feedback: one short sentence, max 25 words.
+- matchedPoints: max 2 short phrases.
+- missingPoints: max 3 short phrases, only the most important gaps.
+- Do not restate the full model answer.
+
 Return ONLY valid JSON with this exact shape:
 {
   "score": 0,
   "maxScore": 10,
   "verdict": "correct" | "mostly_correct" | "partially_correct" | "incorrect" | "unanswered",
-  "feedback": "2-3 concise sentences explaining the score.",
-  "matchedPoints": ["specific correct points the student included"],
-  "missingPoints": ["important points the student missed"]
+  "feedback": "One short sentence.",
+  "matchedPoints": ["short correct point"],
+  "missingPoints": ["short missing point"]
 }
 
 The score must be between 0 and 10.`;
@@ -257,7 +269,7 @@ export async function POST(req: NextRequest) {
       studentAnswer: answer,
     }))],
     temperature: 0.1,
-    maxTokens: 500,
+    maxTokens: 240,
     timeoutMs: 45_000,
     modelRole: "fast",
   }));

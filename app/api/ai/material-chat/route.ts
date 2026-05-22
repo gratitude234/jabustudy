@@ -13,7 +13,12 @@ import {
   getMimeType,
   truncateText,
 } from "@/lib/extractMaterialContent";
-import { geminiModelName } from "@/lib/ai/gemini";
+import {
+  geminiErrorKeyAlias,
+  geminiModelName,
+  isGeminiConfigured,
+  withGeminiKeyFailover,
+} from "@/lib/ai/gemini";
 import {
   aiLimitFromEnv,
   aiRateLimitMessage,
@@ -56,55 +61,73 @@ type GeminiStreamChunk = {
     content?: { parts?: Array<{ text?: string }> };
   }>;
 };
+
+function geminiRouteError(status: number, body: string, keyAlias: string) {
+  return Object.assign(new Error(`Gemini API error ${status}: ${body.slice(0, 240)}`), {
+    code: status === 429 ? "quota" : status >= 500 ? "server" : "request",
+    status,
+    geminiKeyAlias: keyAlias,
+  });
+}
+
+function errorStatus(error: unknown) {
+  if (!error || typeof error !== "object" || !("status" in error)) return undefined;
+  const status = (error as { status?: unknown }).status;
+  return typeof status === "number" ? status : undefined;
+}
+
 // Upload a file to the Gemini Files API and return its hosted URI.
 // Used for PDF and images so the file is cached and reused across chat turns.
 async function uploadFileToGemini(
-  apiKey: string,
   buffer: ArrayBuffer,
   mimeType: string,
   displayName: string
-): Promise<string> {
-  const startRes = await fetch(`${FILE_UPLOAD_URL}?key=${apiKey}`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "X-Goog-Upload-Protocol": "resumable",
-      "X-Goog-Upload-Command": "start",
-      "X-Goog-Upload-Header-Content-Length": String(buffer.byteLength),
-      "X-Goog-Upload-Header-Content-Type": mimeType,
-    },
-    body: JSON.stringify({ file: { display_name: displayName } }),
-    signal: AbortSignal.timeout(30_000),
+): Promise<{ fileUri: string; keyAlias: string }> {
+  const result = await withGeminiKeyFailover("material-chat-upload", async (key) => {
+    const startRes = await fetch(`${FILE_UPLOAD_URL}?key=${key.apiKey}`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Goog-Upload-Protocol": "resumable",
+        "X-Goog-Upload-Command": "start",
+        "X-Goog-Upload-Header-Content-Length": String(buffer.byteLength),
+        "X-Goog-Upload-Header-Content-Type": mimeType,
+      },
+      body: JSON.stringify({ file: { display_name: displayName } }),
+      signal: AbortSignal.timeout(30_000),
+    });
+
+    if (!startRes.ok) {
+      const errText = await startRes.text().catch(() => startRes.statusText);
+      throw geminiRouteError(startRes.status, `Gemini upload init failed: ${errText}`, key.alias);
+    }
+
+    const uploadUrl = startRes.headers.get("x-goog-upload-url");
+    if (!uploadUrl) throw new Error("Gemini upload URL missing.");
+
+    const uploadRes = await fetch(uploadUrl, {
+      method: "POST",
+      headers: {
+        "Content-Length": String(buffer.byteLength),
+        "X-Goog-Upload-Offset": "0",
+        "X-Goog-Upload-Command": "upload, finalize",
+      },
+      body: Buffer.from(buffer),
+      signal: AbortSignal.timeout(60_000),
+    });
+
+    if (!uploadRes.ok) {
+      const errText = await uploadRes.text().catch(() => uploadRes.statusText);
+      throw geminiRouteError(uploadRes.status, `Gemini upload failed: ${errText}`, key.alias);
+    }
+
+    const uploadData = (await uploadRes.json()) as GeminiFileUploadResponse;
+    const fileUri = uploadData.file?.uri?.trim();
+    if (!fileUri) throw new Error("Gemini file URI missing.");
+    return fileUri;
   });
 
-  if (!startRes.ok) {
-    const errText = await startRes.text().catch(() => startRes.statusText);
-    throw new Error(`Gemini upload init failed: ${errText}`);
-  }
-
-  const uploadUrl = startRes.headers.get("x-goog-upload-url");
-  if (!uploadUrl) throw new Error("Gemini upload URL missing.");
-
-  const uploadRes = await fetch(uploadUrl, {
-    method: "POST",
-    headers: {
-      "Content-Length": String(buffer.byteLength),
-      "X-Goog-Upload-Offset": "0",
-      "X-Goog-Upload-Command": "upload, finalize",
-    },
-    body: Buffer.from(buffer),
-    signal: AbortSignal.timeout(60_000),
-  });
-
-  if (!uploadRes.ok) {
-    const errText = await uploadRes.text().catch(() => uploadRes.statusText);
-    throw new Error(`Gemini upload failed: ${errText}`);
-  }
-
-  const uploadData = (await uploadRes.json()) as GeminiFileUploadResponse;
-  const fileUri = uploadData.file?.uri?.trim();
-  if (!fileUri) throw new Error("Gemini file URI missing.");
-  return fileUri;
+  return { fileUri: result.value, keyAlias: result.keyAlias };
 }
 
 export async function POST(req: NextRequest) {
@@ -163,8 +186,7 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  const apiKey = process.env.GEMINI_API_KEY;
-  if (!apiKey) return NextResponse.json({ error: "AI service not configured." }, { status: 500 });
+  if (!isGeminiConfigured()) return NextResponse.json({ error: "AI service not configured." }, { status: 500 });
 
   // ── Resolve file content ───────────────────────────────────────────────────
   // For PDF/images: upload to Gemini Files API (or use cached URI) → file_data part
@@ -180,6 +202,7 @@ Use plain text only — no asterisks, no markdown, no bold/italic symbols.
 For lists, put each item on its own line with a dash prefix (e.g. "- item").`;
 
   let contents: GeminiContent[];
+  let uploadKeyAlias: string | undefined;
 
   if (useFilesApi) {
     // ── PDF / Image path: Gemini Files API ────────────────────────────────────
@@ -209,23 +232,31 @@ For lists, put each item on its own line with a dash prefix (e.g. "- item").`;
       // Upload to Gemini Files API
       try {
         const mimeType = getMimeType(filePath);
-        fileUri = await uploadFileToGemini(
-          apiKey,
+        const upload = await uploadFileToGemini(
           fileBuffer,
           mimeType,
           material.title ?? `material-${material.id}`
         );
+        fileUri = upload.fileUri;
+        uploadKeyAlias = upload.keyAlias;
       } catch (e: unknown) {
         console.error("[material-chat] Gemini file upload error:", e instanceof Error ? e.message : e);
         await recordAiUsageEvent({
           ...usageContext,
+          metadata: {
+            ...(usageContext.metadata ?? {}),
+            ...(geminiErrorKeyAlias(e) ? { geminiKeyAlias: geminiErrorKeyAlias(e) } : {}),
+          },
           provider: "gemini",
           model: "files-api",
           status: "failure",
           errorCode: "upload",
           errorMessage: e instanceof Error ? e.message : "Gemini file upload failed.",
         });
-        return NextResponse.json({ error: "Chat failed." }, { status: 500 });
+        return NextResponse.json(
+          { error: errorStatus(e) === 429 ? "AI quota exceeded. Try again later." : "Chat failed." },
+          { status: errorStatus(e) === 429 ? 429 : 500 }
+        );
       }
 
       // Cache URI for future turns
@@ -313,42 +344,53 @@ For lists, put each item on its own line with a dash prefix (e.g. "- item").`;
   };
 
   let geminiRes: Response;
+  let streamKeyAlias: string | undefined;
   try {
-    geminiRes = await fetch(`${geminiStreamUrl()}&key=${apiKey}`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(geminiBody),
-      signal: AbortSignal.timeout(60_000),
+    const streamResult = await withGeminiKeyFailover("material-chat-stream", async (key) => {
+      const res = await fetch(`${geminiStreamUrl()}&key=${key.apiKey}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(geminiBody),
+        signal: AbortSignal.timeout(60_000),
+      });
+
+      if (!res.ok) {
+        const errText = await res.text().catch(() => res.statusText);
+        throw geminiRouteError(res.status, errText, key.alias);
+      }
+
+      return res;
     });
+    geminiRes = streamResult.value;
+    streamKeyAlias = streamResult.keyAlias;
   } catch (e: unknown) {
     console.error("[material-chat] Gemini fetch error:", e instanceof Error ? e.message : e);
     await recordAiUsageEvent({
       ...usageContext,
+      metadata: {
+        ...(usageContext.metadata ?? {}),
+        ...(geminiErrorKeyAlias(e) ? { geminiKeyAlias: geminiErrorKeyAlias(e) } : {}),
+        ...(uploadKeyAlias ? { geminiFileUploadKeyAlias: uploadKeyAlias } : {}),
+      },
       provider: "gemini",
       model: geminiMaterialChatModelName(),
       status: "failure",
-      errorCode: "network",
+      errorCode: errorStatus(e) === 429 ? "quota" : "network",
       errorMessage: e instanceof Error ? e.message : "Gemini fetch failed.",
     });
-    return NextResponse.json({ error: "Chat failed." }, { status: 500 });
-  }
-
-  if (!geminiRes.ok) {
-    const errText = await geminiRes.text().catch(() => geminiRes.statusText);
-    console.error("[material-chat] Gemini error:", errText);
-    await recordAiUsageEvent({
-      ...usageContext,
-      provider: "gemini",
-      model: geminiMaterialChatModelName(),
-      status: "failure",
-      errorCode: String(geminiRes.status),
-      errorMessage: errText,
-    });
-    return NextResponse.json({ error: "Chat failed." }, { status: 500 });
+    return NextResponse.json(
+      { error: errorStatus(e) === 429 ? "AI quota exceeded. Try again later." : "Chat failed." },
+      { status: errorStatus(e) === 429 ? 429 : 500 }
+    );
   }
 
   await recordAiUsageEvent({
     ...usageContext,
+    metadata: {
+      ...(usageContext.metadata ?? {}),
+      ...(streamKeyAlias ? { geminiKeyAlias: streamKeyAlias } : {}),
+      ...(uploadKeyAlias ? { geminiFileUploadKeyAlias: uploadKeyAlias } : {}),
+    },
     provider: "gemini",
     model: geminiMaterialChatModelName(),
     status: "success",

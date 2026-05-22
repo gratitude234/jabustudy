@@ -21,7 +21,9 @@ Required in `.env.local`:
 NEXT_PUBLIC_SUPABASE_URL=
 NEXT_PUBLIC_SUPABASE_ANON_KEY=
 SUPABASE_SERVICE_ROLE_KEY=
-GEMINI_API_KEY=              # AI Study Plan / summarize features
+GEMINI_API_KEY=              # Legacy single Gemini key fallback
+GEMINI_API_KEYS=             # Optional comma-separated Gemini key pool; preferred for failover
+GEMINI_KEY_QUOTA_COOLDOWN_MS=3600000 # How long to skip a key after Gemini returns quota 429
 VAPID_PUBLIC_KEY=            # Web Push (generate with: npx web-push generate-vapid-keys)
 VAPID_PRIVATE_KEY=
 NEXT_PUBLIC_VAPID_PUBLIC_KEY= # same value as VAPID_PUBLIC_KEY

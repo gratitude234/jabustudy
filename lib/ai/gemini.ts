@@ -36,8 +36,159 @@ export type GeminiTextConfig = {
   responseMimeType?: "application/json";
 };
 
-function getApiKey() {
-  return process.env.GEMINI_API_KEY?.trim() ?? "";
+export type GeminiKeyLease = {
+  apiKey: string;
+  alias: string;
+};
+
+type GeminiKeyedResult<T> = {
+  value: T;
+  keyAlias: string;
+};
+
+function configuredGeminiKeys(): GeminiKeyLease[] {
+  const multi = (process.env.GEMINI_API_KEYS ?? "")
+    .split(",")
+    .map((key) => key.trim())
+    .filter(Boolean);
+  const single = process.env.GEMINI_API_KEY?.trim();
+  const source = multi.length > 0 ? multi : single ? [single] : [];
+  const seen = new Set<string>();
+  const keys: GeminiKeyLease[] = [];
+
+  for (const apiKey of source) {
+    if (seen.has(apiKey)) continue;
+    seen.add(apiKey);
+    keys.push({ apiKey, alias: `gemini-key-${keys.length + 1}` });
+  }
+
+  return keys;
+}
+
+const exhaustedGeminiKeys = new Map<string, number>();
+let nextGeminiKeyIndex = 0;
+
+function geminiKeyQuotaCooldownMs() {
+  const parsed = Number.parseInt(process.env.GEMINI_KEY_QUOTA_COOLDOWN_MS ?? "", 10);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : 60 * 60 * 1000;
+}
+
+function errorStatus(error: unknown) {
+  if (!error || typeof error !== "object" || !("status" in error)) return undefined;
+  const status = (error as { status?: unknown }).status;
+  return typeof status === "number" ? status : undefined;
+}
+
+function isQuotaError(error: unknown) {
+  return errorStatus(error) === 429;
+}
+
+function isInvalidKeyError(error: unknown) {
+  const status = errorStatus(error);
+  if (status !== 400 && status !== 401 && status !== 403) return false;
+  const message = error instanceof Error ? error.message.toLowerCase() : "";
+  return message.includes("api key") ||
+    message.includes("apikey") ||
+    message.includes("api_key") ||
+    message.includes("permission") ||
+    message.includes("credential");
+}
+
+function shouldTryAnotherGeminiKey(error: unknown) {
+  return isQuotaError(error) || isInvalidKeyError(error);
+}
+
+function markGeminiKeyExhausted(alias: string) {
+  exhaustedGeminiKeys.set(alias, Date.now() + geminiKeyQuotaCooldownMs());
+}
+
+function isGeminiKeyAvailable(alias: string) {
+  const exhaustedUntil = exhaustedGeminiKeys.get(alias);
+  if (!exhaustedUntil) return true;
+  if (Date.now() < exhaustedUntil) return false;
+  exhaustedGeminiKeys.delete(alias);
+  return true;
+}
+
+function nextAvailableGeminiKey(tried: Set<string>) {
+  const keys = configuredGeminiKeys();
+  if (keys.length === 0) return null;
+
+  for (let offset = 0; offset < keys.length; offset++) {
+    const index = (nextGeminiKeyIndex + offset) % keys.length;
+    const key = keys[index];
+    if (tried.has(key.alias) || !isGeminiKeyAvailable(key.alias)) continue;
+    nextGeminiKeyIndex = (index + 1) % keys.length;
+    return key;
+  }
+
+  return null;
+}
+
+export function geminiErrorKeyAlias(error: unknown) {
+  if (!error || typeof error !== "object" || !("geminiKeyAlias" in error)) return undefined;
+  const alias = (error as { geminiKeyAlias?: unknown }).geminiKeyAlias;
+  return typeof alias === "string" ? alias : undefined;
+}
+
+function withGeminiKeyAlias(error: unknown, alias: string) {
+  if (error && typeof error === "object" && !("geminiKeyAlias" in error)) {
+    (error as { geminiKeyAlias?: string }).geminiKeyAlias = alias;
+  }
+  return error;
+}
+
+function geminiHttpError(status: number, body: string, keyAlias: string) {
+  return Object.assign(new Error(`Gemini API error ${status}: ${body.slice(0, 240)}`), {
+    code: status === 429 ? "quota" : status >= 500 ? "server" : "request",
+    status,
+    geminiKeyAlias: keyAlias,
+  });
+}
+
+function geminiKeysExhaustedError(lastError: unknown) {
+  return Object.assign(new Error("All Gemini API keys are temporarily exhausted or unavailable."), {
+    code: "quota_exhausted",
+    status: 429,
+    cause: lastError,
+  });
+}
+
+export async function withGeminiKeyFailover<T>(
+  operation: string,
+  call: (key: GeminiKeyLease) => Promise<T>
+): Promise<GeminiKeyedResult<T>> {
+  const keyCount = configuredGeminiKeys().length;
+  if (keyCount === 0) {
+    throw Object.assign(new Error("GEMINI_API_KEYS or GEMINI_API_KEY is not configured."), { code: "not_configured" });
+  }
+
+  const tried = new Set<string>();
+  let lastError: unknown = null;
+
+  while (tried.size < keyCount) {
+    const key = nextAvailableGeminiKey(tried);
+    if (!key) break;
+    tried.add(key.alias);
+
+    try {
+      const value = await call(key);
+      return { value, keyAlias: key.alias };
+    } catch (error) {
+      lastError = withGeminiKeyAlias(error, key.alias);
+      if (!shouldTryAnotherGeminiKey(error)) throw lastError;
+
+      markGeminiKeyExhausted(key.alias);
+      console.warn("[ai] gemini key unavailable", {
+        operation,
+        keyAlias: key.alias,
+        reason: isQuotaError(error) ? "quota" : "invalid_key",
+        cooldownMs: geminiKeyQuotaCooldownMs(),
+      });
+    }
+  }
+
+  throw geminiKeysExhaustedError(lastError);
 }
 
 function contentToText(content: string | AiContentBlock[]) {
@@ -136,7 +287,7 @@ function getGenerateUrl(config: GeminiTextConfig, stream = false) {
 }
 
 export function isGeminiConfigured() {
-  return Boolean(getApiKey());
+  return configuredGeminiKeys().length > 0;
 }
 
 function unknownErrorCode(error: unknown) {
@@ -158,36 +309,31 @@ function unknownErrorCause(error: unknown) {
   return error instanceof Error ? error.cause : undefined;
 }
 
-export async function geminiText(config: GeminiTextConfig): Promise<string> {
-  const apiKey = getApiKey();
-  if (!apiKey) {
-    throw Object.assign(new Error("GEMINI_API_KEY is not configured."), { code: "not_configured" });
-  }
-
+export async function geminiText(config: GeminiTextConfig): Promise<{ text: string; keyAlias: string }> {
   try {
-    const res = await fetch(`${getGenerateUrl(config, false)}?key=${apiKey}`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        system_instruction: getSystemInstruction(config.messages),
-        contents: [{ parts: getGeminiParts(config.messages) }],
-        generationConfig: generationConfig(config),
-      }),
-      signal: AbortSignal.timeout(config.timeoutMs ?? 30_000),
-    });
-
-    if (!res.ok) {
-      const err = await res.text().catch(() => res.statusText);
-      throw Object.assign(new Error(`Gemini API error ${res.status}: ${err.slice(0, 240)}`), {
-        code: res.status >= 500 ? "server" : "request",
-        status: res.status,
+    const result = await withGeminiKeyFailover("text", async (key) => {
+      const res = await fetch(`${getGenerateUrl(config, false)}?key=${key.apiKey}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          system_instruction: getSystemInstruction(config.messages),
+          contents: [{ parts: getGeminiParts(config.messages) }],
+          generationConfig: generationConfig(config),
+        }),
+        signal: AbortSignal.timeout(config.timeoutMs ?? 30_000),
       });
-    }
 
-    const data = await res.json();
-    const text: string = data?.candidates?.[0]?.content?.parts?.[0]?.text ?? "";
-    if (!text.trim()) throw Object.assign(new Error("Gemini returned an empty response."), { code: "empty" });
-    return text.trim();
+      if (!res.ok) {
+        const err = await res.text().catch(() => res.statusText);
+        throw geminiHttpError(res.status, err, key.alias);
+      }
+
+      const data = await res.json();
+      const text: string = data?.candidates?.[0]?.content?.parts?.[0]?.text ?? "";
+      if (!text.trim()) throw Object.assign(new Error("Gemini returned an empty response."), { code: "empty" });
+      return text.trim();
+    });
+    return { text: result.value, keyAlias: result.keyAlias };
   } catch (error) {
     if (unknownErrorCode(error)) throw error;
     const name = unknownErrorName(error);
@@ -201,25 +347,30 @@ export async function geminiText(config: GeminiTextConfig): Promise<string> {
   }
 }
 
-export async function geminiStream(config: GeminiTextConfig): Promise<ReadableStream<Uint8Array>> {
-  const apiKey = getApiKey();
-  if (!apiKey) {
-    throw Object.assign(new Error("GEMINI_API_KEY is not configured."), { code: "not_configured" });
-  }
-
-  let res: Response;
+export async function geminiStream(config: GeminiTextConfig): Promise<{ stream: ReadableStream<Uint8Array>; keyAlias: string }> {
+  let keyedResponse: GeminiKeyedResult<Response>;
   try {
-    res = await fetch(`${getGenerateUrl(config, true)}&key=${apiKey}`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        system_instruction: getSystemInstruction(config.messages),
-        contents: [{ parts: getGeminiParts(config.messages) }],
-        generationConfig: generationConfig(config),
-      }),
-      signal: AbortSignal.timeout(config.timeoutMs ?? 55_000),
+    keyedResponse = await withGeminiKeyFailover("stream", async (key) => {
+      const res = await fetch(`${getGenerateUrl(config, true)}&key=${key.apiKey}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          system_instruction: getSystemInstruction(config.messages),
+          contents: [{ parts: getGeminiParts(config.messages) }],
+          generationConfig: generationConfig(config),
+        }),
+        signal: AbortSignal.timeout(config.timeoutMs ?? 55_000),
+      });
+
+      if (!res.ok) {
+        const err = await res.text().catch(() => res.statusText);
+        throw geminiHttpError(res.status, err, key.alias);
+      }
+
+      return res;
     });
   } catch (error) {
+    if (unknownErrorCode(error)) throw error;
     const name = unknownErrorName(error);
     if (name === "TimeoutError" || name === "AbortError") {
       throw Object.assign(new Error("Gemini stream request timed out."), { code: "timeout" });
@@ -230,19 +381,11 @@ export async function geminiStream(config: GeminiTextConfig): Promise<ReadableSt
     });
   }
 
-  if (!res.ok) {
-    const err = await res.text().catch(() => res.statusText);
-    throw Object.assign(new Error(`Gemini API error ${res.status}: ${err.slice(0, 240)}`), {
-      code: res.status >= 500 ? "server" : "request",
-      status: res.status,
-    });
-  }
-
-  const source = res.body;
+  const source = keyedResponse.value.body;
   if (!source) throw Object.assign(new Error("Gemini stream body is empty."), { code: "empty" });
 
   const encoder = new TextEncoder();
-  return new ReadableStream({
+  const stream = new ReadableStream({
     async start(controller) {
       const reader = source.getReader();
       const decoder = new TextDecoder();
@@ -276,4 +419,5 @@ export async function geminiStream(config: GeminiTextConfig): Promise<ReadableSt
       }
     },
   });
+  return { stream, keyAlias: keyedResponse.keyAlias };
 }

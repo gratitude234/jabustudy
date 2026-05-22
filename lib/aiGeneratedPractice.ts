@@ -62,6 +62,8 @@ type MaterialRow = {
   id: string;
   title: string | null;
   course_code: string | null;
+  level: string | number | null;
+  semester: string | null;
   file_path: string | null;
   gemini_file_uri?: string | null;
 };
@@ -103,6 +105,24 @@ function parsePositiveInt(value: string | undefined) {
 
 function cleanString(value: unknown): string | undefined {
   return typeof value === "string" && value.trim().length > 0 ? value.trim() : undefined;
+}
+
+function normalizeMaterialLevel(value: unknown): number | null {
+  if (typeof value === "number" && Number.isFinite(value)) return Math.trunc(value);
+  if (typeof value !== "string") return null;
+  const match = value.match(/\d+/);
+  if (!match) return null;
+  const parsed = Number.parseInt(match[0], 10);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function normalizeMaterialSemester(value: unknown): string | null {
+  if (typeof value !== "string") return null;
+  const normalized = value.trim().toLowerCase();
+  if (normalized === "1st" || normalized === "first") return "first";
+  if (normalized === "2nd" || normalized === "second") return "second";
+  if (normalized === "summer") return "summer";
+  return null;
 }
 
 function cleanStringArray(value: unknown): string[] {
@@ -534,7 +554,7 @@ export async function saveGeneratedPracticeSet(args: SaveGeneratedPracticeArgs):
 
   const { data: mat, error: matErr } = await adminSupabase
     .from("study_materials")
-    .select("id, title, course_code, file_path, gemini_file_uri")
+    .select("id, title, course_code, level, semester, file_path, gemini_file_uri")
     .eq("id", args.materialId)
     .maybeSingle();
 
@@ -586,6 +606,8 @@ export async function saveGeneratedPracticeSet(args: SaveGeneratedPracticeArgs):
       title,
       source: "ai_generated",
       course_code: material.course_code,
+      level: normalizeMaterialLevel(material.level),
+      semester: normalizeMaterialSemester(material.semester),
       created_by: args.userId,
       published: !isDraft,
       visibility: "private",

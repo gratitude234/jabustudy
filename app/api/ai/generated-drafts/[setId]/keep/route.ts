@@ -4,6 +4,24 @@ import { createSupabaseServerClient } from "@/lib/supabase/server";
 
 export const runtime = "nodejs";
 
+function normalizeMaterialLevel(value: unknown): number | null {
+  if (typeof value === "number" && Number.isFinite(value)) return Math.trunc(value);
+  if (typeof value !== "string") return null;
+  const match = value.match(/\d+/);
+  if (!match) return null;
+  const parsed = Number.parseInt(match[0], 10);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function normalizeMaterialSemester(value: unknown): string | null {
+  if (typeof value !== "string") return null;
+  const normalized = value.trim().toLowerCase();
+  if (normalized === "1st" || normalized === "first") return "first";
+  if (normalized === "2nd" || normalized === "second") return "second";
+  if (normalized === "summer") return "summer";
+  return null;
+}
+
 export async function POST(
   _req: NextRequest,
   { params }: { params: { setId: string } | Promise<{ setId: string }> }
@@ -23,7 +41,7 @@ export async function POST(
 
   const { data: set, error: setError } = await adminSupabase
     .from("study_quiz_sets")
-    .select("id,created_by,draft_status")
+    .select("id,created_by,draft_status,source_material_id")
     .eq("id", setId)
     .eq("source", "ai_generated")
     .maybeSingle();
@@ -38,14 +56,28 @@ export async function POST(
     return NextResponse.json({ ok: false, code: "FORBIDDEN", message: "Forbidden" }, { status: 403 });
   }
 
+  const sourceMaterialId = (set as { source_material_id?: string | null }).source_material_id;
+  const { data: material } = sourceMaterialId
+    ? await adminSupabase
+        .from("study_materials")
+        .select("level,semester")
+        .eq("id", sourceMaterialId)
+        .maybeSingle()
+    : { data: null };
+  const materialLevel = normalizeMaterialLevel((material as { level?: unknown } | null)?.level);
+  const materialSemester = normalizeMaterialSemester((material as { semester?: unknown } | null)?.semester);
+  const patch: Record<string, unknown> = {
+    published: true,
+    visibility: "private",
+    draft_status: "kept",
+    draft_expires_at: null,
+  };
+  if (materialLevel !== null) patch.level = materialLevel;
+  if (materialSemester !== null) patch.semester = materialSemester;
+
   const { error } = await adminSupabase
     .from("study_quiz_sets")
-    .update({
-      published: true,
-      visibility: "private",
-      draft_status: "kept",
-      draft_expires_at: null,
-    })
+    .update(patch)
     .eq("id", setId);
 
   if (error) {

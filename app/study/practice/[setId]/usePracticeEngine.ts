@@ -38,10 +38,16 @@ function cleanString(value: unknown, maxLength = 4000) {
   return value.trim().slice(0, maxLength);
 }
 
+function compactText(value: unknown, maxLength = 180) {
+  const text = cleanString(value, maxLength + 80).replace(/\s+/g, " ");
+  if (text.length <= maxLength) return text;
+  return `${text.slice(0, maxLength).trimEnd().replace(/[.,;:\s]+$/, "")}...`;
+}
+
 function cleanArray(value: unknown, maxItems = 8) {
   if (!Array.isArray(value)) return [];
   return value
-    .map((item) => cleanString(item, 500))
+    .map((item) => compactText(item, 90))
     .filter(Boolean)
     .slice(0, maxItems);
 }
@@ -68,10 +74,10 @@ function writtenGradeFromRow(row: any): WrittenAnswerGrade | null {
     score: Math.round(Math.max(0, Math.min(10, score)) * 10) / 10,
     maxScore: Number(row.ai_grade_max_score) || 10,
     verdict,
-    feedback: cleanString(row.ai_grade_feedback, 3000),
-    matchedPoints: cleanArray(row.ai_grade_matched_points),
-    missingPoints: cleanArray(row.ai_grade_missing_points),
-    improvedAnswer: cleanString(row.ai_grade_improved_answer, 3000) || null,
+    feedback: compactText(row.ai_grade_feedback),
+    matchedPoints: cleanArray(row.ai_grade_matched_points, 2),
+    missingPoints: cleanArray(row.ai_grade_missing_points, 3),
+    improvedAnswer: compactText(row.ai_grade_improved_answer, 220) || null,
     gradedAt: cleanString(row.ai_graded_at, 80),
     provider: cleanString(row.ai_grade_provider, 80) || null,
     model: cleanString(row.ai_grade_model, 120) || null,
