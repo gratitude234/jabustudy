@@ -52,9 +52,9 @@ export default function SidebarNav() {
     <aside className="fixed left-0 top-0 z-30 hidden h-screen w-[220px] flex-col border-r border-border bg-card md:flex">
       {/* Brand */}
       <div className="flex h-14 items-center gap-2 border-b border-border px-4 lg:h-16">
-        <span className="h-2 w-2 shrink-0 rounded-full bg-primary" />
+        <img src="/logo-icon.png" alt="" className="h-6 w-6 shrink-0 object-contain" />
         <Link href="/study" className="font-[family-name:var(--font-bricolage)] text-base font-extrabold text-foreground no-underline">
-          Jabu Study
+          JabuStudy
         </Link>
       </div>
 

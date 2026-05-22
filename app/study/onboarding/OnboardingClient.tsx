@@ -735,8 +735,11 @@ export default function OnboardingClient() {
       {/* Header */}
       <div className="flex items-start justify-between gap-3 px-1">
         <div className="min-w-0">
+          {!isEditMode && (
+            <img src="/logo-full.png" alt="JabuStudy" className="mb-2 h-12 w-auto object-contain" />
+          )}
           <p className="font-[family-name:var(--font-bricolage)] text-2xl font-extrabold tracking-tight text-foreground">
-            {isEditMode ? "Edit study profile" : "Set up Jabu Study"}
+            {isEditMode ? "Edit study profile" : "Set up JabuStudy"}
           </p>
           <p className="mt-1.5 text-sm text-muted-brand">
             {isEditMode

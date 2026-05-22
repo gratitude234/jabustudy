@@ -222,7 +222,7 @@ function TutorCard({
   const whatsapp = normalize(String(t?.whatsapp ?? t?.whatsapp_number ?? phone)) || "";
 
   const waText = encodeURIComponent(
-    `Hi ${name}, I found you on Jabu Study. I need help with: \n\nCourse: (type course code)\nLevel: \nTopic: \nPreferred time: \nMode (online/physical): \n\nThanks!`
+    `Hi ${name}, I found you on JabuStudy. I need help with: \n\nCourse: (type course code)\nLevel: \nTopic: \nPreferred time: \nMode (online/physical): \n\nThanks!`
   );
 
   const waHref = whatsapp ? getWhatsAppLink(whatsapp, waText) : "";

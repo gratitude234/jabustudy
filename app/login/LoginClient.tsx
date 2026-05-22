@@ -12,7 +12,6 @@ import {
   EyeOff,
   Loader2,
   ArrowRight,
-  ShieldCheck,
   X,
 } from "lucide-react";
 
@@ -188,13 +187,11 @@ export default function LoginClient() {
     <div className="space-y-4">
       {/* Brand header */}
       <div className="text-center">
-        <div className="mx-auto mb-3 grid h-[60px] w-[60px] place-items-center rounded-[18px] bg-primary shadow-[0_8px_32px_rgba(91,53,213,0.35)]">
-          <ShieldCheck className="h-6 w-6 text-white" />
-        </div>
+        <img src="/logo-full.png" alt="JabuStudy" className="mx-auto mb-3 h-16 w-auto object-contain" />
         <h1 className="font-[family-name:var(--font-bricolage)] text-2xl font-extrabold text-foreground">
           Sign in
         </h1>
-        <p className="mt-1.5 text-sm text-muted-brand">Secure access to your Jabu Study account.</p>
+        <p className="mt-1.5 text-sm text-muted-brand">Secure access to your JabuStudy account.</p>
       </div>
 
       <BannerView banner={banner} onClose={() => setBanner(null)} />

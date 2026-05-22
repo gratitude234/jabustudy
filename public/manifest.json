@@ -1,7 +1,7 @@
 {
-  "name": "Jabu Study",
+  "name": "JabuStudy",
   "id": "/study",
-  "short_name": "Jabu Study",
+  "short_name": "JabuStudy",
   "description": "Course materials, MCQs, Q&A, tutors, and study tools for JABU students.",
   "start_url": "/study",
   "display": "standalone",

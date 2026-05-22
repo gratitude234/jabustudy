@@ -237,6 +237,7 @@ export default function SignupClient() {
   return (
     <div className="space-y-4">
       <div className="text-center">
+        <img src="/logo-full.png" alt="JabuStudy" className="mx-auto mb-3 h-14 w-auto object-contain" />
         <h1 className="font-[family-name:var(--font-bricolage)] text-2xl font-extrabold text-foreground">
           Create account
         </h1>
@@ -261,7 +262,7 @@ export default function SignupClient() {
             </div>
             {!nameValid && fullName.trim().length > 0
               ? <p className="text-[11px] text-rose-600">Enter at least 2 characters.</p>
-              : <p className="text-[11px] text-muted-brand/70">This is how you appear across Jabu Study.</p>}
+              : <p className="text-[11px] text-muted-brand/70">This is how you appear across JabuStudy.</p>}
           </div>
 
           {/* Email */}

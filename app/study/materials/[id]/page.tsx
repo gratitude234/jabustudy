@@ -52,7 +52,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
       title,
       description: desc.slice(0, 160),
       type: "article",
-      siteName: "Jabu Study",
+      siteName: "JabuStudy",
     },
     twitter: {
       card: "summary",

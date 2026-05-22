@@ -78,8 +78,9 @@ export default function TopNav() {
   return (
     <header className="hidden md:block border-b border-border bg-background/80 backdrop-blur">
       <div className="mx-auto flex h-14 w-full max-w-6xl items-center justify-between gap-4 px-4 md:px-6 lg:h-16 lg:max-w-7xl lg:px-8">
-        <Link href="/study" className="font-bold text-lg lg:text-xl no-underline">
-          Jabu Study
+        <Link href="/study" className="flex items-center gap-2 no-underline">
+          <img src="/logo-icon.png" alt="" className="h-7 w-7 shrink-0 object-contain" />
+          <span className="font-bold text-lg lg:text-xl">JabuStudy</span>
         </Link>
 
         <nav className="flex items-center gap-5 text-sm lg:gap-7">

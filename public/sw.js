@@ -1,5 +1,5 @@
 // public/sw.js
-// Service worker for Jabu Study
+// Service worker for JabuStudy
 // — Caching (PWA offline support)
 // — Web Push notifications
 

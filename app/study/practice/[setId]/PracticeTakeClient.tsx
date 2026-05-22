@@ -1094,7 +1094,7 @@ if (err || !meta) {
                   type="button"
                   aria-label="Share score"
                   onClick={async () => {
-                    const text = `I scored ${resultPct}% on "${normalize(meta.title)}" on Jabu Study!`;
+                    const text = `I scored ${resultPct}% on "${normalize(meta.title)}" on JabuStudy!`;
                     try {
                       if (typeof navigator.share === "function") {
                         await navigator.share({ text, title: "My Practice Score" });
@@ -1114,7 +1114,7 @@ if (err || !meta) {
                     onClick={() => {
                       const streakLine = streakCount && streakCount > 1 ? `\n🔥 ${streakCount}-day streak!` : "";
                       const msg = encodeURIComponent(
-                        `I scored ${resultPct}% on "${normalize(meta?.title ?? "a practice set")}"${meta?.course_code ? ` (${meta.course_code})` : ""} on Jabu Study!${streakLine}\n\nPractice for free: ${publicUrl("/study")}`
+                        `I scored ${resultPct}% on "${normalize(meta?.title ?? "a practice set")}"${meta?.course_code ? ` (${meta.course_code})` : ""} on JabuStudy!${streakLine}\n\nPractice for free: ${publicUrl("/study")}`
                       );
                       window.open(`https://wa.me/?text=${msg}`, "_blank", "noopener,noreferrer");
                     }}
@@ -1252,7 +1252,7 @@ if (err || !meta) {
                   type="button"
                   onClick={() => {
                     const msg = encodeURIComponent(
-                      `🔥 I just hit a ${streakMilestone}-day study streak on Jabu Study!\n\n` +
+                      `🔥 I just hit a ${streakMilestone}-day study streak on JabuStudy!\n\n` +
                       `${streakMilestone === 7 ? "One full week" : streakMilestone === 14 ? "Two weeks straight" : streakMilestone === 30 ? "30 days straight" : streakMilestone === 60 ? "60 days of consistent study" : "100 days"} of consistent practice.\n\n` +
                       `Study smarter: ${publicUrl("/study")}`
                     );
