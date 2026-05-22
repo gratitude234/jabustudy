@@ -36,7 +36,7 @@ import { cn, msToClock, normalize } from "@/lib/utils";
 import { publicUrl } from "@/lib/publicUrl";
 import { usePracticeEngine } from "./usePracticeEngine";
 import { supabase } from "@/lib/supabase";
-import type { AnswerConfidence, WrittenAnswerGrade } from "@/lib/types";
+import type { WrittenAnswerGrade } from "@/lib/types";
 
 type AnyOption = {
   id: string;
@@ -210,49 +210,6 @@ function hasStudyRef(ref: PracticeStudyRef) {
   return Boolean(ref?.chunkId?.trim() || ref?.topic?.trim() || ref?.instruction?.trim() || ref?.quote?.trim() || studyRefPage(ref?.page));
 }
 
-const CONFIDENCE_OPTIONS: Array<{ value: AnswerConfidence; label: string; desc: string }> = [
-  { value: "confident", label: "Got it", desc: "I can answer this again" },
-  { value: "unsure", label: "Partly", desc: "I need one more review" },
-  { value: "guessed", label: "Still weak", desc: "Keep this in revision" },
-];
-
-function ConfidencePicker({
-  value,
-  onChange,
-  compact = false,
-}: {
-  value: AnswerConfidence | null | undefined;
-  onChange: (value: AnswerConfidence) => void;
-  compact?: boolean;
-}) {
-  return (
-    <div className="rounded-2xl border border-border bg-card px-3 py-3">
-      <p className="text-xs font-extrabold text-foreground">How sure were you?</p>
-      <div className={cn("mt-2 grid gap-2", compact ? "sm:grid-cols-3" : "md:grid-cols-3")}>
-        {CONFIDENCE_OPTIONS.map((option) => {
-          const active = value === option.value;
-          return (
-            <button
-              key={option.value}
-              type="button"
-              onClick={() => onChange(option.value)}
-              className={cn(
-                "rounded-xl border px-3 py-2 text-left transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
-                active
-                  ? "border-[#5B35D5]/35 bg-[#EEEDFE] text-[#3B24A8] dark:border-[#5B35D5]/40 dark:bg-[#5B35D5]/10 dark:text-indigo-300"
-                  : "border-border bg-background text-foreground hover:bg-secondary/50"
-              )}
-            >
-              <span className="block text-xs font-extrabold">{option.label}</span>
-              <span className="mt-0.5 block text-[11px] font-medium text-muted-foreground">{option.desc}</span>
-            </button>
-          );
-        })}
-      </div>
-    </div>
-  );
-}
-
 function PracticeGuidedHint({
   studyRef,
   sourceMaterial,
@@ -391,7 +348,6 @@ export default function PracticeTakeClient() {
     answers,
     writtenAnswers,
     writtenGrades,
-    confidences,
     writtenSaving,
     submitted,
     setSubmitted,
@@ -402,7 +358,6 @@ export default function PracticeTakeClient() {
     finalizing,
     weakSummary,
     choose,
-    setAnswerConfidence,
     writeAnswer,
     setWrittenGrade,
     softReset,
@@ -550,7 +505,6 @@ export default function PracticeTakeClient() {
     : "mcq";
   const isWrittenCurrent = currentQuestionType !== "mcq";
   const currentWrittenAnswer = current ? writtenAnswers[current.id] ?? "" : "";
-  const currentConfidence = current ? confidences[current.id] ?? null : null;
   const currentMarkingPoints = Array.isArray(current?.marking_points) ? current.marking_points : [];
   const currentGradeState: WrittenGradeState = current
     ? writtenGradeStates[current.id] ??
@@ -882,7 +836,7 @@ if (err || !meta) {
     const isWritten = item.q.question_type === "short_answer" || item.q.question_type === "theory";
     if (isWritten) return false;
     if (item.isWrong || item.isUnanswered) return true;
-    return item.confidence === "unsure" || item.confidence === "guessed";
+    return false;
   }).length;
 
   return (
@@ -1225,7 +1179,7 @@ if (err || !meta) {
             <Card className="rounded-3xl">
               <div className="mb-3">
                 <p className="text-sm font-extrabold text-foreground">Review answers</p>
-                <p className="text-xs text-muted-foreground">Explanations and confidence update your revision queue.</p>
+                <p className="text-xs text-muted-foreground">Explanations update your revision queue.</p>
               </div>
               <div className="space-y-3">
                 {reviewItems.map((item) => {
@@ -1291,13 +1245,6 @@ if (err || !meta) {
                               {item.q.explanation}
                             </p>
                           ) : null}
-                          <div className="mt-3">
-                            <ConfidencePicker
-                              compact
-                              value={item.confidence}
-                              onChange={(value) => setAnswerConfidence(item.q.id, value)}
-                            />
-                          </div>
                         </div>
                       </div>
                     </div>
@@ -1377,7 +1324,7 @@ if (err || !meta) {
                       </div>
                       <div className="mt-2 flex items-center gap-2 pl-4">
                         <span className="rounded-full bg-rose-50 px-2 py-0.5 text-[10px] font-extrabold text-rose-600 dark:bg-rose-950/30 dark:text-rose-400">
-                          {r.reviewReason === "low_confidence" ? "needs review" : `×${r.missCount} missed`}
+                          {`×${r.missCount} missed`}
                         </span>
                         {r.nextDueAt && (
                           <span className="text-[10px] text-muted-foreground">
@@ -1739,10 +1686,6 @@ if (err || !meta) {
                         </div>
                       ) : null}
                     </div>
-                    <ConfidencePicker
-                      value={currentConfidence}
-                      onChange={(value) => setAnswerConfidence(current.id, value)}
-                    />
                   </div>
                 ) : null}
               </div>
@@ -1896,10 +1839,6 @@ if (err || !meta) {
           {/* ── Explanation Panel — appears after student answers ────────── */}
           {isRevealed && current ? (
             <div className="space-y-2">
-              <ConfidencePicker
-                value={currentConfidence}
-                onChange={(value) => setAnswerConfidence(current.id, value)}
-              />
               {current.explanation ? (
                 <div className="rounded-2xl border border-[#5B35D5]/20 bg-[#EEEDFE] px-3 py-3 dark:border-[#5B35D5]/30 dark:bg-[#5B35D5]/10">
                   <p className="text-xs font-extrabold text-[#3B24A8] dark:text-indigo-300 mb-1">Explanation</p>

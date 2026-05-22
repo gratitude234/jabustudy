@@ -144,12 +144,12 @@ type ActiveAiDraft = {
 };
 
 const STUDENT_GENERATION_MODES: Array<{ value: GenerationMode; label: string; sub: string }> = [
-  { value: "auto", label: "Auto", sub: "Let Jabu choose the best next set." },
-  { value: "weak_areas", label: "Cover weak areas", sub: "Prioritize topics with fewer questions." },
-  { value: "untested_sections", label: "Use untested sections", sub: "Pull from parts not covered well yet." },
-  { value: "application", label: "More application questions", sub: "Practice using ideas, not just recalling them." },
-  { value: "hard", label: "Harder questions", sub: "Make it closer to exam difficulty." },
-  { value: "topic", label: "Focus on a topic", sub: "Use the focus area you type below." },
+  { value: "auto",              label: "Let Jabu decide",            sub: "Auto-selects the best next set for you" },
+  { value: "weak_areas",        label: "Strengthen weak spots",      sub: "Focus on topics you've struggled with in this material" },
+  { value: "untested_sections", label: "Cover new ground",           sub: "Pull from parts of the material not yet tested" },
+  { value: "application",       label: "Practice applying concepts", sub: "Go beyond recall — use and analyse ideas" },
+  { value: "hard",              label: "Exam-style hard",            sub: "Questions that require deeper reasoning and application" },
+  { value: "topic",             label: "Focus on a topic",          sub: "Use the focus area you type below." },
 ];
 
 const QUESTION_FORMATS: Array<{ value: QuestionFormat; label: string; sub: string }> = [
@@ -832,7 +832,8 @@ export default function MaterialDetailClient({
   const [draftAction, setDraftAction] = useState<"discard" | "new" | null>(null);
 
   // Quiz state machine
-  const [quizState, setQuizState] = useState<"idle" | "config" | "loading" | "quiz" | "results">("idle");
+  const [quizState, setQuizState] = useState<"idle" | "loading" | "quiz" | "results">("idle");
+  const [configOpen, setConfigOpen] = useState(false);
   const [quizConfig, setQuizConfig] = useState<{ count: number; difficulty: "easy" | "mixed" | "hard"; focus: string; questionFormat: QuestionFormat }>({
     count: 10,
     difficulty: "mixed",
@@ -897,6 +898,13 @@ export default function MaterialDetailClient({
     .filter((item): item is { q: GeneratedMcqQuestion; i: number; ans: { chosen: string; correct: boolean; skipped: boolean } } =>
       isMcqQuestion(item.q) && Boolean(item.ans) && !item.ans.correct && !item.ans.skipped
     );
+  const missedTopicsForDisplay = Array.from(
+    new Set(
+      missedList
+        .map(({ q }) => q.sourceTopic ?? q.studyRef?.topic)
+        .filter((t): t is string => Boolean(t))
+    )
+  ).slice(0, 2);
 
   useEffect(() => {
     if (quizState !== "results" || !savedSetId || missedList.length === 0) return;
@@ -1007,6 +1015,7 @@ export default function MaterialDetailClient({
   }
 
   async function handleGenerateQuestions() {
+    setConfigOpen(false);
     setQuizState("loading");
     setStreamingQuestions([]);
     setGenerationStatus("Preparing question generation...");
@@ -1057,7 +1066,7 @@ export default function MaterialDetailClient({
       return;
     } catch (e: unknown) {
       setGenQsError(e instanceof Error ? e.message : "Something went wrong.");
-      setQuizState("config");
+      setQuizState("idle");
     }
   }
 
@@ -1117,6 +1126,59 @@ export default function MaterialDetailClient({
     }
   }
 
+  async function handleGenerateMoreFromMistakes() {
+    const uniqueTopics = Array.from(
+      new Set(
+        missedList
+          .map(({ q }) => q.sourceTopic ?? q.studyRef?.topic)
+          .filter((t): t is string => Boolean(t))
+      )
+    );
+    if (!uniqueTopics.length) return handleGenerateMore("weak_areas");
+    setGeneratingMore(true);
+    setGenerateMoreError(null);
+    setStreamingQuestions([]);
+    setGenerationStatus("Generating questions on your weak topics...");
+    setGenerationMode("weak_areas");
+    try {
+      const res = await fetch("/api/ai/generate-questions", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          materialId: m.id,
+          count: quizConfig.count,
+          difficulty: quizConfig.difficulty,
+          focus: uniqueTopics.join(", "),
+          questionFormat: quizConfig.questionFormat,
+          coveredQuestions: generatedQuestions?.map((q) => q.question) ?? [],
+          generationIntent: "weak_areas",
+        }),
+      });
+      const { questions: moreQuestions, ai: moreAi } = await readNdjsonQuestions(res,
+        (q) => { setStreamingQuestions((prev) => [...prev, q]); },
+        (status) => { setGenerationStatus(status.message); }
+      );
+      if (!moreQuestions.length) throw new Error("Failed to generate questions.");
+      setGeneratedQuestions(moreQuestions);
+      setGenerationAi(moreAi);
+      setAnswers({});
+      setWrittenAnswers({});
+      setWrittenCompared({});
+      setWrittenGradeStates({});
+      setCurrentQuestionIndex(0);
+      setRetryPool(null);
+      setHintShown({});
+      setSavedSetId(null);
+      setSaveQsError(null);
+      syncedQuizMissesRef.current = null;
+      setQuizState("quiz");
+    } catch (e: unknown) {
+      setGenerateMoreError(e instanceof Error ? e.message : "Something went wrong.");
+    } finally {
+      setGeneratingMore(false);
+      setStreamingQuestions([]);
+    }
+  }
+
   async function loadActiveDraft() {
     if (!isAiGenSupported(m)) return;
     setDraftLoading(true);
@@ -1140,7 +1202,7 @@ export default function MaterialDetailClient({
       if (!res.ok || !data?.ok) throw new Error(data?.message || "Could not discard draft.");
       setActiveDraft(null);
       showToast("Draft discarded");
-      if (action === "new") setQuizState("config");
+      if (action === "new") void handleGenerateQuestions();
     } catch (error: unknown) {
       showToast(error instanceof Error ? error.message : "Could not discard draft.");
     } finally {
@@ -1386,16 +1448,121 @@ export default function MaterialDetailClient({
                 </div>
               ) : null}
               <button type="button"
-                onClick={() => setQuizState("config")}
+                onClick={() => { setConfigOpen(false); void handleGenerateQuestions(); }}
                 className="flex w-full items-center gap-3 rounded-xl border border-primary/20 bg-primary-light/70 px-4 py-3.5 text-left transition hover:bg-primary-light focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary">
                 <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-primary text-white">
                   <Sparkles className="h-4 w-4" />
                 </span>
                 <div className="min-w-0 flex-1">
                   <p className="text-sm font-bold text-primary-text">Generate Practice Questions</p>
-                  <p className="text-xs text-primary/70">AI-powered exam prep from this material</p>
+                  <p className="text-xs text-primary/70">Generate {quizConfig.count} {formatQuestionFormat(quizConfig.questionFormat)} questions</p>
                 </div>
               </button>
+              <button
+                type="button"
+                onClick={() => setConfigOpen((o) => !o)}
+                className="flex w-full items-center justify-between px-1 py-1 text-xs font-semibold text-muted-brand hover:text-foreground transition focus-visible:outline-none"
+              >
+                <span>Customize</span>
+                {configOpen ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
+              </button>
+              {configOpen && (
+                <div className="space-y-4 pt-1">
+                  <div>
+                    <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-muted-brand">Number of questions</p>
+                    <div className="flex gap-2">
+                      {([5, 10, 15, 20] as const).map((n) => (
+                        <button key={n} type="button"
+                          onClick={() => setQuizConfig((c) => ({ ...c, count: n }))}
+                          className={cn("flex-1 rounded-xl border py-2.5 text-sm font-semibold transition focus-visible:outline-none",
+                            quizConfig.count === n
+                              ? "border-primary bg-primary text-white"
+                              : "border-border bg-background text-foreground hover:bg-secondary/50"
+                          )}>
+                          {n}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  <div>
+                    <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-muted-brand">Format</p>
+                    <div className="grid gap-2 sm:grid-cols-3">
+                      {QUESTION_FORMATS.map(({ value, label, sub }) => (
+                        <button key={value} type="button"
+                          onClick={() => setQuizConfig((c) => ({ ...c, questionFormat: value }))}
+                          className={cn("rounded-xl border px-3 py-3 text-left transition focus-visible:outline-none",
+                            quizConfig.questionFormat === value
+                              ? "border-primary bg-primary-light"
+                              : "border-border bg-background hover:bg-secondary/40"
+                          )}>
+                          <p className={cn("text-sm font-semibold", quizConfig.questionFormat === value ? "text-primary-text" : "text-foreground")}>{label}</p>
+                          <p className="mt-0.5 text-[11px] leading-snug text-muted-brand">{sub}</p>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  <div>
+                    <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-muted-brand">Difficulty</p>
+                    <div className="flex flex-col gap-2">
+                      {([
+                        { value: "easy", label: "Easy warm-up", sub: "Recall & definitions" },
+                        { value: "mixed", label: "Mixed", sub: "Recall, application & analysis" },
+                        { value: "hard", label: "Exam-hard", sub: "Deep understanding & application" },
+                      ] as const).map(({ value, label, sub }) => (
+                        <button key={value} type="button"
+                          onClick={() => setQuizConfig((c) => ({ ...c, difficulty: value }))}
+                          className={cn("flex items-center gap-3 rounded-xl border px-4 py-3 text-left transition focus-visible:outline-none",
+                            quizConfig.difficulty === value
+                              ? "border-primary bg-primary-light"
+                              : "border-border bg-background hover:bg-secondary/40"
+                          )}>
+                          <div className={cn("h-4 w-4 shrink-0 rounded-full border-2",
+                            quizConfig.difficulty === value ? "border-primary bg-primary" : "border-border")} />
+                          <div>
+                            <p className={cn("text-sm font-semibold", quizConfig.difficulty === value ? "text-primary-text" : "text-foreground")}>{label}</p>
+                            <p className="text-xs text-muted-brand">{sub}</p>
+                          </div>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  <div>
+                    <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-muted-brand">Smart targeting</p>
+                    <div className="rounded-xl border border-border bg-background px-3 py-3">
+                      <div className="flex items-center gap-3">
+                        <Sparkles className="h-4 w-4 shrink-0 text-primary" />
+                        <select
+                          value={generationMode}
+                          onChange={(e) => setGenerationMode(e.target.value as GenerationMode)}
+                          className="min-w-0 flex-1 bg-transparent text-sm font-semibold text-foreground outline-none"
+                        >
+                          {STUDENT_GENERATION_MODES.map(({ value, label }) => (
+                            <option key={value} value={value}>{label}</option>
+                          ))}
+                        </select>
+                      </div>
+                      <p className="mt-2 text-xs leading-snug text-muted-brand">
+                        {generationModeCopy(generationMode, quizConfig)}
+                      </p>
+                    </div>
+                  </div>
+                  {(generationMode === "topic" || quizConfig.focus) && (
+                    <div>
+                      <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-muted-brand">
+                        Focus area <span className="normal-case font-normal">(optional)</span>
+                      </p>
+                      <input type="text" value={quizConfig.focus}
+                        onChange={(e) => setQuizConfig((c) => ({ ...c, focus: e.target.value }))}
+                        placeholder="e.g. continuity and limits"
+                        className="w-full rounded-xl border border-border bg-background px-4 py-2.5 text-sm outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/20" />
+                    </div>
+                  )}
+                  {genQsError && <p className="text-center text-xs text-red-500">{genQsError}</p>}
+                </div>
+              )}
+              {genQsError && !configOpen && (
+                <p className="text-center text-xs text-red-500">{genQsError}</p>
+              )}
             </div>
 
           </div>
@@ -1559,8 +1726,7 @@ export default function MaterialDetailClient({
                     AI practice workspace
                   </p>
                   <p className="text-sm font-bold text-foreground">
-                    {quizState === "config" ? "Configure Questions" :
-                     quizState === "loading" ? "Generating…" :
+                    {quizState === "loading" ? "Generating…" :
                      quizState === "quiz" ? `Q ${currentQuestionIndex + 1} / ${qs.length}` :
                      "Results"}
                   </p>
@@ -1604,116 +1770,7 @@ export default function MaterialDetailClient({
                 </button>
               </div>
 
-              {/* ── Panel A: Config ── */}
-              {quizState === "config" && (
-                <div className="flex-1 space-y-6 overflow-y-auto px-4 py-5 md:px-6">
-                  <div>
-                    <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-muted-brand">Number of questions</p>
-                    <div className="flex gap-2">
-                      {([5, 10, 15, 20] as const).map((n) => (
-                        <button key={n} type="button"
-                          onClick={() => setQuizConfig((c) => ({ ...c, count: n }))}
-                          className={cn("flex-1 rounded-xl border py-2.5 text-sm font-semibold transition focus-visible:outline-none",
-                            quizConfig.count === n
-                              ? "border-primary bg-primary text-white"
-                              : "border-border bg-background text-foreground hover:bg-secondary/50"
-                          )}>
-                          {n}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-
-                  <div>
-                    <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-muted-brand">Format</p>
-                    <div className="grid gap-2 sm:grid-cols-3">
-                      {QUESTION_FORMATS.map(({ value, label, sub }) => (
-                        <button
-                          key={value}
-                          type="button"
-                          onClick={() => setQuizConfig((c) => ({ ...c, questionFormat: value }))}
-                          className={cn(
-                            "rounded-xl border px-3 py-3 text-left transition focus-visible:outline-none",
-                            quizConfig.questionFormat === value
-                              ? "border-primary bg-primary-light"
-                              : "border-border bg-background hover:bg-secondary/40"
-                          )}
-                        >
-                          <p className={cn("text-sm font-semibold", quizConfig.questionFormat === value ? "text-primary-text" : "text-foreground")}>{label}</p>
-                          <p className="mt-0.5 text-[11px] leading-snug text-muted-brand">{sub}</p>
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-
-                  <div>
-                    <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-muted-brand">Difficulty</p>
-                    <div className="flex flex-col gap-2">
-                      {([
-                        { value: "easy", label: "Easy warm-up", sub: "Recall & definitions" },
-                        { value: "mixed", label: "Mixed", sub: "Recall, application & analysis" },
-                        { value: "hard", label: "Exam-hard", sub: "Deep understanding & application" },
-                      ] as const).map(({ value, label, sub }) => (
-                        <button key={value} type="button"
-                          onClick={() => setQuizConfig((c) => ({ ...c, difficulty: value }))}
-                          className={cn("flex items-center gap-3 rounded-xl border px-4 py-3 text-left transition focus-visible:outline-none",
-                            quizConfig.difficulty === value
-                              ? "border-primary bg-primary-light"
-                              : "border-border bg-background hover:bg-secondary/40"
-                          )}>
-                          <div className={cn("h-4 w-4 shrink-0 rounded-full border-2",
-                            quizConfig.difficulty === value ? "border-primary bg-primary" : "border-border")} />
-                          <div>
-                            <p className={cn("text-sm font-semibold", quizConfig.difficulty === value ? "text-primary-text" : "text-foreground")}>{label}</p>
-                            <p className="text-xs text-muted-brand">{sub}</p>
-                          </div>
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-
-                  <div>
-                    <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-muted-brand">Smart targeting</p>
-                    <div className="rounded-xl border border-border bg-background px-3 py-3">
-                      <div className="flex items-center gap-3">
-                        <Sparkles className="h-4 w-4 shrink-0 text-primary" />
-                        <select
-                          value={generationMode}
-                          onChange={(e) => setGenerationMode(e.target.value as GenerationMode)}
-                          className="min-w-0 flex-1 bg-transparent text-sm font-semibold text-foreground outline-none"
-                        >
-                          {STUDENT_GENERATION_MODES.map(({ value, label }) => (
-                            <option key={value} value={value}>{label}</option>
-                          ))}
-                        </select>
-                      </div>
-                      <p className="mt-2 text-xs leading-snug text-muted-brand">
-                        {generationModeCopy(generationMode, quizConfig)}
-                      </p>
-                    </div>
-                  </div>
-
-                  <div>
-                    <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-muted-brand">Focus area <span className="normal-case font-normal text-muted-brand">(optional)</span></p>
-                    <input type="text" value={quizConfig.focus}
-                      onChange={(e) => setQuizConfig((c) => ({ ...c, focus: e.target.value }))}
-                      placeholder="e.g. continuity and limits"
-                      className="w-full rounded-xl border border-border bg-background px-4 py-2.5 text-sm outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/20" />
-                  </div>
-
-                  {genQsError && <p className="text-center text-xs text-red-500">{genQsError}</p>}
-
-                  <div className="sticky bottom-0 -mx-4 bg-card px-4 pb-[max(1rem,env(safe-area-inset-bottom))] pt-2 md:-mx-6 md:px-6">
-                    <button type="button" onClick={handleGenerateQuestions}
-                      className="inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-primary px-4 py-3.5 text-sm font-semibold text-white transition hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary">
-                      <Sparkles className="h-4 w-4" />
-                      Generate {quizConfig.count} {formatQuestionFormat(quizConfig.questionFormat)} questions
-                    </button>
-                  </div>
-                </div>
-              )}
-
-              {/* ── Panel B: Loading ── */}
+              {/* ── Panel A: Loading ── */}
               {quizState === "loading" && (
                 <div className="flex flex-1 flex-col items-center justify-center gap-5 px-5 py-16 text-center md:px-6">
                   <div className="grid h-14 w-14 place-items-center rounded-2xl bg-primary-light text-primary">
@@ -2115,6 +2172,7 @@ export default function MaterialDetailClient({
                     </div>
                   )}
                   {missedList.length > 0 && (
+                    <>
                     <button type="button"
                       onClick={() => {
                         const missed = missedList.map(({ q }) => q);
@@ -2133,6 +2191,23 @@ export default function MaterialDetailClient({
                       <RotateCcw className="h-4 w-4" />
                       Retry missed ({missedList.length})
                     </button>
+                    <button
+                      type="button"
+                      onClick={() => void handleGenerateMoreFromMistakes()}
+                      disabled={generatingMore}
+                      className="inline-flex w-full items-center justify-center gap-2 rounded-2xl border border-primary/30 bg-primary-light px-4 py-3 text-sm font-semibold text-primary-text transition hover:opacity-90 disabled:opacity-50 focus-visible:outline-none"
+                    >
+                      {generatingMore
+                        ? <><Loader2 className="h-4 w-4 animate-spin" /> Generating…</>
+                        : <>
+                            <Sparkles className="h-4 w-4" />
+                            {missedTopicsForDisplay.length > 0
+                              ? `You got ${missedList.length} wrong — practice ${missedTopicsForDisplay.join(" & ")}`
+                              : `Generate on what I got wrong (${missedList.length})`}
+                          </>
+                      }
+                    </button>
+                    </>
                   )}
                   {savedSetId ? (
                     <Link href="/study/practice"
