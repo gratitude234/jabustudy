@@ -3,6 +3,7 @@
 // app/study/materials/[id]/MaterialDetailClient.tsx
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import {
   ArrowLeft,
@@ -131,6 +132,15 @@ type GenerateQuestionsResponse = {
 type GenerationStreamStatus = {
   message: string;
   phase?: string;
+};
+
+type ActiveAiDraft = {
+  setId: string;
+  title: string | null;
+  questionsCount: number;
+  createdAt: string | null;
+  expiresAt: string | null;
+  attempt?: { id: string; status: string | null; updatedAt: string | null } | null;
 };
 
 const STUDENT_GENERATION_MODES: Array<{ value: GenerationMode; label: string; sub: string }> = [
@@ -316,7 +326,16 @@ async function readNdjsonQuestions(
   res: Response,
   onQuestion?: (q: GeneratedQuestion) => void,
   onStatus?: (status: GenerationStreamStatus) => void
-): Promise<{ questions: GeneratedQuestion[]; ai: AiGenerationMeta | null }> {
+): Promise<{
+  questions: GeneratedQuestion[];
+  ai: AiGenerationMeta | null;
+  draftSetId?: string;
+  savedCount?: number;
+  requestedCount?: number;
+  repaired?: boolean;
+  replacedCount?: number;
+  skippedCount?: number;
+}> {
   if (!res.ok) {
     let errorMsg = "Failed to generate questions.";
     try {
@@ -332,6 +351,7 @@ async function readNdjsonQuestions(
   const decoder = new TextDecoder();
   let buffer = "";
   let finalAi: AiGenerationMeta | null = null;
+  let doneMeta: Record<string, unknown> = {};
   const questions: GeneratedQuestion[] = [];
 
   try {
@@ -358,6 +378,7 @@ async function readNdjsonQuestions(
           }
         } else if (msg.type === "done") {
           finalAi = msg.ai as AiGenerationMeta;
+          doneMeta = msg;
         } else if (msg.type === "error") {
           throw new Error(String(msg.message ?? "Generation failed."));
         }
@@ -367,7 +388,16 @@ async function readNdjsonQuestions(
     reader.releaseLock();
   }
 
-  return { questions, ai: finalAi };
+  return {
+    questions,
+    ai: finalAi,
+    draftSetId: typeof doneMeta.draftSetId === "string" ? doneMeta.draftSetId : undefined,
+    savedCount: typeof doneMeta.savedCount === "number" ? doneMeta.savedCount : undefined,
+    requestedCount: typeof doneMeta.requestedCount === "number" ? doneMeta.requestedCount : undefined,
+    repaired: typeof doneMeta.repaired === "boolean" ? doneMeta.repaired : undefined,
+    replacedCount: typeof doneMeta.replacedCount === "number" ? doneMeta.replacedCount : undefined,
+    skippedCount: typeof doneMeta.skippedCount === "number" ? doneMeta.skippedCount : undefined,
+  };
 }
 
 const GDOCS = (url: string) =>
@@ -766,6 +796,7 @@ export default function MaterialDetailClient({
 }: {
   material: Material; initialSaved?: boolean; relatedMaterials?: any[]; fromCourse?: string | null;
 }) {
+  const router = useRouter();
   const kind = detectKind(m);
   const badge = fileTypeBadge(kind, m);
   const course = m.study_courses;
@@ -796,6 +827,9 @@ export default function MaterialDetailClient({
   const [streamingQuestions, setStreamingQuestions] = useState<GeneratedQuestion[]>([]);
   const [generationStatus, setGenerationStatus] = useState("Preparing question generation...");
   const [generationMode, setGenerationMode] = useState<GenerationMode>("auto");
+  const [activeDraft, setActiveDraft] = useState<ActiveAiDraft | null>(null);
+  const [draftLoading, setDraftLoading] = useState(false);
+  const [draftAction, setDraftAction] = useState<"discard" | "new" | null>(null);
 
   // Quiz state machine
   const [quizState, setQuizState] = useState<"idle" | "config" | "loading" | "quiz" | "results">("idle");
@@ -835,6 +869,11 @@ export default function MaterialDetailClient({
       } catch {}
     })();
   }, [m.uploader_id]);
+
+  useEffect(() => {
+    void loadActiveDraft();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [m.id]);
 
   // Hide bottom nav while quiz sheet is open
   useEffect(() => {
@@ -985,15 +1024,17 @@ export default function MaterialDetailClient({
           difficulty: quizConfig.difficulty,
           focus: quizConfig.focus || undefined,
           questionFormat: quizConfig.questionFormat,
+          persistDraft: true,
           generationIntent: resolveGenerationIntent(generationMode, quizConfig),
         }),
       });
-      const { questions, ai } = await readNdjsonQuestions(res, (q) => {
+      const { questions, ai, draftSetId, savedCount, repaired, replacedCount, skippedCount } = await readNdjsonQuestions(res, (q) => {
         setStreamingQuestions((prev) => [...prev, q]);
       }, (status) => {
         setGenerationStatus(status.message);
       });
       if (!questions.length) throw new Error("Failed to generate questions.");
+      if (!draftSetId) throw new Error("Questions generated, but the draft could not be saved. Please try again.");
       console.info("[study-ai] generated questions", {
         provider: ai?.provider ?? "unknown",
         model: ai?.model ?? "unknown",
@@ -1003,16 +1044,17 @@ export default function MaterialDetailClient({
         fallbackReason: ai?.fallbackReason ?? null,
         count: questions.length,
       });
-      setGeneratedQuestions(questions);
-      setGenerationAi(ai);
-      setAnswers({});
-      setWrittenAnswers({});
-      setWrittenCompared({});
-      setWrittenGradeStates({});
-      setCurrentQuestionIndex(0);
-      setRetryPool(null);
-      setHintShown({});
-      setQuizState("quiz");
+      const repairDetails = [
+        Number(replacedCount ?? 0) > 0 ? `replaced ${replacedCount}` : "",
+        Number(skippedCount ?? 0) > 0 ? `skipped ${skippedCount}` : "",
+      ].filter(Boolean).join(", ");
+      showToast(
+        repaired || repairDetails
+          ? `Saved ${savedCount ?? questions.length} questions (${repairDetails || "cleaned up"} duplicate${(Number(replacedCount ?? 0) + Number(skippedCount ?? 0)) === 1 ? "" : "s"})`
+          : "Draft saved. Opening practice..."
+      );
+      router.push(`/study/practice/${encodeURIComponent(draftSetId)}`);
+      return;
     } catch (e: unknown) {
       setGenQsError(e instanceof Error ? e.message : "Something went wrong.");
       setQuizState("config");
@@ -1072,6 +1114,37 @@ export default function MaterialDetailClient({
     } finally {
       setGeneratingMore(false);
       setStreamingQuestions([]);
+    }
+  }
+
+  async function loadActiveDraft() {
+    if (!isAiGenSupported(m)) return;
+    setDraftLoading(true);
+    try {
+      const res = await fetch(`/api/ai/generated-drafts?materialId=${encodeURIComponent(m.id)}`);
+      const data = await res.json().catch(() => null) as { ok?: boolean; draft?: ActiveAiDraft | null; message?: string } | null;
+      if (res.ok && data?.ok) setActiveDraft(data.draft ?? null);
+    } catch {
+      // Draft lookup should not block the material page.
+    } finally {
+      setDraftLoading(false);
+    }
+  }
+
+  async function discardActiveDraft(action: "discard" | "new" = "discard") {
+    if (!activeDraft?.setId) return;
+    setDraftAction(action);
+    try {
+      const res = await fetch(`/api/ai/generated-drafts/${encodeURIComponent(activeDraft.setId)}/discard`, { method: "POST" });
+      const data = await res.json().catch(() => null) as { ok?: boolean; message?: string } | null;
+      if (!res.ok || !data?.ok) throw new Error(data?.message || "Could not discard draft.");
+      setActiveDraft(null);
+      showToast("Draft discarded");
+      if (action === "new") setQuizState("config");
+    } catch (error: unknown) {
+      showToast(error instanceof Error ? error.message : "Could not discard draft.");
+    } finally {
+      setDraftAction(null);
     }
   }
 
@@ -1266,6 +1339,44 @@ export default function MaterialDetailClient({
             </div>
 
             <div className="space-y-2">
+              {draftLoading ? (
+                <div className="rounded-xl border border-primary/15 bg-background/70 px-4 py-3 text-xs font-semibold text-primary">
+                  Checking for saved AI drafts...
+                </div>
+              ) : activeDraft ? (
+                <div className="space-y-2 rounded-xl border border-primary/20 bg-background/80 p-3">
+                  <div>
+                    <p className="text-sm font-bold text-primary-text">AI practice draft found</p>
+                    <p className="mt-0.5 text-xs text-primary/70">
+                      {activeDraft.questionsCount} question{activeDraft.questionsCount === 1 ? "" : "s"} saved from this material.
+                    </p>
+                  </div>
+                  <div className="grid gap-2 sm:grid-cols-3">
+                    <Link
+                      href={`/study/practice/${encodeURIComponent(activeDraft.setId)}${activeDraft.attempt?.id ? `?attempt=${encodeURIComponent(activeDraft.attempt.id)}` : ""}`}
+                      className="inline-flex items-center justify-center rounded-xl bg-primary px-3 py-2 text-xs font-bold text-white transition hover:opacity-90"
+                    >
+                      Resume
+                    </Link>
+                    <button
+                      type="button"
+                      onClick={() => void discardActiveDraft("new")}
+                      disabled={draftAction !== null}
+                      className="inline-flex items-center justify-center rounded-xl border border-primary/20 bg-primary-light px-3 py-2 text-xs font-bold text-primary-text transition hover:bg-primary-light/80 disabled:opacity-60"
+                    >
+                      {draftAction === "new" ? "Starting..." : "Start new"}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => void discardActiveDraft("discard")}
+                      disabled={draftAction !== null}
+                      className="inline-flex items-center justify-center rounded-xl border border-border bg-background px-3 py-2 text-xs font-bold text-muted-brand transition hover:bg-secondary/50 disabled:opacity-60"
+                    >
+                      {draftAction === "discard" ? "Discarding..." : "Discard"}
+                    </button>
+                  </div>
+                </div>
+              ) : null}
               <button type="button"
                 onClick={() => setQuizState("config")}
                 className="flex w-full items-center gap-3 rounded-xl border border-primary/20 bg-primary-light/70 px-4 py-3.5 text-left transition hover:bg-primary-light focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary">
@@ -1743,107 +1854,108 @@ export default function MaterialDetailClient({
                             setWrittenGradeStates((prev) => ({ ...prev, [currentQuestionIndex]: { status: "idle" } }));
                           }}
                           placeholder="Type your answer here..."
-                          rows={currentQuestionType === "theory" ? 8 : 5}
+                          rows={currentQuestionType === "theory" ? 8 : 4}
                           className="w-full resize-none rounded-2xl border border-border bg-background px-4 py-3 text-sm leading-relaxed outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/20"
                         />
-                        <button
-                          type="button"
-                          disabled={currentWrittenAnswer.trim().length < 5 || currentGradeState.status === "loading"}
-                          onClick={() => void gradeGeneratedWrittenAnswer(currentQuestionIndex, currentQ)}
-                          className="inline-flex items-center justify-center gap-2 rounded-2xl border border-primary bg-primary-light px-4 py-2.5 text-sm font-semibold text-primary-text transition hover:opacity-90 disabled:opacity-40 focus-visible:outline-none"
-                        >
-                          {currentGradeState.status === "loading" ? (
-                            <Loader2 className="h-4 w-4 animate-spin" />
-                          ) : (
-                            <BookOpen className="h-4 w-4" />
-                          )}
-                          {currentGradeState.status === "loading"
-                            ? "Grading..."
-                            : currentGradeState.status === "done"
-                              ? "Refresh grade"
-                              : "Grade answer"}
-                        </button>
-                        {currentWrittenCompared && (
-                          <div className="space-y-3">
-                            <div className="rounded-2xl border border-border bg-background px-4 py-3">
-                              <p className="text-xs font-extrabold uppercase tracking-wide text-muted-brand">Your answer</p>
-                              <p className="mt-1 whitespace-pre-wrap text-sm leading-relaxed text-foreground">
-                                {currentWrittenAnswer.trim() || "No answer submitted."}
-                              </p>
-                            </div>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <button
+                            type="button"
+                            disabled={currentWrittenAnswer.trim().length < 5 || currentGradeState.status === "loading"}
+                            onClick={() => void gradeGeneratedWrittenAnswer(currentQuestionIndex, currentQ)}
+                            className="inline-flex items-center justify-center gap-2 rounded-2xl border border-primary bg-primary-light px-4 py-2.5 text-sm font-semibold text-primary-text transition hover:opacity-90 disabled:opacity-40 focus-visible:outline-none"
+                          >
                             {currentGradeState.status === "loading" ? (
-                              <div className="flex items-center gap-3 rounded-2xl border border-primary/20 bg-primary-light/60 px-4 py-3 text-primary-text">
-                                <Loader2 className="h-4 w-4 animate-spin" />
-                                <p className="text-sm font-semibold">AI is grading your answer...</p>
+                              <Loader2 className="h-4 w-4 animate-spin" />
+                            ) : (
+                              <BookOpen className="h-4 w-4" />
+                            )}
+                            {currentGradeState.status === "loading"
+                              ? "Grading..."
+                              : currentGradeState.status === "done"
+                                ? "Refresh grade"
+                                : "Grade answer"}
+                          </button>
+                        </div>
+                        {currentWrittenCompared && currentGradeState.status === "loading" && (
+                          <div className="inline-flex w-fit items-center gap-2 rounded-full border border-primary/20 bg-primary-light/50 px-3 py-1.5 text-xs font-semibold text-primary-text">
+                            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                            AI is grading your answer...
+                          </div>
+                        )}
+                        {currentWrittenCompared && currentGradeState.status === "error" && (
+                          <div className="rounded-2xl border border-rose-500/25 bg-rose-500/10 px-4 py-3">
+                            <p className="text-xs font-extrabold text-rose-700 dark:text-rose-300">AI grading failed</p>
+                            <p className="mt-1 text-sm text-foreground">{currentGradeState.message}</p>
+                          </div>
+                        )}
+                        {currentWrittenCompared && currentGradeState.status === "done" && (
+                          <div className="space-y-3">
+                            <div className="rounded-2xl border border-emerald-500/25 bg-emerald-500/10 px-4 py-3">
+                              <div className="flex flex-wrap items-center justify-between gap-2">
+                                <p className="text-xs font-extrabold text-emerald-700 dark:text-emerald-300">AI feedback</p>
+                                <span className="rounded-full border border-emerald-500/30 bg-background px-2.5 py-1 text-xs font-extrabold text-foreground">
+                                  {currentGradeState.grade.score}/{currentGradeState.grade.maxScore} - {verdictLabel(currentGradeState.grade.verdict)}
+                                </span>
                               </div>
-                            ) : currentGradeState.status === "error" ? (
-                              <div className="rounded-2xl border border-rose-500/25 bg-rose-500/10 px-4 py-3">
-                                <p className="text-xs font-extrabold text-rose-700 dark:text-rose-300">AI grading failed</p>
-                                <p className="mt-1 text-sm text-foreground">{currentGradeState.message}</p>
-                              </div>
-                            ) : currentGradeState.status === "done" ? (
-                              <div className="rounded-2xl border border-emerald-500/25 bg-emerald-500/10 px-4 py-3">
-                                <div className="flex flex-wrap items-center justify-between gap-2">
-                                  <p className="text-xs font-extrabold text-emerald-700 dark:text-emerald-300">AI feedback</p>
-                                  <span className="rounded-full border border-emerald-500/30 bg-background px-2.5 py-1 text-xs font-extrabold text-foreground">
-                                    {currentGradeState.grade.score}/{currentGradeState.grade.maxScore} - {verdictLabel(currentGradeState.grade.verdict)}
-                                  </span>
+                              <p className="mt-2 text-sm leading-relaxed text-foreground">{currentGradeState.grade.feedback}</p>
+                              {currentGradeState.grade.matchedPoints.length > 0 ? (
+                                <div className="mt-3">
+                                  <p className="text-xs font-extrabold text-emerald-700 dark:text-emerald-300">You covered</p>
+                                  <ul className="mt-1 list-disc space-y-1 pl-5 text-sm leading-relaxed text-foreground">
+                                    {currentGradeState.grade.matchedPoints.map((point, pointIndex) => (
+                                      <li key={`${point}-${pointIndex}`}>{point}</li>
+                                    ))}
+                                  </ul>
                                 </div>
-                                <p className="mt-2 text-sm leading-relaxed text-foreground">{currentGradeState.grade.feedback}</p>
-                                {currentGradeState.grade.matchedPoints.length > 0 ? (
-                                  <div className="mt-3">
-                                    <p className="text-xs font-extrabold text-emerald-700 dark:text-emerald-300">You covered</p>
-                                    <ul className="mt-1 list-disc space-y-1 pl-5 text-sm leading-relaxed text-foreground">
-                                      {currentGradeState.grade.matchedPoints.map((point, pointIndex) => (
-                                        <li key={`${point}-${pointIndex}`}>{point}</li>
-                                      ))}
-                                    </ul>
-                                  </div>
-                                ) : null}
-                                {currentGradeState.grade.missingPoints.length > 0 ? (
-                                  <div className="mt-3">
-                                    <p className="text-xs font-extrabold text-amber-700 dark:text-amber-300">Missing points</p>
-                                    <ul className="mt-1 list-disc space-y-1 pl-5 text-sm leading-relaxed text-foreground">
-                                      {currentGradeState.grade.missingPoints.map((point, pointIndex) => (
-                                        <li key={`${point}-${pointIndex}`}>{point}</li>
-                                      ))}
-                                    </ul>
-                                  </div>
-                                ) : null}
-                                {currentGradeState.grade.improvedAnswer ? (
-                                  <div className="mt-3">
-                                    <p className="text-xs font-extrabold text-emerald-700 dark:text-emerald-300">Improved answer</p>
-                                    <p className="mt-1 whitespace-pre-wrap text-sm leading-relaxed text-foreground">
-                                      {currentGradeState.grade.improvedAnswer}
-                                    </p>
-                                  </div>
-                                ) : null}
-                                <p className="mt-3 text-[11px] font-semibold text-muted-brand">
-                                  AI feedback only - save this set to Practice Library if you want persistent grading history.
-                                </p>
-                              </div>
-                            ) : null}
-                            <div className="rounded-2xl border border-primary/20 bg-primary-light/60 px-4 py-3">
-                            <div>
-                              <p className="text-xs font-extrabold uppercase tracking-wide text-primary-text/80">Model answer</p>
-                              <p className="mt-1 whitespace-pre-wrap text-sm leading-relaxed text-primary-text">{currentQ.model_answer}</p>
-                            </div>
-                            {currentQ.marking_points.length > 0 && (
-                              <div>
-                                <p className="text-xs font-extrabold uppercase tracking-wide text-primary-text/80">Marking points</p>
-                                <ul className="mt-1 list-disc space-y-1 pl-5 text-sm leading-relaxed text-primary-text">
-                                  {currentQ.marking_points.map((point, index) => (
-                                    <li key={`${point}-${index}`}>{point}</li>
-                                  ))}
-                                </ul>
-                              </div>
-                            )}
-                            {currentQ.explanation?.trim() && (
-                              <p className="text-xs leading-relaxed text-primary-text/85">
-                                <span className="font-semibold">Note: </span>{currentQ.explanation}
+                              ) : null}
+                              {currentGradeState.grade.missingPoints.length > 0 ? (
+                                <div className="mt-3">
+                                  <p className="text-xs font-extrabold text-amber-700 dark:text-amber-300">Missing points</p>
+                                  <ul className="mt-1 list-disc space-y-1 pl-5 text-sm leading-relaxed text-foreground">
+                                    {currentGradeState.grade.missingPoints.map((point, pointIndex) => (
+                                      <li key={`${point}-${pointIndex}`}>{point}</li>
+                                    ))}
+                                  </ul>
+                                </div>
+                              ) : null}
+                              {currentGradeState.grade.improvedAnswer ? (
+                                <div className="mt-3">
+                                  <p className="text-xs font-extrabold text-emerald-700 dark:text-emerald-300">Improved answer</p>
+                                  <p className="mt-1 whitespace-pre-wrap text-sm leading-relaxed text-foreground">
+                                    {currentGradeState.grade.improvedAnswer}
+                                  </p>
+                                </div>
+                              ) : null}
+                              <p className="mt-3 text-[11px] font-semibold text-muted-brand">
+                                AI feedback only - save this set to Practice Library if you want persistent grading history.
                               </p>
-                            )}
                             </div>
+                            <details className="rounded-2xl border border-border bg-background px-4 py-3">
+                              <summary className="cursor-pointer text-xs font-extrabold uppercase tracking-wide text-muted-brand">
+                                Model answer and marking points
+                              </summary>
+                              <div className="mt-3 space-y-3">
+                                <div>
+                                  <p className="text-xs font-extrabold uppercase tracking-wide text-muted-brand">Model answer</p>
+                                  <p className="mt-1 whitespace-pre-wrap text-sm leading-relaxed text-foreground">{currentQ.model_answer}</p>
+                                </div>
+                                {currentQ.marking_points.length > 0 && (
+                                  <div>
+                                    <p className="text-xs font-extrabold uppercase tracking-wide text-muted-brand">Marking points</p>
+                                    <ul className="mt-1 list-disc space-y-1 pl-5 text-sm leading-relaxed text-foreground">
+                                      {currentQ.marking_points.map((point, index) => (
+                                        <li key={`${point}-${index}`}>{point}</li>
+                                      ))}
+                                    </ul>
+                                  </div>
+                                )}
+                                {currentQ.explanation?.trim() && (
+                                  <p className="text-xs leading-relaxed text-muted-brand">
+                                    <span className="font-semibold">Note: </span>{currentQ.explanation}
+                                  </p>
+                                )}
+                              </div>
+                            </details>
                           </div>
                         )}
                       </div>

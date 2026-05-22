@@ -53,6 +53,12 @@ type WrittenGradeState =
   | { status: "done"; grade: WrittenAnswerGrade; cached: boolean }
   | { status: "error"; message: string };
 
+type KeepDraftState =
+  | { status: "idle" }
+  | { status: "saving" }
+  | { status: "done" }
+  | { status: "error"; message: string };
+
 function getIsCorrect(o: AnyOption) {
   return Boolean(o.is_correct ?? o.correct ?? o.isCorrect ?? false);
 }
@@ -334,7 +340,7 @@ export default function PracticeTakeClient() {
 
   const setId = String(params?.setId ?? "");
   const attemptFromUrl = String(sp.get("attempt") ?? "").trim();
-  const modeParam = sp.get("mode") ?? "exam";
+  const modeParam = sp.get("mode") ?? "study";
   const isStudyMode = modeParam === "study";
   const isDueParam = sp.get("due") === "1";
 
@@ -419,6 +425,8 @@ export default function PracticeTakeClient() {
   // Question navigator drawer
   const [navOpen, setNavOpen] = useState(false);
   const [studyHintOpen, setStudyHintOpen] = useState<Record<string, boolean>>({});
+  const [draftKept, setDraftKept] = useState(false);
+  const [keepDraftState, setKeepDraftState] = useState<KeepDraftState>({ status: "idle" });
 
   // Milestone toast — fires once when finalization completes
   const [milestone, setMilestone] = useState<Milestone | null>(null);
@@ -534,6 +542,7 @@ export default function PracticeTakeClient() {
   const total = stats.total;
   const isLast = questions.length > 0 && idx >= questions.length - 1;
   const learningMode = studyMode || isDueMode || isRetryMode;
+  const isActiveAiDraft = meta?.draft_status === "draft" && !draftKept;
 
   const chosenId = current ? answers[current.id] : null;
   const currentQuestionType = current?.question_type === "short_answer" || current?.question_type === "theory"
@@ -650,6 +659,28 @@ export default function PracticeTakeClient() {
     setStudyHintOpen({});
     setReadingRef(null);
     softReset();
+  }
+
+  async function keepDraftSet() {
+    if (!setId || keepDraftState.status === "saving" || !isActiveAiDraft) return;
+    setKeepDraftState({ status: "saving" });
+    try {
+      const res = await fetch(`/api/ai/generated-drafts/${encodeURIComponent(setId)}/keep`, {
+        method: "POST",
+      });
+      const data = await res.json().catch(() => null) as { ok?: boolean; message?: string } | null;
+      if (!res.ok || !data?.ok) {
+        throw new Error(data?.message || "Could not keep this practice set.");
+      }
+      setDraftKept(true);
+      setKeepDraftState({ status: "done" });
+      router.refresh();
+    } catch (error: unknown) {
+      setKeepDraftState({
+        status: "error",
+        message: error instanceof Error ? error.message : "Could not keep this practice set.",
+      });
+    }
   }
 
   function goNext() {
@@ -979,6 +1010,53 @@ if (err || !meta) {
       </div>
 
       {/* No questions */}
+      {isActiveAiDraft || keepDraftState.status === "done" || keepDraftState.status === "error" ? (
+        <div
+          className={cn(
+            "mt-4 rounded-2xl border px-4 py-3",
+            keepDraftState.status === "done"
+              ? "border-emerald-300/60 bg-emerald-50 text-emerald-900 dark:border-emerald-800/40 dark:bg-emerald-950/20 dark:text-emerald-200"
+              : keepDraftState.status === "error"
+                ? "border-rose-300/60 bg-rose-50 text-rose-900 dark:border-rose-800/40 dark:bg-rose-950/20 dark:text-rose-200"
+                : "border-[#5B35D5]/25 bg-[#EEEDFE] text-[#3B24A8] dark:border-[#5B35D5]/30 dark:bg-[#5B35D5]/10 dark:text-indigo-300"
+          )}
+        >
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div className="min-w-0">
+              <p className="text-sm font-extrabold">
+                {keepDraftState.status === "done"
+                  ? "Saved to your practice library"
+                  : keepDraftState.status === "error"
+                    ? "Could not keep draft"
+                    : "AI practice draft"}
+              </p>
+              <p className="mt-0.5 text-xs font-semibold opacity-80">
+                {keepDraftState.status === "done"
+                  ? "This set will stay private and will not expire."
+                  : keepDraftState.status === "error"
+                    ? keepDraftState.message
+                    : "Your questions and answers are saved. Keep it if you want this set permanently."}
+              </p>
+            </div>
+            {isActiveAiDraft ? (
+              <button
+                type="button"
+                onClick={keepDraftSet}
+                disabled={keepDraftState.status === "saving"}
+                className="inline-flex shrink-0 items-center justify-center gap-2 rounded-2xl bg-[#5B35D5] px-4 py-2.5 text-sm font-extrabold text-white transition hover:bg-[#4B26C4] disabled:cursor-not-allowed disabled:opacity-60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#5B35D5] focus-visible:ring-offset-2"
+              >
+                {keepDraftState.status === "saving" ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <BookOpen className="h-4 w-4" />
+                )}
+                Keep in library
+              </button>
+            ) : null}
+          </div>
+        </div>
+      ) : null}
+
       {questions.length === 0 ? (
         <div className="mt-4">
           <EmptyState

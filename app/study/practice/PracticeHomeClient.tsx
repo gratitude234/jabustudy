@@ -927,7 +927,7 @@ function PracticeHomeInner() {
   // Preview sheet
   const [previewOpen, setPreviewOpen] = useState(false);
   const [previewSet, setPreviewSet] = useState<QuizSetRow | null>(null);
-  const [previewMode, setPreviewMode] = useState<"exam" | "study">("exam");
+  const [previewMode, setPreviewMode] = useState<"exam" | "study">("study");
 
   // Drawer drafts
   const [draftCourse, setDraftCourse] = useState(courseParam);
@@ -1587,14 +1587,14 @@ function PracticeHomeInner() {
 
   function openPreview(s: QuizSetRow) {
     setPreviewSet(s);
-    setPreviewMode("exam"); // reset to default each time
+    setPreviewMode("study"); // reset to default each time
     setPreviewOpen(true);
   }
 
-  function startSet(id: string, mode: "exam" | "study" = "exam") {
+  function startSet(id: string, mode: "exam" | "study" = "study") {
     const url = mode === "study"
       ? `/study/practice/${id}?mode=study`
-      : `/study/practice/${id}`;
+      : `/study/practice/${id}?mode=exam`;
     router.push(url);
   }
 
