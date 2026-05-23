@@ -6,12 +6,10 @@ import { useEffect, useRef, useState } from "react";
 import {
   ArrowLeft,
   BookOpen,
-  CheckCircle2,
   ChevronDown,
-  ChevronUp,
+  FileText,
   Loader2,
   Sparkles,
-  X,
 } from "lucide-react";
 import { cn, timeAgo } from "@/lib/utils";
 import { supabase } from "@/lib/supabase";
@@ -214,7 +212,7 @@ async function readNdjsonStream(
 
 // ─── Score ring SVG ───────────────────────────────────────────────────────────
 
-function ScoreRing({ correct, total }: { correct: number; total: number }) {
+function ScoreRing({ correct, total, size = 100 }: { correct: number; total: number; size?: number }) {
   const r = 40;
   const cx = 50;
   const circ = 2 * Math.PI * r;
@@ -223,7 +221,7 @@ function ScoreRing({ correct, total }: { correct: number; total: number }) {
   const color = p >= 80 ? "#22c55e" : p >= 60 ? "#f59e0b" : "#ef4444";
 
   return (
-    <svg width={100} height={100} viewBox="0 0 100 100">
+    <svg width={size} height={size} viewBox="0 0 100 100">
       <circle cx={cx} cy={cx} r={r} fill="none" stroke="currentColor" strokeWidth={8} opacity={0.1} />
       <circle
         cx={cx} cy={cx} r={r} fill="none"
@@ -233,7 +231,7 @@ function ScoreRing({ correct, total }: { correct: number; total: number }) {
         transform={`rotate(-90 ${cx} ${cx})`}
       />
       <text x={cx} y={cx} textAnchor="middle" dominantBaseline="central"
-        fontSize={18} fontWeight={700} fill="currentColor" fontFamily="var(--font-bricolage)">
+        fontSize={size <= 60 ? 20 : 18} fontWeight={700} fill="currentColor" fontFamily="var(--font-bricolage)">
         {total > 0 ? `${correct}/${total}` : "—"}
       </text>
     </svg>
@@ -249,6 +247,21 @@ const DEFAULT_CONFIG: SessionConfig = {
   intent: "auto",
   focus: "",
 };
+
+const FORMAT_OPTIONS: Array<{ value: QuestionFormat; label: string; sub: string }> = [
+  { value: "mixed", label: "Mixed", sub: "Objective, short-answer, and theory" },
+  { value: "mcq", label: "Objective", sub: "A-D questions only" },
+  { value: "written", label: "Written", sub: "Typed answers and marking points" },
+];
+
+const GENERATION_OPTIONS: Array<{ value: GenerationIntent; label: string }> = [
+  { value: "auto", label: "Let Jabu decide" },
+  { value: "weak_areas", label: "Strengthen weak spots" },
+  { value: "untested_sections", label: "Cover new ground" },
+  { value: "application", label: "Practice applying concepts" },
+  { value: "hard", label: "Exam-style hard" },
+  { value: "topic", label: "Focus on a topic" },
+];
 
 export default function PracticeMaterialClient({
   material: m,
@@ -295,7 +308,7 @@ export default function PracticeMaterialClient({
 
   // Hide bottom nav during active session
   useEffect(() => {
-    if (mode === "answering" || mode === "generating") {
+    if (mode === "answering" || mode === "generating" || mode === "batch-complete" || mode === "resume-prompt") {
       document.body.setAttribute("data-hide-nav", "true");
     } else {
       document.body.removeAttribute("data-hide-nav");
@@ -697,8 +710,6 @@ export default function PracticeMaterialClient({
 
   // ── Derived session totals ───────────────────────────────────────────────────
 
-  const sessionTotal = (session?.total_questions ?? 0) + (completedBatch && mode === "batch-complete" ? 0 : 0);
-  const sessionCorrect = session?.total_correct ?? 0;
   const batchCount = session?.batches.length ?? 0;
 
   // ── Render ───────────────────────────────────────────────────────────────────
@@ -709,6 +720,182 @@ export default function PracticeMaterialClient({
   const currentQ = batchQuestions[currentIndex];
   const isMcq = currentQ?.question_type === "mcq";
   const currentAnswered = currentQ ? isQuestionAnswered(currentQ) : false;
+
+  const CreditsCard = () => (
+    <div className="flex items-center gap-3 rounded-3xl border border-border bg-card px-4 py-3.5">
+      <div className="grid h-10 w-10 shrink-0 place-items-center rounded-2xl bg-amber-50">
+        <Sparkles className="h-5 w-5 text-amber-500" />
+      </div>
+      <div className="min-w-0 flex-1">
+        <p className="text-[11px] font-bold uppercase tracking-wider text-muted-brand">AI Credits</p>
+        <p className="text-lg font-extrabold text-foreground">
+          {credits} <span className="text-sm font-semibold text-muted-brand">remaining</span>
+        </p>
+        <div className="mt-1.5 h-1 overflow-hidden rounded-full bg-border">
+          <div
+            className={cn(
+              "h-full rounded-full transition-all",
+              credits <= 2
+                ? "bg-gradient-to-r from-red-500 to-red-400"
+                : "bg-gradient-to-r from-amber-500 to-amber-400"
+            )}
+            style={{ width: `${Math.min(100, (credits / 20) * 100)}%` }}
+          />
+        </div>
+      </div>
+      <button type="button" className="shrink-0 rounded-xl border border-primary bg-primary-light px-3 py-1.5 text-xs font-bold text-primary">
+        + Get more
+      </button>
+    </div>
+  );
+
+  const GenerateConfigCard = () => (
+    <div className="overflow-hidden rounded-3xl border border-border bg-card">
+      <div className="border-b border-border px-4 py-4">
+        <p className="flex items-center gap-2 text-base font-extrabold text-foreground">
+          <Sparkles className="h-4 w-4 text-primary" />
+          Configure Your Practice
+        </p>
+        <p className="mt-1 text-xs text-muted-brand">Generate from this material and start answering immediately.</p>
+      </div>
+      <div className="space-y-4 p-4">
+        <div>
+          <p className="mb-2 text-[11px] font-bold uppercase tracking-wider text-muted-brand">Questions</p>
+          <div className="flex gap-2">
+            {([5, 10, 15, 20] as const).map((n) => (
+              <button
+                key={n}
+                type="button"
+                onClick={() => setConfig((c) => ({ ...c, count: n }))}
+                className={cn(
+                  "flex-1 rounded-xl border py-2.5 text-sm font-bold transition focus-visible:outline-none",
+                  config.count === n
+                    ? "border-primary bg-primary text-white"
+                    : "border-border bg-background text-foreground hover:bg-secondary/50"
+                )}
+              >
+                {n}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div>
+          <p className="mb-2 text-[11px] font-bold uppercase tracking-wider text-muted-brand">Format</p>
+          <div className="space-y-2">
+            {FORMAT_OPTIONS.map(({ value, label, sub }) => (
+              <button
+                key={value}
+                type="button"
+                onClick={() => setConfig((c) => ({ ...c, format: value }))}
+                className={cn(
+                  "flex w-full items-start gap-3 rounded-2xl border px-3 py-3 text-left transition focus-visible:outline-none",
+                  config.format === value
+                    ? "border-primary bg-primary-light"
+                    : "border-border bg-background hover:bg-secondary/40"
+                )}
+              >
+                <span
+                  className={cn(
+                    "mt-0.5 h-4 w-4 shrink-0 rounded-full border-2",
+                    config.format === value ? "border-primary bg-primary" : "border-border bg-card"
+                  )}
+                />
+                <span>
+                  <span className={cn("block text-sm font-bold", config.format === value ? "text-primary-text" : "text-foreground")}>
+                    {label}
+                  </span>
+                  <span className="mt-0.5 block text-[11px] leading-snug text-muted-brand">{sub}</span>
+                </span>
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div>
+          <p className="mb-2 text-[11px] font-bold uppercase tracking-wider text-muted-brand">Difficulty</p>
+          <div className="grid grid-cols-3 gap-2">
+            {([
+              { value: "easy", label: "Easy" },
+              { value: "mixed", label: "Mixed" },
+              { value: "hard", label: "Exam-hard" },
+            ] as const).map(({ value, label }) => (
+              <button
+                key={value}
+                type="button"
+                onClick={() => setConfig((c) => ({ ...c, difficulty: value }))}
+                className={cn(
+                  "rounded-xl border px-2 py-2 text-xs font-extrabold transition focus-visible:outline-none",
+                  config.difficulty !== value && "border-border bg-background text-foreground hover:bg-secondary/50",
+                  config.difficulty === "easy" && value === "easy" && "border-green-300 bg-green-50 text-green-700",
+                  config.difficulty === "mixed" && value === "mixed" && "border-amber-300 bg-amber-50 text-amber-700",
+                  config.difficulty === "hard" && value === "hard" && "border-red-300 bg-red-50 text-red-600"
+                )}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div>
+          <p className="mb-2 text-[11px] font-bold uppercase tracking-wider text-muted-brand">Smart targeting</p>
+          <div className="relative rounded-2xl border border-border bg-background px-3 py-3">
+            <select
+              value={config.intent}
+              onChange={(e) => setConfig((c) => ({ ...c, intent: e.target.value as GenerationIntent }))}
+              className="w-full appearance-none bg-transparent pr-8 text-sm font-bold text-foreground outline-none"
+            >
+              {GENERATION_OPTIONS.map(({ value, label }) => (
+                <option key={value} value={value}>{label}</option>
+              ))}
+            </select>
+            <ChevronDown className="pointer-events-none absolute right-3 top-3.5 h-4 w-4 text-muted-brand" />
+          </div>
+        </div>
+
+        {(config.intent === "topic" || config.focus) && (
+          <div>
+            <p className="mb-2 text-[11px] font-bold uppercase tracking-wider text-muted-brand">Focus area</p>
+            <input
+              type="text"
+              value={config.focus}
+              onChange={(e) => setConfig((c) => ({ ...c, focus: e.target.value }))}
+              placeholder="e.g. Krebs cycle"
+              className="w-full rounded-2xl border border-border bg-background px-4 py-3 text-sm outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/20"
+            />
+          </div>
+        )}
+
+        <div className="flex items-center justify-between rounded-2xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm">
+          <span className="font-semibold text-amber-800">{config.count} questions · cost</span>
+          <span className="font-extrabold text-amber-700">{creditCost} credit{creditCost === 1 ? "" : "s"}</span>
+        </div>
+
+        {error && <p className="text-center text-xs text-red-500">{error}</p>}
+        {!canGenerate && (
+          <p className="text-center text-xs font-semibold text-amber-700">
+            Not enough credits - need {creditCost}, have {credits}.
+          </p>
+        )}
+
+        <button
+          type="button"
+          onClick={() => void handleGenerate()}
+          disabled={!canGenerate}
+          className="flex w-full items-center gap-3 rounded-2xl bg-primary px-4 py-4 text-left text-white shadow-sm transition hover:opacity-90 disabled:opacity-50 focus-visible:outline-none active:scale-[0.99]"
+        >
+          <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-white/15">
+            <Sparkles className="h-5 w-5" />
+          </span>
+          <span className="min-w-0 flex-1">
+            <span className="block text-base font-extrabold">Generate Questions</span>
+            <span className="text-xs font-medium text-white/75">Opens practice immediately</span>
+          </span>
+        </button>
+      </div>
+    </div>
+  );
 
   // Weak areas from current batch
   const missedTopics = completedBatch
@@ -734,89 +921,71 @@ export default function PracticeMaterialClient({
     const totalPct = pct(session.total_correct, session.total_questions);
 
     return (
-      <div className="space-y-4 pb-28 md:pb-8">
-        <div>
-          <Link
-            href={`/study/materials/${m.id}`}
-            className="inline-flex items-center gap-2 rounded-2xl border border-border bg-background px-3 py-2 text-sm font-semibold text-foreground transition hover:bg-secondary/50"
-          >
-            <ArrowLeft className="h-4 w-4" />
-            {title}
-          </Link>
+      <div className="fixed inset-0 z-50 flex flex-col overflow-y-auto bg-background">
+        <div className="border-b border-border bg-card px-4 pb-4 pt-14">
+          <span className="inline-flex items-center rounded-full border border-amber-300 bg-amber-50 px-2.5 py-1 text-[11px] font-bold text-amber-700">
+            Paused {pausedAgo}
+          </span>
+          <h1 className="mt-2 text-xl font-extrabold text-foreground">Session in progress</h1>
+          <p className="text-sm text-muted-brand">
+            {title}{course ? ` - ${course.course_code}` : ""}
+          </p>
         </div>
-
-        <div className="overflow-hidden rounded-3xl border border-primary/20 bg-card shadow-sm">
-          <div className="bg-gradient-to-br from-primary to-primary/65 px-5 py-5">
-            <p className="text-[11px] font-bold uppercase tracking-wider text-white/70">Practice Session</p>
-            <h1 className="mt-1 font-[family-name:var(--font-bricolage)] text-2xl font-bold text-white">
-              {title}
-            </h1>
-            {course && (
-              <p className="mt-1 text-sm font-semibold text-white/80">
-                {course.course_code}{course.level ? ` · ${course.level}L` : ""}
-              </p>
-            )}
-          </div>
-
-          <div className="space-y-4 p-5">
-            <div className="rounded-2xl border border-amber-300/60 bg-amber-50 px-4 py-3 dark:border-amber-700/40 dark:bg-amber-950/20">
-              <p className="text-sm font-bold text-amber-900 dark:text-amber-200">
-                You paused {pausedAgo}
-              </p>
+        <div className="flex-1 space-y-3 p-4">
+          <div className="grid grid-cols-3 gap-2">
+            <div className="rounded-2xl border border-border bg-card py-3 text-center">
+              <p className="text-lg font-extrabold text-foreground">{session.total_questions}</p>
+              <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-brand">Answered</p>
             </div>
-
-            <div className="grid grid-cols-3 gap-3">
-              <div className="rounded-xl border border-border bg-background py-3 text-center">
-                <p className="text-lg font-bold text-foreground">{session.total_questions}</p>
-                <p className="text-[10px] uppercase tracking-wide text-muted-brand">Questions</p>
-              </div>
-              <div className="rounded-xl border border-border bg-background py-3 text-center">
-                <p className="text-lg font-bold text-primary">{session.total_correct}</p>
-                <p className="text-[10px] uppercase tracking-wide text-muted-brand">Correct</p>
-              </div>
-              <div className="rounded-xl border border-border bg-background py-3 text-center">
-                <p className="text-lg font-bold text-foreground">{totalPct}%</p>
-                <p className="text-[10px] uppercase tracking-wide text-muted-brand">Score</p>
-              </div>
+            <div className="rounded-2xl border border-border bg-card py-3 text-center">
+              <p className="text-lg font-extrabold text-green-600">{session.total_correct}</p>
+              <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-brand">Correct</p>
             </div>
-
-            {session.batches.length > 0 && (
-              <div>
-                <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-muted-brand">Batch history</p>
-                <div className="flex flex-wrap gap-2">
-                  {session.batches.map((b, i) => (
-                    <span
-                      key={i}
-                      className="inline-flex items-center gap-1 rounded-full border border-primary/20 bg-primary-light px-3 py-1 text-xs font-semibold text-primary-text"
-                    >
-                      <CheckCircle2 className="h-3 w-3" />
-                      Batch {i + 1} ({b.correct}/{b.count})
-                    </span>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {error && <p className="text-center text-xs text-red-500">{error}</p>}
-
-            <div className="grid gap-2 sm:grid-cols-2">
-              <button
-                type="button"
-                onClick={() => void handleContinue()}
-                className="inline-flex items-center justify-center gap-2 rounded-2xl bg-primary px-4 py-3 text-sm font-bold text-white transition hover:opacity-90"
-              >
-                <Sparkles className="h-4 w-4" />
-                Continue session
-              </button>
-              <button
-                type="button"
-                onClick={() => void handleStartFresh()}
-                className="inline-flex items-center justify-center gap-2 rounded-2xl border border-border bg-background px-4 py-3 text-sm font-semibold text-foreground transition hover:bg-secondary/50"
-              >
-                Start fresh (uses credits)
-              </button>
+            <div className="rounded-2xl border border-border bg-card py-3 text-center">
+              <p className="text-lg font-extrabold text-primary">{totalPct}%</p>
+              <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-brand">Score</p>
             </div>
           </div>
+
+          <div className="rounded-2xl border border-border bg-card p-3.5">
+            <div className="mb-2.5 flex items-center justify-between">
+              <p className="text-sm font-bold text-foreground">Your progress</p>
+              <p className="text-xs font-semibold text-muted-brand">Q1-Q{session.total_questions} answered</p>
+            </div>
+            <div className="mb-2 h-2 overflow-hidden rounded-full bg-border">
+              <div className="h-full rounded-full bg-gradient-to-r from-primary to-primary/70" style={{ width: "100%" }} />
+            </div>
+            <div className="flex flex-wrap gap-1.5">
+              {session.batches.map((b, i) => (
+                <span key={i} className="rounded-lg border border-green-200 bg-green-50 px-2 py-1 text-[10px] font-semibold text-green-700">
+                  Batch {i + 1}: {b.correct}/{b.count}
+                </span>
+              ))}
+            </div>
+          </div>
+
+          {error && <p className="text-center text-xs text-red-500">{error}</p>}
+
+          <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={() => void handleContinue()}
+              className="flex-[2] rounded-2xl bg-primary py-3.5 text-sm font-extrabold text-white transition hover:opacity-90"
+            >
+              Continue from Q{session.total_questions + 1} →
+            </button>
+            <button
+              type="button"
+              onClick={() => void handleStartFresh()}
+              className="flex-1 rounded-2xl border border-border bg-card py-3.5 text-sm font-bold text-muted-brand transition hover:bg-secondary/50"
+            >
+              Start fresh
+            </button>
+          </div>
+          <p className="text-center text-xs leading-relaxed text-muted-brand">
+            Session resumes if returned within 24 hours.<br />
+            <strong className="text-foreground">{credits} credits remaining</strong>
+          </p>
         </div>
       </div>
     );
@@ -826,200 +995,18 @@ export default function PracticeMaterialClient({
 
   if (mode === "configure") {
     return (
-      <div className="space-y-4 pb-28 md:pb-8">
-        <div>
+      <div className="mx-auto max-w-xl space-y-3 p-4 pb-28 md:pb-8">
+        <div className="pt-1">
           <Link
             href={`/study/materials/${m.id}`}
-            className="inline-flex items-center gap-2 rounded-2xl border border-border bg-background px-3 py-2 text-sm font-semibold text-foreground transition hover:bg-secondary/50"
+            className="inline-flex items-center gap-2 rounded-2xl border border-border bg-card px-3 py-2 text-sm font-semibold text-foreground transition hover:bg-secondary/50"
           >
             <ArrowLeft className="h-4 w-4" />
             {title}
           </Link>
         </div>
-
-        <div className="overflow-hidden rounded-3xl border border-primary/20 bg-card shadow-sm">
-          <div className="bg-gradient-to-br from-primary to-primary/65 px-5 py-5">
-            <p className="text-[11px] font-bold uppercase tracking-wider text-white/70">New Practice Session</p>
-            <h1 className="mt-1 font-[family-name:var(--font-bricolage)] text-2xl font-bold text-white">
-              {title}
-            </h1>
-            {course && (
-              <p className="mt-1 text-sm font-semibold text-white/80">
-                {course.course_code}{course.level ? ` · ${course.level}L` : ""}
-              </p>
-            )}
-          </div>
-
-          <div className="space-y-5 p-5">
-            {/* Count */}
-            <div>
-              <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-muted-brand">
-                Number of questions
-              </p>
-              <div className="flex gap-2">
-                {([5, 10, 15, 20] as const).map((n) => (
-                  <button
-                    key={n}
-                    type="button"
-                    onClick={() => setConfig((c) => ({ ...c, count: n }))}
-                    className={cn(
-                      "flex-1 rounded-xl border py-2.5 text-sm font-semibold transition focus-visible:outline-none",
-                      config.count === n
-                        ? "border-primary bg-primary text-white"
-                        : "border-border bg-background text-foreground hover:bg-secondary/50"
-                    )}
-                  >
-                    {n}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {/* Format */}
-            <div>
-              <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-muted-brand">Format</p>
-              <div className="grid gap-2 sm:grid-cols-3">
-                {(
-                  [
-                    { value: "mixed", label: "Mixed", sub: "Objective + written" },
-                    { value: "mcq", label: "Objective", sub: "A–D only" },
-                    { value: "written", label: "Written", sub: "Typed answers" },
-                  ] as const
-                ).map(({ value, label, sub }) => (
-                  <button
-                    key={value}
-                    type="button"
-                    onClick={() => setConfig((c) => ({ ...c, format: value }))}
-                    className={cn(
-                      "rounded-xl border px-3 py-3 text-left transition focus-visible:outline-none",
-                      config.format === value
-                        ? "border-primary bg-primary-light"
-                        : "border-border bg-background hover:bg-secondary/40"
-                    )}
-                  >
-                    <p className={cn("text-sm font-semibold", config.format === value ? "text-primary-text" : "text-foreground")}>
-                      {label}
-                    </p>
-                    <p className="mt-0.5 text-[11px] leading-snug text-muted-brand">{sub}</p>
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {/* Difficulty */}
-            <div>
-              <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-muted-brand">Difficulty</p>
-              <div className="flex flex-col gap-2">
-                {(
-                  [
-                    { value: "easy", label: "Easy warm-up", sub: "Recall & definitions" },
-                    { value: "mixed", label: "Mixed", sub: "Recall, application & analysis" },
-                    { value: "hard", label: "Exam-hard", sub: "Deep understanding & application" },
-                  ] as const
-                ).map(({ value, label, sub }) => (
-                  <button
-                    key={value}
-                    type="button"
-                    onClick={() => setConfig((c) => ({ ...c, difficulty: value }))}
-                    className={cn(
-                      "flex items-center gap-3 rounded-xl border px-4 py-3 text-left transition focus-visible:outline-none",
-                      config.difficulty === value
-                        ? "border-primary bg-primary-light"
-                        : "border-border bg-background hover:bg-secondary/40"
-                    )}
-                  >
-                    <div
-                      className={cn(
-                        "h-4 w-4 shrink-0 rounded-full border-2",
-                        config.difficulty === value ? "border-primary bg-primary" : "border-border"
-                      )}
-                    />
-                    <div>
-                      <p className={cn("text-sm font-semibold", config.difficulty === value ? "text-primary-text" : "text-foreground")}>
-                        {label}
-                      </p>
-                      <p className="text-xs text-muted-brand">{sub}</p>
-                    </div>
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {/* Intent */}
-            <div>
-              <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-muted-brand">
-                What should Jabu focus on?
-              </p>
-              <div className="rounded-xl border border-border bg-background px-3 py-3">
-                <div className="flex items-center gap-3">
-                  <Sparkles className="h-4 w-4 shrink-0 text-primary" />
-                  <select
-                    value={config.intent}
-                    onChange={(e) => setConfig((c) => ({ ...c, intent: e.target.value as GenerationIntent }))}
-                    className="min-w-0 flex-1 bg-transparent text-sm font-semibold text-foreground outline-none"
-                  >
-                    <option value="auto">Let Jabu decide</option>
-                    <option value="weak_areas">Strengthen weak spots</option>
-                    <option value="untested_sections">Cover new ground</option>
-                    <option value="application">Practice applying concepts</option>
-                    <option value="hard">Exam-style hard</option>
-                    <option value="topic">Focus on a topic</option>
-                  </select>
-                </div>
-              </div>
-            </div>
-
-            {/* Focus area */}
-            {(config.intent === "topic" || config.focus) && (
-              <div>
-                <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-muted-brand">
-                  Focus area <span className="normal-case font-normal">(optional)</span>
-                </p>
-                <input
-                  type="text"
-                  value={config.focus}
-                  onChange={(e) => setConfig((c) => ({ ...c, focus: e.target.value }))}
-                  placeholder="e.g. Krebs cycle"
-                  className="w-full rounded-xl border border-border bg-background px-4 py-2.5 text-sm outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/20"
-                />
-              </div>
-            )}
-
-            {/* Credits */}
-            <div
-              className={cn(
-                "rounded-xl border px-3 py-2.5 text-sm",
-                canGenerate
-                  ? "border-border bg-background text-muted-brand"
-                  : "border-amber-300/60 bg-amber-50 text-amber-800 dark:border-amber-700/40 dark:bg-amber-950/20 dark:text-amber-300"
-              )}
-            >
-              {canGenerate
-                ? `Cost: ${creditCost} credit${creditCost === 1 ? "" : "s"} · ${credits} remaining`
-                : `Not enough credits — need ${creditCost}, have ${credits}`}
-            </div>
-
-            {error && <p className="text-center text-xs text-red-500">{error}</p>}
-
-            <button
-              type="button"
-              onClick={() => void handleGenerate()}
-              disabled={!canGenerate}
-              className="flex w-full items-center gap-3 rounded-2xl bg-primary px-4 py-4 text-left text-white shadow-sm transition hover:opacity-90 disabled:opacity-50 focus-visible:outline-none active:scale-[0.99]"
-            >
-              <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-white/15">
-                <Sparkles className="h-5 w-5" />
-              </span>
-              <div className="min-w-0 flex-1">
-                <p className="text-base font-bold">Generate {config.count} questions</p>
-                <p className="text-xs font-medium text-white/75">
-                  {config.difficulty === "hard" ? "Exam-hard" : config.difficulty === "easy" ? "Easy warm-up" : "Mixed"} ·{" "}
-                  {config.format === "mcq" ? "Objective" : config.format === "written" ? "Written" : "Mixed format"}
-                </p>
-              </div>
-            </button>
-          </div>
-        </div>
+        <CreditsCard />
+        <GenerateConfigCard />
       </div>
     );
   }
@@ -1028,38 +1015,25 @@ export default function PracticeMaterialClient({
 
   if (mode === "generating") {
     return (
-      <div className="fixed inset-0 z-50 flex flex-col items-center justify-center gap-5 bg-card px-5 py-16 text-center">
-        <div className="grid h-14 w-14 place-items-center rounded-2xl bg-primary-light text-primary">
-          <Loader2 className="h-7 w-7 animate-spin" />
-        </div>
-        <div className="max-w-sm space-y-2">
-          <p className="text-base font-bold text-foreground">
-            {streamingQuestions.length > 0
-              ? `${streamingQuestions.length} of ${config.count} questions ready`
-              : `Generating ${config.count} questions`}
-          </p>
-          <p className="text-sm leading-relaxed text-muted-brand">{generationStatus}</p>
-        </div>
-        <div className="h-2 w-full max-w-xs overflow-hidden rounded-full bg-secondary">
-          <div
-            className={cn(
-              "h-full rounded-full bg-primary transition-all duration-500",
-              streamingQuestions.length === 0 && "w-1/3 animate-pulse"
-            )}
-            style={
-              streamingQuestions.length > 0
-                ? { width: `${Math.min(100, Math.round((streamingQuestions.length / config.count) * 100))}%` }
-                : undefined
-            }
-          />
-        </div>
+      <div className="fixed inset-0 z-50 flex flex-col items-center justify-center gap-5 bg-background px-7">
+        <div className="h-12 w-12 rounded-full border-[3px] border-border border-t-primary animate-spin" />
+        <p className="text-center text-lg font-extrabold text-foreground">
+          Generating {config.count} questions
+        </p>
+        <p className="text-center text-sm leading-relaxed text-muted-brand">{generationStatus}</p>
         {streamingQuestions.length > 0 && (
-          <div className="w-full max-w-sm space-y-2 text-left">
-            {streamingQuestions.slice(-3).map((q, i) => (
-              <div key={i} className="rounded-xl border border-border bg-background px-3 py-2">
-                <p className="line-clamp-2 text-xs font-semibold leading-relaxed text-foreground">
+          <div className="max-h-48 w-full space-y-2 overflow-hidden rounded-2xl border border-border bg-card p-3">
+            {streamingQuestions.slice(-5).map((q, i) => (
+              <div key={i} className="flex items-start gap-2 text-xs text-muted-brand">
+                <div
+                  className={cn(
+                    "mt-1 h-1.5 w-1.5 shrink-0 rounded-full",
+                    i < streamingQuestions.slice(-5).length - 1 ? "bg-green-500" : "bg-border"
+                  )}
+                />
+                <span className={i < streamingQuestions.slice(-5).length - 1 ? "text-foreground" : ""}>
                   {typeof q.question === "string" ? q.question : ""}
-                </p>
+                </span>
               </div>
             ))}
           </div>
@@ -1076,42 +1050,54 @@ export default function PracticeMaterialClient({
     const gradeState: WrittenGradeState = writtenGradeStates[currentQ.id] ?? { status: "idle" };
 
     return (
-      <div className="fixed inset-0 z-50 flex flex-col bg-card">
-        {/* Top strip */}
-        <div className="flex shrink-0 items-center gap-3 border-b border-border px-4 py-3">
-          <button
-            type="button"
-            onClick={() => setMode("configure")}
-            className="grid h-8 w-8 shrink-0 place-items-center rounded-xl border border-border bg-background text-muted-brand hover:bg-secondary/50"
-            aria-label="Back"
-          >
-            <ArrowLeft className="h-4 w-4" />
-          </button>
-          <div className="min-w-0 flex-1">
-            <p className="truncate text-sm font-bold text-foreground">{title}</p>
-            <p className="text-xs text-muted-brand">
-              Q{currentIndex + 1} of {batchQuestions.length}
-              {session && session.total_questions > 0 && (
-                <> · Session: {session.total_correct}/{session.total_questions} ({pct(session.total_correct, session.total_questions)}%)</>
-              )}
-              {batchCount > 0 && <> · Batch {batchCount + 1}</>}
+      <div className="fixed inset-0 z-50 flex flex-col bg-background">
+        <div className="shrink-0 border-b border-border bg-card px-4 pb-3 pt-3">
+          <div className="mb-2 flex items-center justify-between gap-3">
+            <p className="truncate text-[11px] font-bold text-primary">
+              {course?.course_code ?? title}{course ? ` - ${m.title ?? ""}` : ""}
             </p>
+            <button
+              type="button"
+              onClick={() => setMode("configure")}
+              className="grid h-6 w-6 shrink-0 place-items-center rounded-full bg-secondary text-sm text-muted-brand"
+              aria-label="Close session"
+            >
+              ×
+            </button>
+          </div>
+          <div className="mb-2 flex items-center gap-2">
+            <span className="text-sm font-extrabold text-foreground">Q{currentIndex + 1} of {batchQuestions.length}</span>
+            {session && session.total_correct > 0 && (
+              <span className="inline-flex items-center gap-1 rounded-full border border-green-200 bg-green-50 px-2 py-0.5 text-[11px] font-bold text-green-700">
+                {session.total_correct} correct
+              </span>
+            )}
+            <span className="ml-auto text-sm font-extrabold tabular-nums text-foreground">
+              {pct(session?.total_correct ?? 0, session?.total_questions ?? 0)}%
+            </span>
+          </div>
+          <div className="h-1 overflow-hidden rounded-full bg-border">
+            <div
+              className="h-full rounded-full bg-primary transition-all duration-500"
+              style={{ width: `${((currentIndex + 1) / batchQuestions.length) * 100}%` }}
+            />
           </div>
         </div>
 
-        {/* Progress bar */}
-        <div className="h-1 shrink-0 bg-secondary">
-          <div
-            className="h-full bg-primary transition-all"
-            style={{ width: `${((currentIndex + 1) / batchQuestions.length) * 100}%` }}
-          />
-        </div>
+        <div className="flex-1 space-y-3 overflow-y-auto px-4 py-5 pb-8">
+          <div className="inline-flex items-center gap-1.5 rounded-full border border-primary/20 bg-primary-light px-2.5 py-1 text-[10px] font-bold text-primary">
+            Batch {batchCount + 1} - {batchQuestions.length} questions
+          </div>
 
-        {/* Question content */}
-        <div className="flex-1 overflow-y-auto px-4 py-5 pb-36">
-          <p className="mb-4 text-sm font-bold leading-relaxed text-foreground">
-            {currentIndex + 1}. {currentQ.prompt}
-          </p>
+          <div className="rounded-2xl border border-border bg-card p-3.5">
+            {currentQ.study_ref?.chunkId && (
+              <div className="mb-2.5 flex items-center gap-1 text-[11px] font-semibold text-muted-brand">
+                <FileText className="h-3 w-3 shrink-0" />
+                {currentQ.study_ref.page ? `Page ${currentQ.study_ref.page}` : currentQ.study_ref.topic ?? "Source"}
+              </div>
+            )}
+            <p className="text-[15px] font-bold leading-relaxed text-foreground">{currentQ.prompt}</p>
+          </div>
 
           {isMcq ? (
             <>
@@ -1127,23 +1113,42 @@ export default function PracticeMaterialClient({
                       disabled={answered}
                       onClick={() => handleMcqAnswer(currentQ.id, opt.id)}
                       className={cn(
-                        "flex w-full items-start gap-2.5 rounded-xl border px-3.5 py-2.5 text-sm text-left transition focus-visible:outline-none",
-                        !answered && "hover:bg-secondary/50 border-border/60 text-foreground",
-                        answered && opt.is_correct && "border-primary bg-primary-light font-semibold text-primary-text",
-                        answered && isChosen && !opt.is_correct && "border-red-400 bg-red-50 font-semibold text-red-700",
+                        "flex w-full items-start gap-2.5 rounded-xl border-[1.5px] px-3 py-3 text-left transition focus-visible:outline-none",
+                        !answered && "border-border bg-card hover:border-primary hover:bg-primary-light",
+                        answered && opt.is_correct && "border-green-400 bg-green-50",
+                        answered && isChosen && !opt.is_correct && "border-red-400 bg-red-50",
                         answered && !opt.is_correct && !isChosen && "border-border/40 text-muted-brand opacity-60"
                       )}
                     >
-                      <span className="shrink-0 font-bold">{label}.</span>
-                      <span>{opt.text}</span>
+                      <span
+                        className={cn(
+                          "grid h-6 w-6 shrink-0 place-items-center rounded-full text-[11px] font-extrabold transition",
+                          !answered && "bg-secondary text-muted-brand",
+                          answered && opt.is_correct && "bg-green-500 text-white",
+                          answered && isChosen && !opt.is_correct && "bg-red-500 text-white",
+                          answered && !opt.is_correct && !isChosen && "bg-secondary text-muted-brand"
+                        )}
+                      >
+                        {label}
+                      </span>
+                      <span
+                        className={cn(
+                          "flex-1 text-[13.5px] font-medium leading-relaxed",
+                          answered && opt.is_correct && "font-semibold text-green-800",
+                          answered && isChosen && !opt.is_correct && "text-red-700"
+                        )}
+                      >
+                        {opt.text}
+                      </span>
                     </button>
                   );
                 })}
               </div>
-              {chosenOptionId && currentQ.explanation && (
-                <div className="mt-4 rounded-xl border border-primary/20 bg-primary-light/60 px-4 py-3">
-                  <p className="text-xs leading-relaxed text-primary-text/85">
-                    <span className="font-semibold">Explanation: </span>
+              {chosenOptionId && (
+                <div className={cn("flex items-start gap-2.5 rounded-xl p-3", chosenOption?.is_correct ? "bg-green-50" : "bg-red-50")}>
+                  <span className="shrink-0 text-lg leading-tight">{chosenOption?.is_correct ? "✓" : "✗"}</span>
+                  <p className="text-[12.5px] leading-relaxed text-foreground">
+                    <strong>{chosenOption?.is_correct ? "Correct!" : "Not quite."}</strong>{" "}
                     {currentQ.explanation}
                   </p>
                 </div>
@@ -1195,30 +1200,16 @@ export default function PracticeMaterialClient({
               )}
             </div>
           )}
-        </div>
 
-        {/* Bottom actions */}
-        <div className="absolute inset-x-0 bottom-0 flex gap-2 border-t border-border bg-card px-4 py-4 pb-[max(1rem,env(safe-area-inset-bottom))]">
-          {!currentAnswered && isMcq && (
+          {currentAnswered && (
             <button
               type="button"
               onClick={handleContinueQuestion}
-              className="flex-1 rounded-2xl border border-border bg-background py-3 text-sm font-semibold text-muted-brand transition hover:bg-secondary/50 focus-visible:outline-none"
+              className="w-full rounded-2xl bg-primary py-3.5 text-[15px] font-extrabold text-white transition hover:opacity-90 focus-visible:outline-none"
             >
-              Skip
+              {currentIndex + 1 >= batchQuestions.length ? "Finish batch →" : "Continue →"}
             </button>
           )}
-          <button
-            type="button"
-            disabled={!currentAnswered}
-            onClick={handleContinueQuestion}
-            className={cn(
-              "rounded-2xl bg-primary py-3 text-sm font-semibold text-white transition hover:opacity-90 disabled:opacity-40 focus-visible:outline-none",
-              !currentAnswered && isMcq ? "flex-[2]" : "w-full"
-            )}
-          >
-            {currentIndex + 1 >= batchQuestions.length ? "Finish batch →" : "Continue →"}
-          </button>
         </div>
       </div>
     );
@@ -1227,7 +1218,6 @@ export default function PracticeMaterialClient({
   // ── Mode: batch-complete ─────────────────────────────────────────────────────
 
   if (mode === "batch-complete" && completedBatch) {
-    const batchPct = pct(completedBatch.correct, completedBatch.total);
     const updatedSessionTotal = (session?.total_questions ?? 0) + completedBatch.total;
     const updatedSessionCorrect = (session?.total_correct ?? 0) + completedBatch.correct;
     const updatedBatchCount = (session?.batches.length ?? 0) + 1;
@@ -1236,140 +1226,121 @@ export default function PracticeMaterialClient({
     const canMore = credits >= moreCost;
 
     return (
-      <div className="space-y-4 pb-28 md:pb-8">
-        {/* Top strip */}
-        <div className="flex items-center gap-3">
-          <button
-            type="button"
-            onClick={() => void handleFinishSession()}
-            className="inline-flex items-center gap-2 rounded-2xl border border-border bg-background px-3 py-2 text-sm font-semibold text-foreground transition hover:bg-secondary/50"
-          >
-            <ArrowLeft className="h-4 w-4" />
-            {title}
-          </button>
-          <div className="min-w-0 flex-1 text-right">
-            <p className="text-xs text-muted-brand">
-              Session: {updatedSessionCorrect}/{updatedSessionTotal} · {pct(updatedSessionCorrect, updatedSessionTotal)}% · {updatedBatchCount} batch{updatedBatchCount === 1 ? "" : "es"}
+      <div className="fixed inset-0 z-50 flex flex-col bg-background">
+        <div className="relative z-30 shrink-0 border-b border-border bg-card px-4 pb-3 pt-3">
+          <div className="mb-2 flex items-center justify-between gap-3">
+            <p className="truncate text-[11px] font-bold text-primary">
+              {course?.course_code ?? title}{course ? ` - ${m.title ?? ""}` : ""}
             </p>
+            <button
+              type="button"
+              onClick={() => void handleFinishSession()}
+              className="grid h-6 w-6 shrink-0 place-items-center rounded-full bg-secondary text-sm text-muted-brand"
+              aria-label="Close session"
+            >
+              ×
+            </button>
           </div>
-        </div>
-
-        {/* Score ring */}
-        <div className="flex flex-col items-center gap-2 rounded-3xl border border-border bg-card py-6">
-          <ScoreRing correct={completedBatch.correct} total={completedBatch.total} />
-          <p className="text-sm font-semibold text-foreground">
-            {batchPct >= 80 ? "Excellent!" : batchPct >= 60 ? "Good effort" : "Keep practising"}
-          </p>
-          <p className="text-xs text-muted-brand">
-            {completedBatch.correct} of {completedBatch.total} correct in this batch
-          </p>
-        </div>
-
-        {/* Weak areas */}
-        {missedTopics.length > 0 && (
-          <div className="rounded-2xl border border-border bg-card px-4 py-3">
-            <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-muted-brand">Weak areas</p>
-            <div className="flex flex-wrap gap-2">
-              {missedTopics.map((t) => (
-                <span
-                  key={t}
-                  className="rounded-full border border-red-300/60 bg-red-50 px-3 py-1 text-xs font-semibold text-red-700 dark:border-red-700/40 dark:bg-red-950/20 dark:text-red-300"
-                >
-                  {t}
-                </span>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {/* Session running total */}
-        <div className="rounded-2xl border border-primary/20 bg-primary-light/30 px-4 py-3">
-          <p className="text-xs font-semibold text-primary-text">
-            Session total: {updatedSessionCorrect} of {updatedSessionTotal} correct ({pct(updatedSessionCorrect, updatedSessionTotal)}%) across {updatedBatchCount} batch{updatedBatchCount === 1 ? "" : "es"}
-          </p>
-        </div>
-
-        {error && <p className="text-center text-xs text-red-500">{error}</p>}
-
-        {/* Generate more */}
-        <div className="rounded-3xl border border-border bg-card p-4 space-y-4">
-          <p className="text-sm font-bold text-foreground">Generate more questions</p>
-
-          {/* Count */}
-          <div className="flex gap-2">
-            {([5, 10, 15, 20] as const).map((n) => (
-              <button
-                key={n}
-                type="button"
-                onClick={() => setMoreConfig((c) => ({ ...c, count: n }))}
-                className={cn(
-                  "flex-1 rounded-xl border py-2 text-sm font-semibold transition",
-                  moreConfig.count === n
-                    ? "border-primary bg-primary text-white"
-                    : "border-border bg-background text-foreground hover:bg-secondary/50"
-                )}
-              >
-                {n}
-              </button>
-            ))}
-          </div>
-
-          {/* Intent */}
-          <div className="rounded-xl border border-border bg-background px-3 py-2.5">
-            <div className="flex items-center gap-2">
-              <Sparkles className="h-4 w-4 shrink-0 text-primary" />
-              <select
-                value={moreConfig.intent}
-                onChange={(e) => setMoreConfig((c) => ({ ...c, intent: e.target.value as GenerationIntent }))}
-                className="min-w-0 flex-1 bg-transparent text-sm font-semibold text-foreground outline-none"
-              >
-                <option value="auto">Let Jabu decide</option>
-                <option value="weak_areas">Strengthen weak spots</option>
-                <option value="untested_sections">Cover new ground</option>
-                <option value="application">Practice applying concepts</option>
-                <option value="hard">Exam-style hard</option>
-                <option value="topic">Focus on a topic</option>
-              </select>
-            </div>
-          </div>
-
-          {/* Credits */}
-          <div
-            className={cn(
-              "rounded-xl border px-3 py-2 text-xs",
-              canMore
-                ? "border-border bg-background text-muted-brand"
-                : "border-amber-300/60 bg-amber-50 text-amber-800 dark:border-amber-700/40 dark:bg-amber-950/20 dark:text-amber-300"
-            )}
-          >
-            {canMore
-              ? `Cost: ${moreCost} credit${moreCost === 1 ? "" : "s"} · ${credits} remaining`
-              : `Not enough credits — need ${moreCost}, have ${credits}`}
-          </div>
-
-          <button
-            type="button"
-            disabled={!canMore}
-            onClick={() => void handleSaveBatchAndGenerateMore(moreConfig)}
-            className="flex w-full items-center gap-3 rounded-2xl bg-primary px-4 py-4 text-left text-white shadow-sm transition hover:opacity-90 disabled:opacity-50 focus-visible:outline-none"
-          >
-            <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-white/15">
-              <Sparkles className="h-5 w-5" />
+          <div className="mb-2 flex items-center gap-2">
+            <span className="text-sm font-extrabold text-foreground">{updatedBatchCount} batch{updatedBatchCount === 1 ? "" : "es"}</span>
+            <span className="inline-flex items-center gap-1 rounded-full border border-green-200 bg-green-50 px-2 py-0.5 text-[11px] font-bold text-green-700">
+              {updatedSessionCorrect} correct
             </span>
-            <div className="min-w-0 flex-1">
-              <p className="text-base font-bold">Generate {moreConfig.count} more questions</p>
-              <p className="text-xs font-medium text-white/75">Continue this session</p>
-            </div>
-          </button>
+            <span className="ml-auto text-sm font-extrabold tabular-nums text-foreground">
+              {pct(updatedSessionCorrect, updatedSessionTotal)}%
+            </span>
+          </div>
+          <div className="h-1 overflow-hidden rounded-full bg-border">
+            <div className="h-full rounded-full bg-primary transition-all duration-500" style={{ width: "100%" }} />
+          </div>
+        </div>
 
-          <button
-            type="button"
-            onClick={() => void handleFinishSession()}
-            className="inline-flex w-full items-center justify-center gap-2 rounded-2xl border border-border bg-background px-4 py-3 text-sm font-semibold text-foreground transition hover:bg-secondary/50 focus-visible:outline-none"
-          >
-            <X className="h-4 w-4" />
-            Finish session
-          </button>
+        <div className="fixed inset-0 z-20 bg-black/40" />
+        <div className="fixed inset-x-0 bottom-0 z-30 max-h-[88vh] overflow-y-auto rounded-t-3xl bg-card">
+          <div className="mx-auto mt-2.5 h-1 w-9 rounded-full bg-border" />
+          <div className="border-b border-border px-4 pb-3 pt-3.5">
+            <p className="text-lg font-extrabold text-foreground">Batch {updatedBatchCount} done</p>
+            <p className="text-[12.5px] text-muted-brand">{completedBatch.total} questions - {title}</p>
+          </div>
+          <div className="space-y-3 px-4 py-3.5">
+            <div className="flex items-center gap-3.5 rounded-2xl border border-border bg-background p-3">
+              <ScoreRing correct={completedBatch.correct} total={completedBatch.total} size={52} />
+              <div>
+                <p className="text-2xl font-extrabold leading-none text-foreground">
+                  {completedBatch.correct} <em className="text-sm font-semibold not-italic text-muted-brand">/ {completedBatch.total} correct</em>
+                </p>
+                <p className="mt-0.5 text-[11px] font-semibold text-muted-brand">
+                  Running total: {updatedSessionCorrect} / {updatedSessionTotal}
+                </p>
+              </div>
+            </div>
+
+            {missedTopics.length > 0 && (
+              <div>
+                <p className="mb-2 text-[10px] font-bold uppercase tracking-wider text-muted-brand">Needs more practice</p>
+                <div className="space-y-1.5">
+                  {missedTopics.map((t) => (
+                    <div key={t} className="flex items-center gap-2 rounded-xl border border-red-200 bg-red-50 p-2.5">
+                      <div className="h-1.5 w-1.5 shrink-0 rounded-full bg-red-500" />
+                      <span className="flex-1 text-sm font-bold text-foreground">{t}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            <div className="space-y-2.5 rounded-2xl border border-primary/20 bg-primary-light p-3.5">
+              <p className="flex items-center gap-1.5 text-xs font-extrabold text-primary-text">
+                <Sparkles className="h-3.5 w-3.5" /> Generate more - targeting weak areas
+              </p>
+              {missedTopics.length > 0 && (
+                <div className="flex justify-between text-[12.5px]">
+                  <span className="font-semibold text-muted-brand">Focus</span>
+                  <span className="ml-3 truncate font-bold text-primary">{missedTopics.join(" + ")}</span>
+                </div>
+              )}
+              <div className="flex gap-1.5">
+                {([5, 10, 15, 20] as const).map((n) => (
+                  <button
+                    key={n}
+                    type="button"
+                    onClick={() => setMoreConfig((c) => ({ ...c, count: n }))}
+                    className={cn(
+                      "flex-1 rounded-xl border py-1.5 text-xs font-bold transition",
+                      moreConfig.count === n
+                        ? "border-primary bg-primary text-white"
+                        : "border-border bg-card text-foreground"
+                    )}
+                  >
+                    {n}
+                  </button>
+                ))}
+              </div>
+              <div className="flex items-center justify-between rounded-xl border border-border bg-card px-3 py-2 text-xs">
+                <span className="font-semibold text-muted-brand">Cost</span>
+                <span className="font-extrabold text-amber-600">{moreCost} credits · {credits} remaining</span>
+              </div>
+            </div>
+
+            {error && <p className="text-center text-xs text-red-500">{error}</p>}
+
+            <button
+              type="button"
+              disabled={!canMore}
+              onClick={() => void handleSaveBatchAndGenerateMore(moreConfig)}
+              className="flex w-full items-center justify-center gap-2 rounded-2xl bg-primary py-3 text-sm font-extrabold text-white transition hover:opacity-90 disabled:opacity-50"
+            >
+              <Sparkles className="h-4 w-4" /> Generate {moreConfig.count} more questions
+            </button>
+
+            <button
+              type="button"
+              onClick={() => void handleFinishSession()}
+              className="w-full rounded-2xl border border-border bg-background py-3 text-sm font-semibold text-foreground transition hover:bg-secondary/50"
+            >
+              Finish session
+            </button>
+          </div>
         </div>
       </div>
     );
