@@ -82,7 +82,7 @@ export default function ServiceWorkerRegister() {
           })
         })
 
-        if (Notification.permission === 'granted') {
+        if ('Notification' in window && Notification.permission === 'granted') {
           await subscribeToPush(registration)
         }
       })
