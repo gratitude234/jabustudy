@@ -115,6 +115,32 @@ type SessionConfig = {
   focus: string;
 };
 
+type ActiveAiDraft = {
+  setId: string;
+  title: string | null;
+  questionsCount: number;
+  createdAt: string | null;
+  expiresAt: string | null;
+  requestSignature?: string | null;
+  attempt?: { id: string; status: string | null; updatedAt: string | null } | null;
+};
+
+type GenerationTrustStatus = {
+  credits: {
+    balance: number;
+    cost: number;
+    canAfford: boolean;
+  };
+  dailyLimit: {
+    limit: number;
+    used: number;
+    remaining: number;
+    retryAfterSeconds: number;
+  };
+  matchingDraft: ActiveAiDraft | null;
+  latestDraft: ActiveAiDraft | null;
+};
+
 type Props = {
   material: Material;
   userId: string;
@@ -158,6 +184,9 @@ async function readNdjsonStream(
   draftSetId?: string;
   creditCost?: number;
   creditsRemaining?: number;
+  reusedDraft?: boolean;
+  charged?: boolean;
+  receiptMessage?: string;
 }> {
   if (!res.ok) {
     let msg = "Failed to generate questions.";
@@ -207,6 +236,9 @@ async function readNdjsonStream(
     draftSetId: typeof doneMeta.draftSetId === "string" ? doneMeta.draftSetId : undefined,
     creditCost: typeof doneMeta.creditCost === "number" ? doneMeta.creditCost : undefined,
     creditsRemaining: typeof doneMeta.creditsRemaining === "number" ? doneMeta.creditsRemaining : undefined,
+    reusedDraft: typeof doneMeta.reusedDraft === "boolean" ? doneMeta.reusedDraft : undefined,
+    charged: typeof doneMeta.charged === "boolean" ? doneMeta.charged : undefined,
+    receiptMessage: typeof doneMeta.receiptMessage === "string" ? doneMeta.receiptMessage : undefined,
   };
 }
 
@@ -277,6 +309,9 @@ export default function PracticeMaterialClient({
   const [session, setSession] = useState<MaterialSession | null>(activeSession);
   const [credits, setCredits] = useState(initialCredits);
   const [config, setConfig] = useState<SessionConfig>(DEFAULT_CONFIG);
+  const [generationTrust, setGenerationTrust] = useState<GenerationTrustStatus | null>(null);
+  const [matchingDraft, setMatchingDraft] = useState<ActiveAiDraft | null>(null);
+  const [customizeOpen, setCustomizeOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   // Generating state
@@ -315,6 +350,41 @@ export default function PracticeMaterialClient({
     }
     return () => { document.body.removeAttribute("data-hide-nav"); };
   }, [mode]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    void (async () => {
+      try {
+        const params = new URLSearchParams({
+          materialId: m.id,
+          count: String(config.count),
+          difficulty: config.difficulty,
+          questionFormat: config.format,
+          generationIntent: resolveIntent(config.intent, config),
+        });
+        if (config.focus.trim()) params.set("focus", config.focus.trim());
+
+        const res = await fetch(`/api/ai/generate-questions/status?${params.toString()}`);
+        const data = await res.json().catch(() => null) as ({ ok?: boolean } & Partial<GenerationTrustStatus>) | null;
+        if (cancelled || !res.ok || !data?.ok || !data.credits || !data.dailyLimit) return;
+
+        const nextStatus: GenerationTrustStatus = {
+          credits: data.credits,
+          dailyLimit: data.dailyLimit,
+          matchingDraft: data.matchingDraft ?? null,
+          latestDraft: data.latestDraft ?? null,
+        };
+        setGenerationTrust(nextStatus);
+        setMatchingDraft(nextStatus.matchingDraft);
+        setCredits(data.credits.balance);
+      } catch {
+        // Status should never block configuring practice.
+      }
+    })();
+
+    return () => { cancelled = true; };
+  }, [m.id, config.count, config.difficulty, config.format, config.intent, config.focus]);
 
   // ── Resume prompt actions ────────────────────────────────────────────────────
 
@@ -423,6 +493,37 @@ export default function PracticeMaterialClient({
     const resolvedIntent = resolveIntent(config.intent, config);
 
     try {
+      if (matchingDraft?.setId && coveredQuestionsRef.current.length === 0) {
+        setGenerationStatus("Opening saved draft - no credits charged.");
+        let sessionId = session?.id ?? null;
+        if (!sessionId) {
+          const sessionRes = await fetch(`/api/study/material-sessions/${m.id}`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({}),
+          });
+          const sessionData = await sessionRes.json();
+          if (sessionData.ok && sessionData.session) {
+            setSession(sessionData.session);
+            sessionId = sessionData.session.id;
+          }
+        }
+
+        let attemptId = matchingDraft.attempt?.id ?? null;
+        if (!attemptId) {
+          const startedIso = new Date().toISOString();
+          const { data: attemptData } = await supabase
+            .from("study_practice_attempts")
+            .insert({ user_id: userId, set_id: matchingDraft.setId, status: "in_progress", started_at: startedIso } as any)
+            .select("id")
+            .maybeSingle();
+          attemptId = attemptData?.id ? String(attemptData.id) : null;
+        }
+        if (!attemptId) throw new Error("Could not create practice session. Please try again.");
+        await loadBatchForAnswering(matchingDraft.setId, attemptId);
+        return;
+      }
+
       const res = await fetch("/api/ai/generate-questions", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -438,7 +539,7 @@ export default function PracticeMaterialClient({
         }),
       });
 
-      const { draftSetId, creditsRemaining } = await readNdjsonStream(
+      const { draftSetId, creditsRemaining, receiptMessage } = await readNdjsonStream(
         res,
         (q) => setStreamingQuestions((prev) => [...prev, q]),
         (s) => setGenerationStatus(s.message)
@@ -446,6 +547,7 @@ export default function PracticeMaterialClient({
 
       if (!draftSetId) throw new Error("Questions generated, but the draft could not be saved. Please try again.");
       if (typeof creditsRemaining === "number") setCredits(creditsRemaining);
+      if (receiptMessage) setGenerationStatus(receiptMessage);
 
       // Ensure session exists
       let sessionId = session?.id ?? null;
@@ -475,7 +577,8 @@ export default function PracticeMaterialClient({
 
       await loadBatchForAnswering(draftSetId, attemptId);
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Something went wrong.");
+      const detail = e instanceof Error ? e.message : "Something went wrong.";
+      setError(detail.includes("no credits charged") ? detail : `Generation failed - no credits charged. ${detail}`);
       setMode("configure");
     }
   }
@@ -653,7 +756,7 @@ export default function PracticeMaterialClient({
         }),
       });
 
-      const { draftSetId, creditsRemaining } = await readNdjsonStream(
+      const { draftSetId, creditsRemaining, receiptMessage } = await readNdjsonStream(
         res,
         (q) => setStreamingQuestions((prev) => [...prev, q]),
         (s) => setGenerationStatus(s.message)
@@ -661,6 +764,7 @@ export default function PracticeMaterialClient({
 
       if (!draftSetId) throw new Error("Questions generated, but the draft could not be saved. Please try again.");
       if (typeof creditsRemaining === "number") setCredits(creditsRemaining);
+      if (receiptMessage) setGenerationStatus(receiptMessage);
 
       const startedIso = new Date().toISOString();
       const { data: attemptData } = await supabase
@@ -674,7 +778,8 @@ export default function PracticeMaterialClient({
 
       await loadBatchForAnswering(draftSetId, attemptId);
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Something went wrong.");
+      const detail = e instanceof Error ? e.message : "Something went wrong.";
+      setError(detail.includes("no credits charged") ? detail : `Generation failed - no credits charged. ${detail}`);
       setMode("batch-complete");
     }
   }
@@ -714,8 +819,13 @@ export default function PracticeMaterialClient({
 
   // ── Render ───────────────────────────────────────────────────────────────────
 
-  const creditCost = Math.ceil(config.count / 5);
-  const canGenerate = credits >= creditCost;
+  const creditCost = generationTrust?.credits.cost ?? Math.ceil(config.count / 5);
+  const dailyRemaining = generationTrust?.dailyLimit.remaining ?? 4;
+  const hasMatchingDraft = Boolean(matchingDraft?.setId);
+  const canGenerate = hasMatchingDraft || ((generationTrust?.credits.canAfford ?? credits >= creditCost) && dailyRemaining > 0);
+  const generationAvailabilityCopy = hasMatchingDraft
+    ? "Saved draft ready - no credits charged"
+    : `${creditCost} credit${creditCost === 1 ? "" : "s"} - ${dailyRemaining} generation${dailyRemaining === 1 ? "" : "s"} left today`;
 
   const currentQ = batchQuestions[currentIndex];
   const isMcq = currentQ?.question_type === "mcq";
@@ -754,11 +864,58 @@ export default function PracticeMaterialClient({
       <div className="border-b border-border px-4 py-4">
         <p className="flex items-center gap-2 text-base font-extrabold text-foreground">
           <Sparkles className="h-4 w-4 text-primary" />
-          Configure Your Practice
+          AI Practice
         </p>
-        <p className="mt-1 text-xs text-muted-brand">Generate from this material and start answering immediately.</p>
+        <p className="mt-1 text-xs text-muted-brand">Start with 10 questions, or customize the set.</p>
       </div>
       <div className="space-y-4 p-4">
+        <div className={cn(
+          "flex items-center justify-between rounded-2xl border px-4 py-3 text-sm",
+          hasMatchingDraft ? "border-primary/25 bg-primary-light text-primary-text" : "border-amber-300 bg-amber-50 text-amber-800"
+        )}>
+          <span className="font-semibold">{generationAvailabilityCopy}</span>
+          <span className="font-extrabold">{hasMatchingDraft ? "Free" : `${credits} left`}</span>
+        </div>
+
+        {error && <p className="text-center text-xs text-red-500">{error}</p>}
+        {!hasMatchingDraft && dailyRemaining <= 0 && (
+          <p className="text-center text-xs font-semibold text-amber-700">Daily generation limit reached.</p>
+        )}
+        {!hasMatchingDraft && !(generationTrust?.credits.canAfford ?? credits >= creditCost) && (
+          <p className="text-center text-xs font-semibold text-amber-700">
+            Not enough credits - need {creditCost}, have {credits}.
+          </p>
+        )}
+
+        <button
+          type="button"
+          onClick={() => void handleGenerate()}
+          disabled={!canGenerate}
+          className="flex w-full items-center gap-3 rounded-2xl bg-primary px-4 py-4 text-left text-white shadow-sm transition hover:opacity-90 disabled:opacity-50 focus-visible:outline-none active:scale-[0.99]"
+        >
+          <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-white/15">
+            <Sparkles className="h-5 w-5" />
+          </span>
+          <span className="min-w-0 flex-1">
+            <span className="block text-base font-extrabold">
+              {hasMatchingDraft ? "Resume saved draft" : `Generate ${config.count} questions`}
+            </span>
+            <span className="text-xs font-medium text-white/75">
+              {hasMatchingDraft ? "No credits charged" : "Opens practice immediately"}
+            </span>
+          </span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setCustomizeOpen((open) => !open)}
+          className="flex w-full items-center justify-center gap-2 rounded-2xl border border-border bg-background px-4 py-3 text-sm font-bold text-foreground transition hover:bg-secondary/50"
+        >
+          <ChevronDown className={cn("h-4 w-4 transition", customizeOpen && "rotate-180")} />
+          Customize
+        </button>
+
+        <div className={cn("space-y-4", !customizeOpen && "hidden")}>
         <div>
           <p className="mb-2 text-[11px] font-bold uppercase tracking-wider text-muted-brand">Questions</p>
           <div className="flex gap-2">
@@ -867,32 +1024,8 @@ export default function PracticeMaterialClient({
           </div>
         )}
 
-        <div className="flex items-center justify-between rounded-2xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm">
-          <span className="font-semibold text-amber-800">{config.count} questions · cost</span>
-          <span className="font-extrabold text-amber-700">{creditCost} credit{creditCost === 1 ? "" : "s"}</span>
         </div>
 
-        {error && <p className="text-center text-xs text-red-500">{error}</p>}
-        {!canGenerate && (
-          <p className="text-center text-xs font-semibold text-amber-700">
-            Not enough credits - need {creditCost}, have {credits}.
-          </p>
-        )}
-
-        <button
-          type="button"
-          onClick={() => void handleGenerate()}
-          disabled={!canGenerate}
-          className="flex w-full items-center gap-3 rounded-2xl bg-primary px-4 py-4 text-left text-white shadow-sm transition hover:opacity-90 disabled:opacity-50 focus-visible:outline-none active:scale-[0.99]"
-        >
-          <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-white/15">
-            <Sparkles className="h-5 w-5" />
-          </span>
-          <span className="min-w-0 flex-1">
-            <span className="block text-base font-extrabold">Generate Questions</span>
-            <span className="text-xs font-medium text-white/75">Opens practice immediately</span>
-          </span>
-        </button>
       </div>
     </div>
   );

@@ -384,6 +384,10 @@ export default function PracticeTakeClient() {
   const [draftKept, setDraftKept] = useState(false);
   const [keepDraftState, setKeepDraftState] = useState<KeepDraftState>({ status: "idle" });
 
+  // Review answer filtering + collapse state
+  const [reviewFilter, setReviewFilter] = useState<"all" | "wrong" | "correct">("all");
+  const [openReviews, setOpenReviews] = useState<Set<string>>(new Set());
+
   // Milestone toast — fires once when finalization completes
   const [milestone, setMilestone] = useState<Milestone | null>(null);
   const milestoneShownRef = useRef(false);
@@ -1160,21 +1164,56 @@ if (err || !meta) {
             </div>
           </div>
 
-          {reviewItems.length > 0 ? (
-            <Card className="rounded-3xl">
-              <div className="mb-3">
-                <p className="text-sm font-extrabold text-foreground">Review answers</p>
-                <p className="text-xs text-muted-foreground">Explanations update your revision queue.</p>
-              </div>
-              <div className="space-y-3">
-                {reviewItems.map((item) => {
-                  const isWritten = item.q.question_type === "short_answer" || item.q.question_type === "theory";
-                  const answeredCorrectly = !isWritten && item.chosenOpt?.id && item.correctOpt?.id && item.chosenOpt.id === item.correctOpt.id;
-                  return (
-                    <div key={item.q.id} className="rounded-2xl border border-border bg-background p-3">
-                      <div className="flex items-start gap-2">
-                        <span
-                          className={cn(
+          {reviewItems.length > 0 ? (() => {
+            const wrongCount = reviewItems.filter(i => i.isWrong || i.isUnanswered).length;
+            const correctCount = reviewItems.filter(i => !i.isWrong && !i.isUnanswered && !!i.chosen).length;
+            const filtered = reviewItems.filter(item => {
+              if (reviewFilter === "all") return true;
+              if (reviewFilter === "wrong") return item.isWrong || item.isUnanswered;
+              return !item.isWrong && !item.isUnanswered && !!item.chosen;
+            });
+            return (
+              <div className="overflow-hidden rounded-3xl border border-border bg-card">
+                <div className="flex items-center justify-between gap-3 border-b border-border px-4 py-3">
+                  <p className="text-sm font-extrabold text-foreground">Review answers</p>
+                  <div className="flex items-center gap-0.5 rounded-xl border border-border bg-background p-0.5">
+                    {([["all", "All", reviewItems.length], ["wrong", "Wrong", wrongCount], ["correct", "Correct", correctCount]] as const).map(([f, label, count]) => (
+                      <button
+                        key={f}
+                        type="button"
+                        onClick={() => setReviewFilter(f)}
+                        className={cn(
+                          "rounded-lg px-2.5 py-1 text-xs font-bold transition",
+                          reviewFilter === f
+                            ? "bg-foreground text-background"
+                            : "text-muted-foreground hover:text-foreground"
+                        )}
+                      >
+                        {label} <span className="opacity-50">{count}</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <div className="divide-y divide-border">
+                  {filtered.length === 0 ? (
+                    <p className="px-4 py-6 text-center text-sm text-muted-foreground">No questions in this filter.</p>
+                  ) : filtered.map((item) => {
+                    const isWritten = item.q.question_type === "short_answer" || item.q.question_type === "theory";
+                    const answeredCorrectly = !isWritten && item.chosenOpt?.id && item.correctOpt?.id && item.chosenOpt.id === item.correctOpt.id;
+                    const isOpen = openReviews.has(item.q.id);
+                    return (
+                      <div key={item.q.id}>
+                        <button
+                          type="button"
+                          onClick={() => setOpenReviews(prev => {
+                            const next = new Set(prev);
+                            if (next.has(item.q.id)) next.delete(item.q.id);
+                            else next.add(item.q.id);
+                            return next;
+                          })}
+                          className="flex w-full items-start gap-2.5 px-4 py-3 text-left transition-colors hover:bg-secondary/30"
+                        >
+                          <span className={cn(
                             "mt-0.5 grid h-6 w-6 shrink-0 place-items-center rounded-full border text-[11px] font-extrabold",
                             isWritten
                               ? "border-[#5B35D5]/30 bg-[#EEEDFE] text-[#3B24A8]"
@@ -1183,61 +1222,67 @@ if (err || !meta) {
                               : item.chosen
                               ? "border-rose-500 bg-rose-500 text-white"
                               : "border-border bg-card text-muted-foreground"
-                          )}
-                        >
-                          {item.index + 1}
-                        </span>
-                        <div className="min-w-0 flex-1">
-                          <p className="whitespace-pre-wrap text-sm font-extrabold leading-snug text-foreground">
+                          )}>
+                            {item.index + 1}
+                          </span>
+                          <p className="flex-1 text-sm font-semibold leading-snug text-foreground line-clamp-2">
                             {normalize(String(item.q.prompt ?? ""))}
                           </p>
-                          {!isWritten ? (
-                            <div className="mt-2 space-y-1 text-xs leading-relaxed">
-                              <p className="text-muted-foreground">
-                                Your answer: <span className="font-semibold text-foreground">{item.chosenOpt?.text ?? "Skipped"}</span>
-                              </p>
-                              <p className="text-muted-foreground">
-                                Correct answer: <span className="font-semibold text-emerald-700 dark:text-emerald-300">{item.correctOpt?.text ?? "Not set"}</span>
-                              </p>
-                            </div>
-                          ) : (
-                            <div className="mt-2 space-y-2">
-                              <div className="rounded-xl border border-border bg-card p-2">
-                                <p className="text-[11px] font-extrabold text-muted-foreground">Your answer</p>
-                                <p className="mt-1 whitespace-pre-wrap text-sm leading-relaxed text-foreground">{item.writtenAnswer.trim() || "Skipped"}</p>
-                              </div>
-                              {item.writtenGrade ? (
-                                <div className="rounded-xl border border-emerald-500/25 bg-emerald-500/10 p-2">
-                                  <div className="flex flex-wrap items-center justify-between gap-2">
-                                    <p className="text-[11px] font-extrabold text-emerald-700 dark:text-emerald-300">AI feedback</p>
-                                    <span className="rounded-full border border-emerald-500/30 bg-background px-2 py-0.5 text-[11px] font-extrabold text-foreground">
-                                      {item.writtenGrade.score}/{item.writtenGrade.maxScore} - {verdictLabel(item.writtenGrade.verdict)}
-                                    </span>
-                                  </div>
-                                  <p className="mt-1 text-sm leading-relaxed text-foreground">{item.writtenGrade.feedback}</p>
+                          <ChevronRight className={cn("mt-0.5 h-4 w-4 shrink-0 text-muted-foreground/40 transition-transform duration-150", isOpen && "rotate-90")} />
+                        </button>
+
+                        {isOpen && (
+                          <div className="border-t border-border bg-background/50 px-4 pb-4 pt-3">
+                            {!isWritten ? (
+                              <div className="space-y-2">
+                                <div className="space-y-1 text-xs leading-relaxed">
+                                  <p className="text-muted-foreground">
+                                    Your answer: <span className="font-semibold text-foreground">{item.chosenOpt?.text ?? "Skipped"}</span>
+                                  </p>
+                                  <p className="text-muted-foreground">
+                                    Correct: <span className="font-semibold text-emerald-700 dark:text-emerald-300">{item.correctOpt?.text ?? "Not set"}</span>
+                                  </p>
                                 </div>
-                              ) : null}
-                              <div className="rounded-xl border border-[#5B35D5]/20 bg-[#EEEDFE] p-2 dark:border-[#5B35D5]/30 dark:bg-[#5B35D5]/10">
-                                <p className="text-[11px] font-extrabold text-[#3B24A8] dark:text-indigo-300">Model answer</p>
-                                <p className="mt-1 whitespace-pre-wrap text-sm leading-relaxed text-foreground">
-                                  {item.q.model_answer?.trim() || item.q.explanation?.trim() || "No model answer provided yet."}
-                                </p>
+                                {item.q.explanation ? (
+                                  <p className="whitespace-pre-wrap rounded-xl border border-border bg-card p-2 text-xs leading-relaxed text-muted-foreground">
+                                    {item.q.explanation}
+                                  </p>
+                                ) : null}
                               </div>
-                            </div>
-                          )}
-                          {item.q.explanation ? (
-                            <p className="mt-2 whitespace-pre-wrap rounded-xl border border-border bg-card p-2 text-xs leading-relaxed text-muted-foreground">
-                              {item.q.explanation}
-                            </p>
-                          ) : null}
-                        </div>
+                            ) : (
+                              <div className="space-y-2">
+                                <div className="rounded-xl border border-border bg-card p-2">
+                                  <p className="text-[11px] font-extrabold text-muted-foreground">Your answer</p>
+                                  <p className="mt-1 whitespace-pre-wrap text-sm leading-relaxed text-foreground">{item.writtenAnswer.trim() || "Skipped"}</p>
+                                </div>
+                                {item.writtenGrade ? (
+                                  <div className="rounded-xl border border-emerald-500/25 bg-emerald-500/10 p-2">
+                                    <div className="flex flex-wrap items-center justify-between gap-2">
+                                      <p className="text-[11px] font-extrabold text-emerald-700 dark:text-emerald-300">AI feedback</p>
+                                      <span className="rounded-full border border-emerald-500/30 bg-background px-2 py-0.5 text-[11px] font-extrabold text-foreground">
+                                        {item.writtenGrade.score}/{item.writtenGrade.maxScore} · {verdictLabel(item.writtenGrade.verdict)}
+                                      </span>
+                                    </div>
+                                    <p className="mt-1 text-sm leading-relaxed text-foreground">{item.writtenGrade.feedback}</p>
+                                  </div>
+                                ) : null}
+                                <div className="rounded-xl border border-[#5B35D5]/20 bg-[#EEEDFE] p-2 dark:border-[#5B35D5]/30 dark:bg-[#5B35D5]/10">
+                                  <p className="text-[11px] font-extrabold text-[#3B24A8] dark:text-indigo-300">Model answer</p>
+                                  <p className="mt-1 whitespace-pre-wrap text-sm leading-relaxed text-foreground">
+                                    {item.q.model_answer?.trim() || item.q.explanation?.trim() || "No model answer provided yet."}
+                                  </p>
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        )}
                       </div>
-                    </div>
-                  );
-                })}
+                    );
+                  })}
+                </div>
               </div>
-            </Card>
-          ) : null}
+            );
+          })() : null}
 
           {/* ── Streak milestone ────────────────────────────────────────────── */}
           {streakMilestone && (
@@ -1532,7 +1577,7 @@ if (err || !meta) {
               ) : null}
             </div>
 
-            {current && hasStudyRef(current.study_ref) && !isRevealed ? (
+            {current && hasStudyRef(current.study_ref) ? (
               studyHintOpen[current.id] ? (
                 <PracticeGuidedHint
                   studyRef={current.study_ref}

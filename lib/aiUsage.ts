@@ -90,6 +90,7 @@ export async function checkAiUsageLimit(args: {
   windowMs: number;
   materialId?: string | null;
   courseId?: string | null;
+  statuses?: AiUsageStatus[];
 }): Promise<AiLimitResult> {
   if (args.limit <= 0) {
     return { allowed: false, limit: args.limit, used: 0, retryAfterSeconds: Math.ceil(args.windowMs / 1000) };
@@ -99,12 +100,13 @@ export async function checkAiUsageLimit(args: {
   const since = sinceDate.toISOString();
 
   try {
+    const statuses = args.statuses?.length ? args.statuses : ["success", "failure"];
     let query = adminSupabase
       .from("ai_usage_events")
       .select("id", { count: "exact", head: true })
       .eq("endpoint", args.endpoint)
       .gte("created_at", since)
-      .in("status", ["success", "failure"]);
+      .in("status", statuses);
 
     query = args.userId ? query.eq("user_id", args.userId) : query.is("user_id", null);
     if (args.materialId) query = query.eq("material_id", args.materialId);

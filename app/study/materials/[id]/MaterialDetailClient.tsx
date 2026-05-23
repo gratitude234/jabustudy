@@ -144,7 +144,24 @@ type ActiveAiDraft = {
   questionsCount: number;
   createdAt: string | null;
   expiresAt: string | null;
+  requestSignature?: string | null;
   attempt?: { id: string; status: string | null; updatedAt: string | null } | null;
+};
+
+type GenerationTrustStatus = {
+  credits: {
+    balance: number;
+    cost: number;
+    canAfford: boolean;
+  };
+  dailyLimit: {
+    limit: number;
+    used: number;
+    remaining: number;
+    retryAfterSeconds: number;
+  };
+  matchingDraft: ActiveAiDraft | null;
+  latestDraft: ActiveAiDraft | null;
 };
 
 type PreviousGeneratedSet = {
@@ -352,14 +369,19 @@ async function readNdjsonQuestions(
   repaired?: boolean;
   replacedCount?: number;
   skippedCount?: number;
+  reusedDraft?: boolean;
+  charged?: boolean;
+  creditCost?: number;
   creditsRemaining?: number;
+  receiptMessage?: string;
 }> {
   if (!res.ok) {
     let errorMsg = "Failed to generate questions.";
     try {
       const text = await res.text();
       const parsed = JSON.parse(text);
-      if (parsed.error) errorMsg = parsed.error;
+      if (parsed.message) errorMsg = parsed.message;
+      else if (parsed.error) errorMsg = parsed.error;
     } catch { /* ignore */ }
     throw new Error(errorMsg);
   }
@@ -415,7 +437,11 @@ async function readNdjsonQuestions(
     repaired: typeof doneMeta.repaired === "boolean" ? doneMeta.repaired : undefined,
     replacedCount: typeof doneMeta.replacedCount === "number" ? doneMeta.replacedCount : undefined,
     skippedCount: typeof doneMeta.skippedCount === "number" ? doneMeta.skippedCount : undefined,
+    reusedDraft: typeof doneMeta.reusedDraft === "boolean" ? doneMeta.reusedDraft : undefined,
+    charged: typeof doneMeta.charged === "boolean" ? doneMeta.charged : undefined,
+    creditCost: typeof doneMeta.creditCost === "number" ? doneMeta.creditCost : undefined,
     creditsRemaining: typeof doneMeta.creditsRemaining === "number" ? doneMeta.creditsRemaining : undefined,
+    receiptMessage: typeof doneMeta.receiptMessage === "string" ? doneMeta.receiptMessage : undefined,
   };
 }
 
@@ -873,6 +899,9 @@ export default function MaterialDetailClient({
   const [generationStatus, setGenerationStatus] = useState("Preparing question generation...");
   const [generationMode, setGenerationMode] = useState<GenerationMode>("auto");
   const [activeDraft, setActiveDraft] = useState<ActiveAiDraft | null>(null);
+  const [matchingDraft, setMatchingDraft] = useState<ActiveAiDraft | null>(null);
+  const [generationTrust, setGenerationTrust] = useState<GenerationTrustStatus | null>(null);
+  const [customizeOpen, setCustomizeOpen] = useState(false);
   const [draftLoading, setDraftLoading] = useState(false);
   const [draftAction, setDraftAction] = useState<"discard" | "new" | null>(null);
   const [credits, setCredits] = useState(initialCredits);
@@ -921,7 +950,7 @@ export default function MaterialDetailClient({
   useEffect(() => {
     void loadActiveDraft();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [m.id]);
+  }, [m.id, quizConfig.count, quizConfig.difficulty, quizConfig.focus, quizConfig.questionFormat, generationMode]);
 
   useEffect(() => {
     if (!userId) {
@@ -1110,6 +1139,12 @@ export default function MaterialDetailClient({
   }
 
   async function handleGenerateQuestions() {
+    if (matchingDraft?.setId) {
+      showToast("Saved draft ready - no credits charged.");
+      router.push(`/study/practice/${encodeURIComponent(matchingDraft.setId)}${matchingDraft.attempt?.id ? `?attempt=${encodeURIComponent(matchingDraft.attempt.id)}` : ""}`);
+      return;
+    }
+
     setQuizState("loading");
     setStreamingQuestions([]);
     setGenerationStatus("Preparing question generation...");
@@ -1131,14 +1166,25 @@ export default function MaterialDetailClient({
           generationIntent: resolveGenerationIntent(generationMode, quizConfig),
         }),
       });
-      const { questions, ai, draftSetId, savedCount, repaired, replacedCount, skippedCount, creditsRemaining } = await readNdjsonQuestions(res, (q) => {
+      const {
+        questions,
+        ai,
+        draftSetId,
+        savedCount,
+        repaired,
+        replacedCount,
+        skippedCount,
+        creditsRemaining,
+        receiptMessage,
+        reusedDraft,
+      } = await readNdjsonQuestions(res, (q) => {
         setStreamingQuestions((prev) => [...prev, q]);
       }, (status) => {
         setGenerationStatus(status.message);
       });
       if (typeof creditsRemaining === "number") setCredits(creditsRemaining);
-      if (!questions.length) throw new Error("Failed to generate questions.");
       if (!draftSetId) throw new Error("Questions generated, but the draft could not be saved. Please try again.");
+      if (!reusedDraft && !questions.length) throw new Error("Failed to generate questions.");
       console.info("[study-ai] generated questions", {
         provider: ai?.provider ?? "unknown",
         model: ai?.model ?? "unknown",
@@ -1153,14 +1199,17 @@ export default function MaterialDetailClient({
         Number(skippedCount ?? 0) > 0 ? `skipped ${skippedCount}` : "",
       ].filter(Boolean).join(", ");
       showToast(
-        repaired || repairDetails
+        receiptMessage
+          ? receiptMessage
+          : repaired || repairDetails
           ? `Saved ${savedCount ?? questions.length} questions (${repairDetails || "cleaned up"} duplicate${(Number(replacedCount ?? 0) + Number(skippedCount ?? 0)) === 1 ? "" : "s"})`
           : "Draft saved. Opening practice..."
       );
       router.push(`/study/practice/${encodeURIComponent(draftSetId)}`);
       return;
     } catch (e: unknown) {
-      setGenQsError(e instanceof Error ? e.message : "Something went wrong.");
+      const detail = e instanceof Error ? e.message : "Something went wrong.";
+      setGenQsError(detail.includes("no credits charged") ? detail : `Generation failed - no credits charged. ${detail}`);
       setQuizState("idle");
     }
   }
@@ -1215,7 +1264,8 @@ export default function MaterialDetailClient({
       syncedQuizMissesRef.current = null;
       setQuizState("quiz");
     } catch (e: unknown) {
-      setGenerateMoreError(e instanceof Error ? e.message : "Something went wrong.");
+      const detail = e instanceof Error ? e.message : "Something went wrong.";
+      setGenerateMoreError(detail.includes("no credits charged") ? detail : `Generation failed - no credits charged. ${detail}`);
     } finally {
       setGeneratingMore(false);
       setStreamingQuestions([]);
@@ -1269,7 +1319,8 @@ export default function MaterialDetailClient({
       syncedQuizMissesRef.current = null;
       setQuizState("quiz");
     } catch (e: unknown) {
-      setGenerateMoreError(e instanceof Error ? e.message : "Something went wrong.");
+      const detail = e instanceof Error ? e.message : "Something went wrong.";
+      setGenerateMoreError(detail.includes("no credits charged") ? detail : `Generation failed - no credits charged. ${detail}`);
     } finally {
       setGeneratingMore(false);
       setStreamingQuestions([]);
@@ -1280,9 +1331,29 @@ export default function MaterialDetailClient({
     if (!isAiGenSupported(m)) return;
     setDraftLoading(true);
     try {
-      const res = await fetch(`/api/ai/generated-drafts?materialId=${encodeURIComponent(m.id)}`);
-      const data = await res.json().catch(() => null) as { ok?: boolean; draft?: ActiveAiDraft | null; message?: string } | null;
-      if (res.ok && data?.ok) setActiveDraft(data.draft ?? null);
+      const params = new URLSearchParams({
+        materialId: m.id,
+        count: String(quizConfig.count),
+        difficulty: quizConfig.difficulty,
+        questionFormat: quizConfig.questionFormat,
+        generationIntent: resolveGenerationIntent(generationMode, quizConfig),
+      });
+      if (quizConfig.focus.trim()) params.set("focus", quizConfig.focus.trim());
+
+      const res = await fetch(`/api/ai/generate-questions/status?${params.toString()}`);
+      const data = await res.json().catch(() => null) as ({ ok?: boolean } & Partial<GenerationTrustStatus>) | null;
+      if (res.ok && data?.ok && data.credits && data.dailyLimit) {
+        const nextStatus: GenerationTrustStatus = {
+          credits: data.credits,
+          dailyLimit: data.dailyLimit,
+          matchingDraft: data.matchingDraft ?? null,
+          latestDraft: data.latestDraft ?? null,
+        };
+        setGenerationTrust(nextStatus);
+        setCredits(data.credits.balance);
+        setMatchingDraft(nextStatus.matchingDraft);
+        setActiveDraft(nextStatus.latestDraft);
+      }
     } catch {
       // Draft lookup should not block the material page.
     } finally {
@@ -1298,6 +1369,8 @@ export default function MaterialDetailClient({
       const data = await res.json().catch(() => null) as { ok?: boolean; message?: string } | null;
       if (!res.ok || !data?.ok) throw new Error(data?.message || "Could not discard draft.");
       setActiveDraft(null);
+      setMatchingDraft(null);
+      setGenerationTrust((prev) => prev ? { ...prev, matchingDraft: null, latestDraft: null } : prev);
       showToast("Draft discarded");
       if (action === "new") void handleGenerateQuestions();
     } catch (error: unknown) {
@@ -1415,8 +1488,15 @@ export default function MaterialDetailClient({
 
   const backHref = fromCourse ? `/study/courses/${encodeURIComponent(fromCourse)}` : "/study/library";
   const backLabel = fromCourse ?? "Materials";
-  const creditCost = Math.ceil(quizConfig.count / 5);
-  const canGenerate = aiSupported && credits >= creditCost && quizState !== "loading";
+  const creditCost = generationTrust?.credits.cost ?? Math.ceil(quizConfig.count / 5);
+  const dailyRemaining = generationTrust?.dailyLimit.remaining ?? 4;
+  const hasMatchingDraft = Boolean(matchingDraft?.setId);
+  const canGenerate = aiSupported && quizState !== "loading" && (
+    hasMatchingDraft || ((generationTrust?.credits.canAfford ?? credits >= creditCost) && dailyRemaining > 0)
+  );
+  const generationAvailabilityCopy = hasMatchingDraft
+    ? "Saved draft ready - no credits charged"
+    : `${creditCost} credit${creditCost === 1 ? "" : "s"} - ${dailyRemaining} generation${dailyRemaining === 1 ? "" : "s"} left today`;
   const tabLabels: Array<{ value: typeof activeTab; label: string }> = [
     { value: "practice", label: "Practice" },
     { value: "read", label: "Read" },
@@ -1761,11 +1841,62 @@ export default function MaterialDetailClient({
             <div className="border-b border-border bg-secondary/20 px-4 py-3.5">
               <p className="flex items-center gap-2 text-base font-extrabold text-foreground">
                 <Sparkles className="h-4 w-4 text-primary" />
-                Configure Your Practice
+                AI Practice
               </p>
-              <p className="mt-1 text-xs text-muted-brand">Generate from this material and open practice immediately.</p>
+              <p className="mt-1 text-xs text-muted-brand">Start with 10 questions, or customize the set.</p>
             </div>
             <div className="space-y-3.5 p-4">
+              <div className={cn(
+                "flex items-center justify-between rounded-2xl border px-4 py-2.5 text-sm",
+                hasMatchingDraft ? "border-primary/25 bg-primary-light text-primary-text" : "border-amber-300 bg-amber-50 text-amber-800"
+              )}>
+                <span className="font-semibold">{generationAvailabilityCopy}</span>
+                <span className="font-extrabold">
+                  {hasMatchingDraft ? "Free" : `${credits} left`}
+                </span>
+              </div>
+
+              {genQsError && <p className="text-center text-xs text-red-500">{genQsError}</p>}
+              {!aiSupported && (
+                <p className="text-center text-xs text-muted-brand">AI practice is available for PDF, image, Word, and PowerPoint files.</p>
+              )}
+              {aiSupported && !hasMatchingDraft && dailyRemaining <= 0 && (
+                <p className="text-center text-xs font-semibold text-amber-700">Daily generation limit reached.</p>
+              )}
+              {aiSupported && !hasMatchingDraft && !(generationTrust?.credits.canAfford ?? credits >= creditCost) && (
+                <p className="text-center text-xs font-semibold text-amber-700">Not enough credits for this set.</p>
+              )}
+
+              <button
+                type="button"
+                disabled={!canGenerate}
+                onClick={() => void handleGenerateQuestions()}
+                className="flex w-full items-center gap-3 rounded-2xl bg-primary px-4 py-3.5 text-left text-white shadow-sm transition hover:opacity-90 disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 active:scale-[0.99]"
+              >
+                <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-white/15">
+                  <Sparkles className="h-5 w-5" />
+                </span>
+                <span className="min-w-0 flex-1">
+                  <span className="block text-base font-extrabold">
+                    {hasMatchingDraft ? "Resume saved draft" : `Generate ${quizConfig.count} questions`}
+                  </span>
+                  <span className="text-xs font-medium text-white/75">
+                    {hasMatchingDraft ? "No credits charged" : "Opens practice immediately"}
+                  </span>
+                </span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setCustomizeOpen((open) => !open)}
+                className="flex w-full items-center justify-center gap-2 rounded-2xl border border-border bg-background px-4 py-3 text-sm font-bold text-foreground transition hover:bg-secondary/50"
+              >
+                {customizeOpen ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+                Customize
+              </button>
+
+              {customizeOpen && (
+                <div className="space-y-3.5">
               <div>
                 <p className="mb-2 text-[11px] font-bold uppercase tracking-wider text-muted-brand">Questions</p>
                 <div className="flex gap-2">
@@ -1877,37 +2008,8 @@ export default function MaterialDetailClient({
                 </div>
               )}
 
-              <div className="flex items-center justify-between rounded-2xl border border-amber-300 bg-amber-50 px-4 py-2.5 text-sm">
-                <span className="font-semibold text-amber-800">
-                  {quizConfig.count} questions · cost
-                </span>
-                <span className="font-extrabold text-amber-700">
-                  {creditCost} credit{creditCost === 1 ? "" : "s"}
-                </span>
-              </div>
-
-              {genQsError && <p className="text-center text-xs text-red-500">{genQsError}</p>}
-              {!aiSupported && (
-                <p className="text-center text-xs text-muted-brand">AI practice is available for PDF, image, Word, and PowerPoint files.</p>
+                </div>
               )}
-              {aiSupported && credits < creditCost && (
-                <p className="text-center text-xs font-semibold text-amber-700">Not enough credits for this set.</p>
-              )}
-
-              <button
-                type="button"
-                disabled={!canGenerate}
-                onClick={() => void handleGenerateQuestions()}
-                className="flex w-full items-center gap-3 rounded-2xl bg-primary px-4 py-3.5 text-left text-white shadow-sm transition hover:opacity-90 disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 active:scale-[0.99]"
-              >
-                <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-white/15">
-                  <Sparkles className="h-5 w-5" />
-                </span>
-                <span className="min-w-0 flex-1">
-                  <span className="block text-base font-extrabold">Generate Questions</span>
-                  <span className="text-xs font-medium text-white/75">Opens practice immediately</span>
-                </span>
-              </button>
 
               <Link
                 href={`/study/materials/${m.id}/practice`}

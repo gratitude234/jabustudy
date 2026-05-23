@@ -17,22 +17,28 @@ import {
 import { saveGeneratedPracticeSet } from "@/lib/aiGeneratedPractice";
 import { generateCoverageAwareQuestions, type StudyGenerationIntent } from "@/lib/studyQuestionGeneration";
 import {
-  aiLimitFromEnv,
   aiRateLimitMessage,
-  checkAiUsageLimit,
   recordAiUsageEvent,
   recordBlockedAiUsage,
   withAiUsageContext,
   type AiUsageContext,
   type AiUsageStatus,
 } from "@/lib/aiUsage";
+import {
+  discardDraftSet,
+  ensureStudyCreditBalance,
+  generationReceipt,
+  getActiveGenerationDrafts,
+  getQuestionGenerationLimit,
+  normalizeQuestionGenerationRequest,
+  spendStudyCredits,
+} from "@/lib/aiQuestionGenerationTrust";
 
 const QUESTION_GEN_TEXT_CHARS = 24_000;
 const AI_QUESTION_TIMEOUT_MS =
   parsePositiveInt(process.env.AI_QUESTION_TIMEOUT_MS) ??
   parsePositiveInt(process.env.GEMINI_QUESTION_TIMEOUT_MS) ??
   60_000;
-const MAX_QUESTION_COUNT = 20;
 const ENABLE_COVERAGE_AWARE_MCQ =
   process.env.AI_ENABLE_COVERAGE_AWARE_QUESTIONS?.trim().toLowerCase() === "true";
 
@@ -95,25 +101,6 @@ type GeneratedQuestion = {
 };
 
 type QuestionFormat = "mcq" | "mixed" | "written";
-
-const GENERATION_INTENTS = new Set<StudyGenerationIntent>([
-  "weak_areas",
-  "untested_sections",
-  "application",
-  "hard",
-  "topic",
-  "past_question_style",
-]);
-
-function normalizeGenerationIntent(value: unknown): StudyGenerationIntent | null {
-  return typeof value === "string" && GENERATION_INTENTS.has(value as StudyGenerationIntent)
-    ? (value as StudyGenerationIntent)
-    : null;
-}
-
-function normalizeQuestionFormat(value: unknown): QuestionFormat {
-  return value === "mcq" || value === "written" || value === "mixed" ? value : "mixed";
-}
 
 function generationIntentInstruction(intent: StudyGenerationIntent | null) {
   switch (intent) {
@@ -588,18 +575,30 @@ async function handleGenerateQuestionsRequest(req: NextRequest) {
     return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
   }
 
-  const { materialId, count = 10, difficulty = "mixed", focus, coveredQuestions = [] } = body;
-  const questionFormat = normalizeQuestionFormat(body.questionFormat);
+  const { coveredQuestions = [] } = body;
   const persistDraft = body.persistDraft === true;
-  const generationIntent = normalizeGenerationIntent(body.generationIntent);
-  const topicId = typeof body.topicId === "string" && body.topicId.trim() ? body.topicId.trim() : null;
-  const subtopicId = typeof body.subtopicId === "string" && body.subtopicId.trim() ? body.subtopicId.trim() : null;
-  if (!materialId) return NextResponse.json({ error: "Missing materialId" }, { status: 400 });
-  const requestedQuestionCount = Math.max(1, Math.min(MAX_QUESTION_COUNT, Math.floor(Number(count) || 10)));
-  const questionCount = questionFormat === "mcq"
-    ? Math.min(requestedQuestionCount, aiLimitFromEnv("AI_MAX_MCQ_QUESTIONS_PER_REQUEST", 6))
-    : requestedQuestionCount;
-  const effectiveDifficulty = generationIntent === "hard" || generationIntent === "past_question_style" ? "hard" : difficulty;
+  const requestConfig = normalizeQuestionGenerationRequest({
+    materialId: body.materialId,
+    count: body.count,
+    difficulty: body.difficulty,
+    focus: body.focus,
+    questionFormat: body.questionFormat,
+    generationIntent: body.generationIntent,
+    topicId: body.topicId,
+    subtopicId: body.subtopicId,
+  });
+  if (!requestConfig) return NextResponse.json({ error: "Missing materialId" }, { status: 400 });
+
+  const materialId = requestConfig.materialId;
+  const questionCount = requestConfig.questionCount;
+  const questionFormat = requestConfig.questionFormat;
+  const effectiveDifficulty = requestConfig.effectiveDifficulty;
+  const focus = requestConfig.focus ?? undefined;
+  const generationIntent = requestConfig.generationIntent;
+  const topicId = requestConfig.topicId;
+  const subtopicId = requestConfig.subtopicId;
+  const estimatedCreditCost = requestConfig.creditCost;
+  const canReuseDraft = persistDraft && coveredQuestions.length === 0;
 
   // ── Fetch material ─────────────────────────────────────────────────────────
   const admin = adminSupabase;
@@ -615,6 +614,54 @@ async function handleGenerateQuestionsRequest(req: NextRequest) {
   const filePath = material.file_path;
   if (!filePath) return NextResponse.json({ error: "No file attached to this material." }, { status: 400 });
 
+  if (canReuseDraft) {
+    const { matchingDraft } = await getActiveGenerationDrafts({
+      userId: user.id,
+      materialId,
+      signature: requestConfig.signature,
+    });
+
+    if (matchingDraft) {
+      const balance = await ensureStudyCreditBalance(user.id);
+      const receiptMessage = generationReceipt({
+        savedCount: matchingDraft.questionsCount,
+        creditCost: 0,
+        creditsRemaining: balance,
+        reusedDraft: true,
+      });
+      const encoder = new TextEncoder();
+      const stream = new ReadableStream({
+        start(controller) {
+          controller.enqueue(encoder.encode(JSON.stringify({
+            type: "status",
+            message: "Found a matching saved draft. No credits charged.",
+            phase: "reuse-draft",
+          }) + "\n"));
+          controller.enqueue(encoder.encode(JSON.stringify({
+            type: "done",
+            draftSetId: matchingDraft.setId,
+            savedCount: matchingDraft.questionsCount,
+            requestedCount: matchingDraft.questionsCount,
+            reusedDraft: true,
+            charged: false,
+            creditCost: 0,
+            creditsRemaining: balance,
+            receiptMessage,
+          }) + "\n"));
+          controller.close();
+        },
+      });
+
+      return new Response(stream, {
+        headers: {
+          "Content-Type": "application/x-ndjson",
+          "Cache-Control": "no-cache",
+          "X-Content-Type-Options": "nosniff",
+        },
+      });
+    }
+  }
+
   const usageContext: AiUsageContext = {
     userId: user.id,
     endpoint: "generate-questions",
@@ -622,70 +669,42 @@ async function handleGenerateQuestionsRequest(req: NextRequest) {
     materialId,
     requestedCount: questionCount,
     metadata: {
+      requestedQuestionCount: requestConfig.requestedQuestionCount,
       questionFormat,
       difficulty: effectiveDifficulty,
+      focus: requestConfig.focus,
       generationIntent,
       topicId,
       subtopicId,
+      requestSignature: requestConfig.signature,
+      estimatedCreditCost,
     },
   };
-  const limit = await checkAiUsageLimit({
-    userId: user.id,
-    endpoint: usageContext.endpoint,
-    limit: aiLimitFromEnv("AI_LIMIT_GENERATE_QUESTIONS_PER_DAY", 4),
-    windowMs: 24 * 60 * 60 * 1000,
-  });
+  const limit = await getQuestionGenerationLimit(user.id);
   if (!limit.allowed) {
     await recordBlockedAiUsage(usageContext, "Daily question generation limit reached.");
     return NextResponse.json(
-      { error: aiRateLimitMessage(limit), code: "AI_RATE_LIMITED" },
+      { error: aiRateLimitMessage(limit), code: "AI_RATE_LIMITED", chargeStatus: "not_charged" },
       { status: 429, headers: { "Retry-After": String(limit.retryAfterSeconds) } }
     );
   }
 
   // ── Credits check ─────────────────────────────────────────────────────────
-  const creditCost = Math.ceil(requestedQuestionCount / 5);
-  let creditsRemaining = 0;
-
-  // Ensure row exists (INSERT ... ON CONFLICT DO NOTHING)
-  await admin
-    .from("study_user_credits")
-    .upsert(
-      { user_id: user.id, balance: 20, updated_at: new Date().toISOString() },
-      { onConflict: "user_id", ignoreDuplicates: true }
-    );
-
-  const { data: creditsRow } = await admin
-    .from("study_user_credits")
-    .select("balance")
-    .eq("user_id", user.id)
-    .maybeSingle();
-
-  const currentBalance = typeof creditsRow?.balance === "number" ? creditsRow.balance : 20;
-
-  if (currentBalance < creditCost) {
+  const currentBalance = await ensureStudyCreditBalance(user.id);
+  if (currentBalance < estimatedCreditCost) {
     return NextResponse.json(
-      { ok: false, code: "INSUFFICIENT_CREDITS", message: "Not enough credits to generate questions" },
+      {
+        ok: false,
+        code: "INSUFFICIENT_CREDITS",
+        message: "Not enough credits to generate questions",
+        chargeStatus: "not_charged",
+      },
       { status: 402 }
     );
   }
 
-  // Atomic deduct — optimistic lock on current balance
-  const { data: deducted } = await admin
-    .from("study_user_credits")
-    .update({ balance: currentBalance - creditCost, updated_at: new Date().toISOString() })
-    .eq("user_id", user.id)
-    .eq("balance", currentBalance)
-    .select("user_id");
-
-  if (!deducted || deducted.length === 0) {
-    return NextResponse.json(
-      { ok: false, code: "INSUFFICIENT_CREDITS", message: "Not enough credits to generate questions" },
-      { status: 402 }
-    );
-  }
-
-  creditsRemaining = currentBalance - creditCost;
+  // The actual spend happens after generation and draft persistence succeed.
+  let creditsRemaining = currentBalance;
 
   // ── Build prompt components ────────────────────────────────────────────────
   const difficultyInstruction = {
@@ -774,6 +793,27 @@ Return ONLY a valid JSON object with no markdown, no backticks, no preamble:
       const emitStatus = (message: string, phase?: string) => {
         emit({ type: "status", message, phase });
       };
+      const buildGenerationConfig = (
+        ai: Record<string, unknown>,
+        credit?: Record<string, unknown>
+      ) => ({
+        count: questionCount,
+        difficulty: effectiveDifficulty,
+        focus: focus || null,
+        questionFormat,
+        generationIntent,
+        topicId,
+        subtopicId,
+        ai,
+        request: {
+          ...requestConfig.signaturePayload,
+          signature: requestConfig.signature,
+        },
+        credit: credit ?? {
+          estimatedCost: estimatedCreditCost,
+          charged: false,
+        },
+      });
       const persistDraftIfNeeded = async (questions: GeneratedQuestion[], ai: Record<string, unknown>) => {
         if (!persistDraft) return null;
         emitStatus("Saving your AI practice draft.", "persist-draft");
@@ -782,17 +822,66 @@ Return ONLY a valid JSON object with no markdown, no backticks, no preamble:
           materialId,
           questions,
           asDraft: true,
-          generationConfig: {
-            count: questionCount,
-            difficulty: effectiveDifficulty,
-            focus: focus || null,
-            questionFormat,
-            generationIntent,
-            topicId,
-            subtopicId,
-            ai,
-          },
+          generationConfig: buildGenerationConfig(ai),
         });
+      };
+      const finalizeSuccessfulGeneration = async (
+        questions: GeneratedQuestion[],
+        ai: Record<string, unknown>,
+        draft: Awaited<ReturnType<typeof persistDraftIfNeeded>>
+      ) => {
+        const savedCount = draft?.savedCount ?? questions.length;
+        if (persistDraft && (!draft?.setId || savedCount <= 0)) {
+          throw new Error("Questions generated, but the draft could not be saved. No credits charged.");
+        }
+
+        const finalCreditCost = Math.max(1, Math.ceil(savedCount / 5));
+        emitStatus("Confirming credits.", "charge-credits");
+        const spend = await spendStudyCredits({ userId: user.id, cost: finalCreditCost });
+        if (!spend.ok) {
+          if (draft?.setId) await discardDraftSet(draft.setId);
+          const message = spend.code === "INSUFFICIENT_CREDITS"
+            ? "Not enough credits to generate questions. No credits charged."
+            : "Credit charge could not be completed. No credits charged.";
+          throw Object.assign(new Error(message), { code: spend.code });
+        }
+
+        creditsRemaining = spend.balance;
+        const receiptMessage = generationReceipt({
+          savedCount,
+          creditCost: finalCreditCost,
+          creditsRemaining,
+        });
+
+        if (draft?.setId) {
+          try {
+            await admin
+              .from("study_quiz_sets")
+              .update({
+                generation_config: buildGenerationConfig(ai, {
+                  estimatedCost: estimatedCreditCost,
+                  cost: finalCreditCost,
+                  charged: true,
+                  chargedAt: new Date().toISOString(),
+                  balanceAfter: creditsRemaining,
+                  receiptMessage,
+                }),
+              })
+              .eq("id", draft.setId);
+          } catch (configError) {
+            console.warn(
+              "[generate-questions] credit receipt metadata update failed:",
+              configError instanceof Error ? configError.message : configError
+            );
+          }
+        }
+
+        return {
+          creditCost: finalCreditCost,
+          creditsRemaining,
+          receiptMessage,
+          savedCount,
+        };
       };
 
       try {
@@ -855,35 +944,28 @@ Return ONLY a valid JSON object with no markdown, no backticks, no preamble:
                 },
               };
               const draft = await persistDraftIfNeeded(coverageResult.questions as GeneratedQuestion[], ai);
+              const receipt = await finalizeSuccessfulGeneration(coverageResult.questions as GeneratedQuestion[], ai, draft);
               await recordUsage("success", ai);
               emit({
                 type: "done",
                 ai,
                 draftSetId: draft?.setId,
-                savedCount: draft?.savedCount,
+                savedCount: receipt.savedCount,
                 requestedCount: draft?.requestedCount,
                 repaired: draft?.repaired,
                 replacedCount: draft?.replacedCount,
                 skippedCount: draft?.skippedCount,
-                creditCost,
-                creditsRemaining,
+                reusedDraft: false,
+                charged: true,
+                creditCost: receipt.creditCost,
+                creditsRemaining: receipt.creditsRemaining,
+                receiptMessage: receipt.receiptMessage,
               });
               return;
             }
           } catch (coverageError) {
             if (emittedAny) {
-              const ai = {
-                provider: "gemini",
-                model: process.env.GEMINI_MODEL_GENERATION?.trim() ?? process.env.GEMINI_MODEL?.trim() ?? "gemini-2.5-flash",
-                inputMode: "coverage-aware",
-                reason: "Partial coverage-aware generation.",
-              };
-              await recordUsage("success", ai);
-              emit({
-                type: "done",
-                ai,
-              });
-              return;
+              throw new Error("Generation stopped before the questions could be saved. No credits charged.");
             }
             console.warn("[generate-questions] coverage-aware generation fell back:", coverageError instanceof Error ? coverageError.message : coverageError);
             if (material.index_status === "ready") {
@@ -906,23 +988,27 @@ Return ONLY a valid JSON object with no markdown, no backticks, no preamble:
           onQuestion: (q) => emit({ type: "question", question: q }),
         });
         const draft = await persistDraftIfNeeded(directResult.questions, directResult.ai);
+        const receipt = await finalizeSuccessfulGeneration(directResult.questions, directResult.ai, draft);
         await recordUsage("success", directResult.ai);
         emit({
           type: "done",
           ai: directResult.ai,
           draftSetId: draft?.setId,
-          savedCount: draft?.savedCount,
+          savedCount: receipt.savedCount,
           requestedCount: draft?.requestedCount,
           repaired: draft?.repaired,
           replacedCount: draft?.replacedCount,
           skippedCount: draft?.skippedCount,
-          creditCost,
-          creditsRemaining,
+          reusedDraft: false,
+          charged: true,
+          creditCost: receipt.creditCost,
+          creditsRemaining: receipt.creditsRemaining,
+          receiptMessage: receipt.receiptMessage,
         });
       } catch (error) {
         await recordUsage("failure", null, error);
         try {
-          emit({ type: "error", message: routeErrorMessage(error) });
+          emit({ type: "error", message: routeErrorMessage(error), chargeStatus: "not_charged" });
         } catch { /* controller already closed */ }
       } finally {
         controller.close();
