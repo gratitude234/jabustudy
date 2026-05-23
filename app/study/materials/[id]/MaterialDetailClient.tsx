@@ -1379,6 +1379,13 @@ export default function MaterialDetailClient({
               </div>
             ) : null}
 
+            <Link
+              href={`/study/materials/${m.id}/practice`}
+              className="flex w-full items-center justify-center gap-2 rounded-2xl border border-primary/30 bg-primary-light/40 px-4 py-3 text-sm font-bold text-primary-text hover:bg-primary-light/70 transition"
+            >
+              <Sparkles className="h-4 w-4" /> Open practice session
+            </Link>
+
             <button type="button"
               onClick={() => { setConfigOpen(false); void handleGenerateQuestions(); }}
               className="flex w-full items-center gap-3 rounded-2xl bg-primary px-4 py-4 text-left text-white shadow-sm transition hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 active:scale-[0.99]">

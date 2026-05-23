@@ -610,6 +610,50 @@ async function handleGenerateQuestionsRequest(req: NextRequest) {
     );
   }
 
+  // ── Credits check ─────────────────────────────────────────────────────────
+  const creditCost = Math.ceil(requestedQuestionCount / 5);
+  let creditsRemaining = 0;
+
+  // Ensure row exists (INSERT ... ON CONFLICT DO NOTHING)
+  await admin
+    .from("study_user_credits")
+    .upsert(
+      { user_id: user.id, balance: 20, updated_at: new Date().toISOString() },
+      { onConflict: "user_id", ignoreDuplicates: true }
+    );
+
+  const { data: creditsRow } = await admin
+    .from("study_user_credits")
+    .select("balance")
+    .eq("user_id", user.id)
+    .maybeSingle();
+
+  const currentBalance = typeof creditsRow?.balance === "number" ? creditsRow.balance : 20;
+
+  if (currentBalance < creditCost) {
+    return NextResponse.json(
+      { ok: false, code: "INSUFFICIENT_CREDITS", message: "Not enough credits to generate questions" },
+      { status: 402 }
+    );
+  }
+
+  // Atomic deduct — optimistic lock on current balance
+  const { data: deducted } = await admin
+    .from("study_user_credits")
+    .update({ balance: currentBalance - creditCost, updated_at: new Date().toISOString() })
+    .eq("user_id", user.id)
+    .eq("balance", currentBalance)
+    .select("user_id");
+
+  if (!deducted || deducted.length === 0) {
+    return NextResponse.json(
+      { ok: false, code: "INSUFFICIENT_CREDITS", message: "Not enough credits to generate questions" },
+      { status: 402 }
+    );
+  }
+
+  creditsRemaining = currentBalance - creditCost;
+
   // ── Build prompt components ────────────────────────────────────────────────
   const difficultyInstruction = {
     easy: "Generate straightforward recall and definition questions.",
@@ -777,6 +821,8 @@ Return ONLY a valid JSON object with no markdown, no backticks, no preamble:
                 repaired: draft?.repaired,
                 replacedCount: draft?.replacedCount,
                 skippedCount: draft?.skippedCount,
+                creditCost,
+                creditsRemaining,
               });
               return;
             }
@@ -824,6 +870,8 @@ Return ONLY a valid JSON object with no markdown, no backticks, no preamble:
           repaired: draft?.repaired,
           replacedCount: draft?.replacedCount,
           skippedCount: draft?.skippedCount,
+          creditCost,
+          creditsRemaining,
         });
       } catch (error) {
         try {

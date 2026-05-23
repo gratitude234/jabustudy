@@ -563,7 +563,6 @@ export function usePracticeEngine({
       const now = new Date().toISOString();
       const rows = writtenQuestions.map((q) => ({
         attempt_id: attemptId,
-        user_id: userId,
         question_id: q.id,
         text_answer: writtenAnswers[q.id] ?? "",
         answered_at: now,
@@ -592,7 +591,6 @@ export function usePracticeEngine({
         await supabase.from("study_attempt_answers").upsert(
           {
             attempt_id: attemptId,
-            user_id: userId,
             question_id: qid,
             selected_option_id: oid,
             answered_at: new Date().toISOString(),
@@ -749,7 +747,6 @@ export function usePracticeEngine({
         await supabase.from("study_attempt_answers").upsert(
           writtenQuestions.map((q) => ({
             attempt_id: attemptId,
-            user_id: userId,
             question_id: q.id,
             text_answer: writtenAnswers[q.id] ?? "",
             answered_at: submittedIso,
