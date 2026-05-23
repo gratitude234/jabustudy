@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import Image from 'next/image'
 import { usePWAInstall } from './PWAInstallProvider'
 import { X, Download } from 'lucide-react'
 
@@ -29,19 +30,19 @@ export default function PWAInstallBanner() {
 
     if (standalone) return
 
-    // Track visits — show after 2nd visit
+    // Track visits, then show after the 2nd visit.
     const visits = parseInt(localStorage.getItem(VISIT_KEY) ?? '0', 10) + 1
     localStorage.setItem(VISIT_KEY, String(visits))
 
     if (visits < 2) return
 
-    // For iOS Safari — no beforeinstallprompt exists, show manual guide
+    // For iOS Safari, no beforeinstallprompt exists, so show a manual guide.
     if (isIOSSafari) {
       const t = setTimeout(() => setShowIOS(true), 3000)
       return () => clearTimeout(t)
     }
 
-    // For Chrome/Android — show after prompt is available
+    // For Chrome/Android, show after the prompt is available.
     if (canInstall) {
       const t = setTimeout(() => setShow(true), 3000)
       return () => clearTimeout(t)
@@ -70,17 +71,19 @@ export default function PWAInstallBanner() {
       {show && (
         <div className="fixed bottom-20 left-0 right-0 z-50 flex justify-center px-4 pointer-events-none">
           <div className="pointer-events-auto w-full max-w-sm rounded-2xl border border-border bg-card shadow-lg p-3 flex items-center gap-3">
-            <img
+            <Image
               src="/icon-192.png"
               alt=""
+              width={40}
+              height={40}
               className="h-10 w-10 rounded-xl shrink-0"
             />
             <div className="flex-1 min-w-0">
               <p className="text-sm font-semibold text-foreground">
-                Install JabuStudy
+                Download web app
               </p>
               <p className="text-xs text-muted-foreground mt-0.5">
-                Fast, offline-ready, no app store needed
+                Add JabuStudy to your phone or desktop.
               </p>
             </div>
             <div className="flex items-center gap-2 shrink-0">
@@ -97,7 +100,7 @@ export default function PWAInstallBanner() {
                 className="inline-flex items-center gap-1.5 rounded-xl bg-zinc-900 px-3 py-1.5 text-xs font-bold text-white hover:bg-zinc-700 disabled:opacity-50"
               >
                 <Download className="h-3.5 w-3.5" />
-                {installing ? 'Installing…' : 'Install'}
+                {installing ? 'Opening...' : 'Download'}
               </button>
             </div>
           </div>
@@ -110,7 +113,7 @@ export default function PWAInstallBanner() {
           <div className="pointer-events-auto w-full max-w-sm rounded-2xl border border-border bg-card shadow-lg p-4">
             <div className="flex items-start justify-between gap-3">
               <p className="text-sm font-semibold text-foreground">
-                Install JabuStudy on iPhone
+                Download web app
               </p>
               <button
                 onClick={() => {
@@ -130,7 +133,7 @@ export default function PWAInstallBanner() {
                 Scroll down and tap <strong className="text-foreground">&quot;Add to Home Screen&quot;</strong>
               </li>
               <li>
-                Tap <strong className="text-foreground">Add</strong> — done!
+                Tap <strong className="text-foreground">Add</strong> - done!
               </li>
             </ol>
           </div>

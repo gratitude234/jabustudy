@@ -4,6 +4,7 @@ import { Suspense, useEffect, useState } from "react";
 import { usePathname } from "next/navigation";
 
 import MobileTopBar from "@/components/layout/MobileTopBar";
+import PushNotificationPrompt from "@/components/PushNotificationPrompt";
 import SidebarNav from "@/components/layout/SidebarNav";
 import StudyBottomNav from "@/components/layout/StudyBottomNav";
 import PWAInstallBanner from "@/components/PWAInstallBanner";
@@ -41,7 +42,7 @@ export default function AppChrome({ children }: { children: React.ReactNode }) {
         <SidebarNav />
       </Suspense>
 
-      {/* Content — shifted right by sidebar width at md+ */}
+      {/* Content shifted right by sidebar width at md+ */}
       <div className={hasDesktopSidebar ? "md:ml-[220px]" : undefined}>
         <main className={[APP_CONTAINER, "py-6 md:py-8", "pb-20 md:pb-8"].join(" ")}>
           {children}
@@ -67,6 +68,7 @@ export default function AppChrome({ children }: { children: React.ReactNode }) {
         </div>
       )}
 
+      <PushNotificationPrompt />
       <PWAInstallBanner />
     </NotificationsProvider>
   );
