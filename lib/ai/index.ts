@@ -140,6 +140,7 @@ async function logAiUsage(params: {
 }) {
   const context = currentAiUsageContext();
   if (!context) return;
+  if (context.suppressProviderUsageEvents) return;
   await recordAiUsageEvent({
     ...context,
     metadata: {

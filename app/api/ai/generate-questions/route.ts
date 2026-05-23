@@ -20,9 +20,11 @@ import {
   aiLimitFromEnv,
   aiRateLimitMessage,
   checkAiUsageLimit,
+  recordAiUsageEvent,
   recordBlockedAiUsage,
   withAiUsageContext,
   type AiUsageContext,
+  type AiUsageStatus,
 } from "@/lib/aiUsage";
 
 const QUESTION_GEN_TEXT_CHARS = 24_000;
@@ -31,6 +33,8 @@ const AI_QUESTION_TIMEOUT_MS =
   parsePositiveInt(process.env.GEMINI_QUESTION_TIMEOUT_MS) ??
   60_000;
 const MAX_QUESTION_COUNT = 20;
+const ENABLE_COVERAGE_AWARE_MCQ =
+  process.env.AI_ENABLE_COVERAGE_AWARE_QUESTIONS?.trim().toLowerCase() === "true";
 
 function parsePositiveInt(value: string | undefined) {
   const parsed = Number.parseInt(value ?? "", 10);
@@ -318,6 +322,35 @@ type DirectGenResult = {
   questions: GeneratedQuestion[];
   ai: Record<string, unknown>;
 };
+
+function aiProviderFromMeta(ai: Record<string, unknown> | null | undefined): "bedrock" | "gemini" | null {
+  const provider = ai?.provider;
+  return provider === "bedrock" || provider === "gemini" ? provider : null;
+}
+
+function aiModelFromMeta(ai: Record<string, unknown> | null | undefined): string | null {
+  return typeof ai?.model === "string" && ai.model.trim() ? ai.model.trim() : null;
+}
+
+async function recordQuestionGenerationUsage(
+  context: AiUsageContext,
+  status: AiUsageStatus,
+  ai?: Record<string, unknown> | null,
+  error?: unknown
+) {
+  await recordAiUsageEvent({
+    ...context,
+    provider: aiProviderFromMeta(ai),
+    model: aiModelFromMeta(ai),
+    status,
+    errorCode: status === "failure" ? "GENERATE_QUESTIONS_FAILED" : null,
+    errorMessage: status === "failure"
+      ? error instanceof Error
+        ? error.message
+        : "Question generation failed."
+      : null,
+  });
+}
 
 async function runDirectGeneration(args: {
   material: StudyMaterialRow;
@@ -724,7 +757,17 @@ Return ONLY a valid JSON object with no markdown, no backticks, no preamble:
 
   const stream = new ReadableStream({
     async start(controller) {
-      await withAiUsageContext(usageContext, async () => {
+      await withAiUsageContext({ ...usageContext, suppressProviderUsageEvents: true }, async () => {
+      let usageRecorded = false;
+      const recordUsage = async (
+        status: AiUsageStatus,
+        ai?: Record<string, unknown> | null,
+        error?: unknown
+      ) => {
+        if (usageRecorded) return;
+        usageRecorded = true;
+        await recordQuestionGenerationUsage(usageContext, status, ai, error);
+      };
       const emit = (obj: object) => {
         controller.enqueue(encoder.encode(JSON.stringify(obj) + "\n"));
       };
@@ -755,7 +798,7 @@ Return ONLY a valid JSON object with no markdown, no backticks, no preamble:
       try {
         emitStatus("Starting question generation.", "start");
         // Coverage-aware MCQ path
-        if (questionFormat === "mcq") {
+        if (questionFormat === "mcq" && ENABLE_COVERAGE_AWARE_MCQ) {
           let emittedAny = false;
 
           try {
@@ -812,6 +855,7 @@ Return ONLY a valid JSON object with no markdown, no backticks, no preamble:
                 },
               };
               const draft = await persistDraftIfNeeded(coverageResult.questions as GeneratedQuestion[], ai);
+              await recordUsage("success", ai);
               emit({
                 type: "done",
                 ai,
@@ -828,15 +872,16 @@ Return ONLY a valid JSON object with no markdown, no backticks, no preamble:
             }
           } catch (coverageError) {
             if (emittedAny) {
-              // Some questions already streamed — emit done with what we have
+              const ai = {
+                provider: "gemini",
+                model: process.env.GEMINI_MODEL_GENERATION?.trim() ?? process.env.GEMINI_MODEL?.trim() ?? "gemini-2.5-flash",
+                inputMode: "coverage-aware",
+                reason: "Partial coverage-aware generation.",
+              };
+              await recordUsage("success", ai);
               emit({
                 type: "done",
-                ai: {
-                  provider: "gemini",
-                  model: process.env.GEMINI_MODEL_GENERATION?.trim() ?? process.env.GEMINI_MODEL?.trim() ?? "gemini-2.5-flash",
-                  inputMode: "coverage-aware",
-                  reason: "Partial coverage-aware generation.",
-                },
+                ai,
               });
               return;
             }
@@ -861,6 +906,7 @@ Return ONLY a valid JSON object with no markdown, no backticks, no preamble:
           onQuestion: (q) => emit({ type: "question", question: q }),
         });
         const draft = await persistDraftIfNeeded(directResult.questions, directResult.ai);
+        await recordUsage("success", directResult.ai);
         emit({
           type: "done",
           ai: directResult.ai,
@@ -874,6 +920,7 @@ Return ONLY a valid JSON object with no markdown, no backticks, no preamble:
           creditsRemaining,
         });
       } catch (error) {
+        await recordUsage("failure", null, error);
         try {
           emit({ type: "error", message: routeErrorMessage(error) });
         } catch { /* controller already closed */ }

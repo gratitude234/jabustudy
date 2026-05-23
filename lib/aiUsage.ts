@@ -13,6 +13,7 @@ export type AiUsageContext = {
   courseId?: string | null;
   requestedCount?: number | null;
   metadata?: Record<string, unknown>;
+  suppressProviderUsageEvents?: boolean;
 };
 
 export type AiUsageEvent = AiUsageContext & {
