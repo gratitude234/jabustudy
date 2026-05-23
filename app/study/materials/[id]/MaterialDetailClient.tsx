@@ -606,25 +606,40 @@ function ImageViewer({ url, title, heightClass = "h-[70vh]" }: { url: string; ti
   );
 }
 
-function InlinePreview({ url, title, kind }: { url: string; title: string; kind: "pdf" | "image" | "other" }) {
-  const [open, setOpen] = useState(false);
+function InlinePreview({
+  url,
+  title,
+  kind,
+  defaultOpen = false,
+}: {
+  url: string;
+  title: string;
+  kind: "pdf" | "image" | "other";
+  defaultOpen?: boolean;
+}) {
+  const [open, setOpen] = useState(defaultOpen);
+  useEffect(() => {
+    if (defaultOpen) setOpen(true);
+  }, [defaultOpen]);
   if (kind === "other" || !url) return null;
 
   return (
-    <div className="overflow-hidden rounded-2xl border border-border bg-card">
+    <div className="overflow-hidden rounded-2xl border border-border bg-card shadow-sm">
       <button type="button" onClick={() => setOpen((v) => !v)}
-        className="flex w-full items-center justify-between gap-4 px-4 py-3.5 text-left transition-colors hover:bg-secondary/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset"
+        className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left transition-colors hover:bg-secondary/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset"
         aria-expanded={open}>
-        <div className="flex items-center gap-3">
-          {kind === "pdf" ? <FileText className="h-4 w-4 shrink-0 text-muted-brand" /> : <ImageIcon className="h-4 w-4 shrink-0 text-muted-brand" />}
+        <div className="flex min-w-0 items-center gap-3">
+          <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-primary-light text-primary">
+            {kind === "pdf" ? <FileText className="h-4 w-4" /> : <ImageIcon className="h-4 w-4" />}
+          </span>
           <div>
             <p className="text-sm font-semibold text-foreground">{open ? "Hide preview" : `Preview ${kind === "pdf" ? "PDF" : "image"}`}</p>
-            {!open && <p className="text-xs text-muted-brand">Tap to expand inline</p>}
+            <p className="text-xs text-muted-brand">{open ? "Reading inline" : "Tap to expand inline"}</p>
           </div>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex shrink-0 items-center gap-2">
           <a href={url} target="_blank" rel="noreferrer" onClick={(e) => e.stopPropagation()}
-            className="inline-flex items-center gap-1 rounded-lg border border-border bg-background px-2.5 py-1.5 text-xs font-semibold text-foreground hover:bg-secondary/50">
+            className="inline-flex items-center gap-1 rounded-xl border border-border bg-background px-2.5 py-1.5 text-xs font-semibold text-foreground hover:bg-secondary/50">
             Open <ExternalLink className="h-3 w-3" />
           </a>
           {open ? <ChevronUp className="h-4 w-4 text-muted-brand" /> : <ChevronDown className="h-4 w-4 text-muted-brand" />}
@@ -634,10 +649,10 @@ function InlinePreview({ url, title, kind }: { url: string; title: string; kind:
         <div className="border-t border-border p-3">
           {kind === "pdf" && (
             <div className="relative">
-              <ResolvedFileViewer url={url} title={title} kind="pdf" heightClass="h-[60vh]" />
+              <ResolvedFileViewer url={url} title={title} kind="pdf" heightClass="h-[68vh] min-h-[420px]" />
             </div>
           )}
-          {kind === "image" && <ResolvedFileViewer url={url} title={title} kind="image" heightClass="h-[60vh]" />}
+          {kind === "image" && <ResolvedFileViewer url={url} title={title} kind="image" heightClass="h-[68vh] min-h-[420px]" />}
         </div>
       )}
     </div>
@@ -1410,28 +1425,28 @@ export default function MaterialDetailClient({
 
   return (
     <div className="min-h-[calc(100vh-56px)] bg-background">
-      <div className="px-4 pb-0 pt-4 md:px-6">
+      <div className="px-4 pb-0 pt-3 md:px-6 md:pt-4">
         <Link
           href={backHref}
-          className="inline-flex items-center gap-2 rounded-2xl border border-border bg-card px-3 py-2 text-sm font-semibold text-foreground transition hover:bg-secondary/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+          className="inline-flex max-w-full items-center gap-2 rounded-full border border-border bg-card px-3 py-2 text-sm font-semibold text-foreground shadow-sm transition hover:bg-secondary/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
         >
           <ArrowLeft className="h-4 w-4" />
-          {backLabel}
+          <span className="truncate">{backLabel}</span>
         </Link>
       </div>
 
-      <div className="sticky top-[56px] z-20 border-b border-border bg-card px-4 md:hidden">
-        <div className="flex">
+      <div className="sticky top-[56px] z-20 bg-background/95 px-4 py-3 backdrop-blur md:hidden">
+        <div className="grid grid-cols-3 rounded-2xl border border-border bg-card p-1 shadow-sm">
           {tabLabels.map((tab) => (
             <button
               key={tab.value}
               type="button"
               onClick={() => setActiveTab(tab.value)}
               className={cn(
-                "flex-1 border-b-2 py-3 text-sm font-semibold transition focus-visible:outline-none",
+                "rounded-xl px-2 py-2 text-sm font-bold transition focus-visible:outline-none",
                 activeTab === tab.value
-                  ? "border-primary text-primary"
-                  : "border-transparent text-muted-brand"
+                  ? "bg-primary text-white shadow-sm"
+                  : "text-muted-brand hover:bg-secondary/50 hover:text-foreground"
               )}
             >
               {tab.label}
@@ -1440,7 +1455,7 @@ export default function MaterialDetailClient({
         </div>
       </div>
 
-      <div className="mx-auto grid max-w-7xl items-start gap-5 p-4 pb-24 md:grid-cols-[1fr_420px] md:p-6 md:pt-5 md:pb-12">
+      <div className="mx-auto grid max-w-7xl items-start gap-4 p-4 pb-24 pt-2 md:grid-cols-[minmax(0,1fr)_420px] md:gap-5 md:p-6 md:pt-5 md:pb-12">
         <section
           className={cn(
             "flex flex-col gap-4",
@@ -1448,12 +1463,11 @@ export default function MaterialDetailClient({
           )}
         >
           <div
-            className="relative overflow-hidden rounded-3xl"
-            style={{ background: "linear-gradient(135deg, var(--primary) 0%, oklch(46% 0.22 305) 100%)" }}
+            className="relative overflow-hidden rounded-3xl shadow-sm"
+            style={{ background: "linear-gradient(135deg, var(--primary) 0%, oklch(45% 0.2 298) 100%)" }}
           >
             <div className="pointer-events-none absolute -right-10 -top-10 h-36 w-36 rounded-full border border-white/10" />
-            <div className="pointer-events-none absolute bottom-4 right-16 h-16 w-16 rounded-full bg-white/10 blur-2xl" />
-            <div className="relative px-5 pb-5 pt-5">
+            <div className="relative px-5 pb-4 pt-4 sm:px-6 sm:pb-5 sm:pt-5">
               <div className="mb-3 flex flex-wrap gap-1.5">
                 {course?.course_code && <HeroBadge>{course.course_code}</HeroBadge>}
                 {course?.level && <HeroBadge>{course.level}L</HeroBadge>}
@@ -1471,34 +1485,35 @@ export default function MaterialDetailClient({
                 )}
               </div>
               <div className="flex items-start gap-3">
-                <div className="grid h-12 w-12 shrink-0 place-items-center rounded-2xl bg-white/15 text-white">
+                <div className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl bg-white/15 text-white ring-1 ring-white/10 sm:h-12 sm:w-12">
                   <FileIcon kind={kind} />
                 </div>
                 <div className="min-w-0">
                   <p className="mb-1 text-[11px] font-bold uppercase tracking-widest text-white/70">
                     {formatMaterialType(m.material_type)} · {badge}
                   </p>
-                  <h1 className="text-xl font-extrabold leading-snug text-white">{title}</h1>
-                  <p className="mt-1 text-sm text-white/75">
+                  <h1 className="break-words text-lg font-extrabold leading-snug text-white sm:text-xl">{title}</h1>
+                  <p className="mt-1 line-clamp-2 text-sm text-white/75">
                     Uploaded by {obfuscateEmail(m.uploader_email)} · {timeAgo(m.created_at ?? "")}
                   </p>
                 </div>
               </div>
-              <div className="mt-4 flex gap-4 border-t border-white/15 pt-3.5">
+              <div className="mt-4 flex flex-wrap gap-x-4 gap-y-2 border-t border-white/15 pt-3.5">
                 <HeroStat icon={Download}>{downloads.toLocaleString("en-NG")} downloads</HeroStat>
                 <HeroStat icon={ThumbsUp}>{upvoteCount.toLocaleString("en-NG")} upvotes</HeroStat>
               </div>
             </div>
           </div>
 
-          <div className="flex gap-2">
+          <div className="grid grid-cols-[minmax(0,1.25fr)_minmax(0,1fr)_44px_44px] gap-2 sm:grid-cols-[minmax(0,1.15fr)_minmax(0,1fr)_48px_48px]">
             <button
               type="button"
               onClick={() => setPreviewOpen(true)}
               disabled={!hasFile}
-              className="inline-flex flex-1 items-center justify-center gap-2 rounded-2xl border border-primary bg-primary px-4 py-2.5 text-sm font-semibold text-white transition hover:opacity-90 disabled:border-border disabled:bg-muted disabled:text-muted-brand disabled:opacity-70"
+              className="inline-flex h-12 min-w-0 items-center justify-center gap-2 rounded-2xl border border-primary bg-primary px-3 text-sm font-bold text-white shadow-sm transition hover:opacity-90 disabled:border-border disabled:bg-muted disabled:text-muted-brand disabled:opacity-70"
             >
-              <Eye className="h-4 w-4" /> Read {badge}
+              <Eye className="h-4 w-4 shrink-0" />
+              <span className="truncate">Read {badge}</span>
             </button>
             <a
               href={hasFile ? fileUrl : "#"}
@@ -1511,11 +1526,12 @@ export default function MaterialDetailClient({
                 void handleDownload();
               }}
               className={cn(
-                "inline-flex flex-1 items-center justify-center gap-2 rounded-2xl border border-border bg-card px-4 py-2.5 text-sm font-semibold text-foreground transition hover:bg-secondary/50",
+                "inline-flex h-12 min-w-0 items-center justify-center gap-2 rounded-2xl border border-border bg-card px-3 text-sm font-bold text-foreground shadow-sm transition hover:bg-secondary/50",
                 !hasFile && "pointer-events-none opacity-50"
               )}
             >
-              <Download className="h-4 w-4" /> Download
+              <Download className="h-4 w-4 shrink-0" />
+              <span className="truncate">Download</span>
             </a>
             <button
               type="button"
@@ -1523,7 +1539,7 @@ export default function MaterialDetailClient({
               disabled={saving}
               aria-label={saved ? "Remove from library" : "Save to library"}
               className={cn(
-                "grid h-11 w-11 shrink-0 place-items-center rounded-2xl border transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
+                "grid h-12 w-full shrink-0 place-items-center rounded-2xl border shadow-sm transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
                 saved ? "border-primary/30 bg-primary-light text-primary-text" : "border-border bg-card text-foreground hover:bg-secondary/50",
                 saving && "opacity-60"
               )}
@@ -1534,14 +1550,16 @@ export default function MaterialDetailClient({
               type="button"
               onClick={handleShare}
               aria-label="Share"
-              className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl border border-border bg-card text-foreground transition hover:bg-secondary/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+              className="grid h-12 w-full shrink-0 place-items-center rounded-2xl border border-border bg-card text-foreground shadow-sm transition hover:bg-secondary/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
             >
               <Share2 className="h-4 w-4" />
             </button>
           </div>
 
           {hasFile ? (
-            <InlinePreview url={fileUrl} title={title} kind={kind} />
+            <div className={cn(activeTab === "info" ? "hidden md:block" : "block")}>
+              <InlinePreview url={fileUrl} title={title} kind={kind} defaultOpen={activeTab === "read"} />
+            </div>
           ) : (
             <div className="rounded-2xl border border-border bg-card p-5 text-sm text-muted-brand">
               This material does not have a readable file attached.
@@ -1549,7 +1567,7 @@ export default function MaterialDetailClient({
           )}
 
           {m.ai_summary && (
-            <div className="rounded-3xl border border-border bg-card p-5">
+            <div className="rounded-2xl border border-border bg-card p-5 shadow-sm">
               <div className="mb-3 flex items-center gap-2">
                 <div className="grid h-9 w-9 place-items-center rounded-2xl bg-primary-light text-primary">
                   <Lightbulb className="h-4 w-4" />
@@ -1564,7 +1582,7 @@ export default function MaterialDetailClient({
           )}
 
           <div className={cn("space-y-4", activeTab === "info" ? "block" : "hidden md:block")}>
-            <div className="rounded-3xl border border-border bg-card p-5">
+            <div className="rounded-2xl border border-border bg-card p-5 shadow-sm">
               <div className="mb-4 flex items-start justify-between gap-4">
                 <div>
                   <p className="text-xs font-bold uppercase tracking-wider text-muted-brand">Material info</p>
@@ -1581,19 +1599,19 @@ export default function MaterialDetailClient({
                 )}
               </div>
               <div className="grid grid-cols-2 gap-3 text-sm">
-                <div className="rounded-2xl border border-border bg-background px-3 py-3">
+                <div className="min-h-[74px] rounded-2xl border border-border bg-background px-3 py-3">
                   <p className="text-[11px] font-bold uppercase tracking-wider text-muted-brand">Level</p>
                   <p className="mt-1 font-extrabold text-foreground">{course?.level ? `${course.level}L` : "-"}</p>
                 </div>
-                <div className="rounded-2xl border border-border bg-background px-3 py-3">
+                <div className="min-h-[74px] rounded-2xl border border-border bg-background px-3 py-3">
                   <p className="text-[11px] font-bold uppercase tracking-wider text-muted-brand">Semester</p>
                   <p className="mt-1 font-extrabold text-foreground">{course?.semester ?? "-"}</p>
                 </div>
-                <div className="rounded-2xl border border-border bg-background px-3 py-3">
+                <div className="min-h-[74px] rounded-2xl border border-border bg-background px-3 py-3">
                   <p className="text-[11px] font-bold uppercase tracking-wider text-muted-brand">Type</p>
                   <p className="mt-1 font-extrabold text-foreground">{formatMaterialType(m.material_type)}</p>
                 </div>
-                <div className="rounded-2xl border border-border bg-background px-3 py-3">
+                <div className="min-h-[74px] rounded-2xl border border-border bg-background px-3 py-3">
                   <p className="text-[11px] font-bold uppercase tracking-wider text-muted-brand">Session</p>
                   <p className="mt-1 font-extrabold text-foreground">{m.session ?? "-"}</p>
                 </div>
@@ -1627,7 +1645,7 @@ export default function MaterialDetailClient({
             </div>
 
             {relatedMaterials.length > 0 && (
-              <div className="rounded-3xl border border-border bg-card p-4">
+              <div className="rounded-2xl border border-border bg-card p-4 shadow-sm">
                 <div className="mb-3">
                   <p className="text-xs font-bold uppercase tracking-wider text-muted-brand">Related materials</p>
                   <p className="mt-1 text-sm font-semibold text-foreground">More for {course?.course_code ?? "this course"}</p>
@@ -1666,8 +1684,8 @@ export default function MaterialDetailClient({
             activeTab !== "practice" ? "hidden md:flex" : "flex"
           )}
         >
-          <div className="flex items-center gap-3 rounded-3xl border border-border bg-card px-4 py-3.5">
-            <div className="grid h-10 w-10 shrink-0 place-items-center rounded-2xl bg-amber-50">
+          <div className="flex items-center gap-3 rounded-2xl border border-border bg-card px-4 py-3.5 shadow-sm">
+            <div className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-amber-50">
               <Coins className="h-5 w-5 text-amber-500" />
             </div>
             <div className="min-w-0 flex-1">
@@ -1689,22 +1707,29 @@ export default function MaterialDetailClient({
             </div>
             <button
               type="button"
-              className="shrink-0 rounded-xl border border-primary bg-primary-light px-3 py-1.5 text-xs font-bold text-primary"
+              className="h-9 shrink-0 rounded-xl border border-primary/25 bg-primary-light px-3 text-xs font-bold text-primary"
             >
               + Get more
             </button>
           </div>
 
           {draftLoading ? (
-            <div className="rounded-3xl border border-primary/20 bg-primary-light/40 px-4 py-3 text-xs font-semibold text-primary">
+            <div className="rounded-2xl border border-primary/20 bg-primary-light/40 px-4 py-3 text-xs font-semibold text-primary shadow-sm">
               Checking for saved AI drafts...
             </div>
           ) : activeDraft ? (
-            <div className="rounded-3xl border border-primary/20 bg-primary-light/45 p-4">
-              <p className="text-sm font-extrabold text-primary-text">Draft found</p>
-              <p className="mt-1 text-xs leading-relaxed text-primary/75">
-                {activeDraft.questionsCount} question{activeDraft.questionsCount === 1 ? "" : "s"} saved from this material.
-              </p>
+            <div className="rounded-2xl border border-primary/20 bg-primary-light/45 p-4 shadow-sm">
+              <div className="flex items-start gap-3">
+                <div className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-card text-primary">
+                  <PenLine className="h-4 w-4" />
+                </div>
+                <div className="min-w-0">
+                  <p className="text-sm font-extrabold text-primary-text">Draft found</p>
+                  <p className="mt-1 text-xs leading-relaxed text-primary/75">
+                    {activeDraft.questionsCount} question{activeDraft.questionsCount === 1 ? "" : "s"} saved from this material.
+                  </p>
+                </div>
+              </div>
               <div className="mt-3 grid grid-cols-2 gap-2">
                 <Link
                   href={`/study/practice/${encodeURIComponent(activeDraft.setId)}${activeDraft.attempt?.id ? `?attempt=${encodeURIComponent(activeDraft.attempt.id)}` : ""}`}
@@ -1732,15 +1757,15 @@ export default function MaterialDetailClient({
             </div>
           ) : null}
 
-          <div className="overflow-hidden rounded-3xl border border-border bg-card">
-            <div className="border-b border-border px-4 py-4">
+          <div className="overflow-hidden rounded-2xl border border-border bg-card shadow-sm">
+            <div className="border-b border-border bg-secondary/20 px-4 py-3.5">
               <p className="flex items-center gap-2 text-base font-extrabold text-foreground">
                 <Sparkles className="h-4 w-4 text-primary" />
                 Configure Your Practice
               </p>
               <p className="mt-1 text-xs text-muted-brand">Generate from this material and open practice immediately.</p>
             </div>
-            <div className="space-y-4 p-4">
+            <div className="space-y-3.5 p-4">
               <div>
                 <p className="mb-2 text-[11px] font-bold uppercase tracking-wider text-muted-brand">Questions</p>
                 <div className="flex gap-2">
@@ -1750,7 +1775,7 @@ export default function MaterialDetailClient({
                       type="button"
                       onClick={() => setQuizConfig((c) => ({ ...c, count: n }))}
                       className={cn(
-                        "flex-1 rounded-xl border py-2.5 text-sm font-bold transition focus-visible:outline-none",
+                        "h-10 flex-1 rounded-xl border text-sm font-bold transition focus-visible:outline-none",
                         quizConfig.count === n
                           ? "border-primary bg-primary text-white"
                           : "border-border bg-background text-foreground hover:bg-secondary/50"
@@ -1771,9 +1796,9 @@ export default function MaterialDetailClient({
                       type="button"
                       onClick={() => setQuizConfig((c) => ({ ...c, questionFormat: value }))}
                       className={cn(
-                        "flex w-full items-start gap-3 rounded-2xl border px-3 py-3 text-left transition focus-visible:outline-none",
+                        "flex w-full items-start gap-3 rounded-2xl border px-3 py-2.5 text-left transition focus-visible:outline-none",
                         quizConfig.questionFormat === value
-                          ? "border-primary bg-primary-light"
+                          ? "border-primary bg-primary-light ring-1 ring-primary/25"
                           : "border-border bg-background hover:bg-secondary/40"
                       )}
                     >
@@ -1807,7 +1832,7 @@ export default function MaterialDetailClient({
                       type="button"
                       onClick={() => setQuizConfig((c) => ({ ...c, difficulty: value }))}
                       className={cn(
-                        "rounded-xl border px-2 py-2 text-xs font-extrabold transition focus-visible:outline-none",
+                        "h-10 rounded-xl border px-2 text-xs font-extrabold transition focus-visible:outline-none",
                         quizConfig.difficulty !== value && "border-border bg-background text-foreground hover:bg-secondary/50",
                         quizConfig.difficulty === "easy" && value === "easy" && "border-green-300 bg-green-50 text-green-700",
                         quizConfig.difficulty === "mixed" && value === "mixed" && "border-amber-300 bg-amber-50 text-amber-700",
@@ -1822,7 +1847,7 @@ export default function MaterialDetailClient({
 
               <div>
                 <p className="mb-2 text-[11px] font-bold uppercase tracking-wider text-muted-brand">Smart targeting</p>
-                <div className="relative rounded-2xl border border-border bg-background px-3 py-3">
+                <div className="relative rounded-2xl border border-border bg-background px-3 py-2.5">
                   <select
                     value={generationMode}
                     onChange={(e) => setGenerationMode(e.target.value as GenerationMode)}
@@ -1833,7 +1858,7 @@ export default function MaterialDetailClient({
                     ))}
                   </select>
                   <ChevronDown className="pointer-events-none absolute right-3 top-3.5 h-4 w-4 text-muted-brand" />
-                  <p className="mt-2 text-xs leading-snug text-muted-brand">
+                  <p className="mt-1.5 text-xs leading-snug text-muted-brand">
                     {generationModeCopy(generationMode, quizConfig)}
                   </p>
                 </div>
@@ -1852,7 +1877,7 @@ export default function MaterialDetailClient({
                 </div>
               )}
 
-              <div className="flex items-center justify-between rounded-2xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm">
+              <div className="flex items-center justify-between rounded-2xl border border-amber-300 bg-amber-50 px-4 py-2.5 text-sm">
                 <span className="font-semibold text-amber-800">
                   {quizConfig.count} questions · cost
                 </span>
@@ -1873,7 +1898,7 @@ export default function MaterialDetailClient({
                 type="button"
                 disabled={!canGenerate}
                 onClick={() => void handleGenerateQuestions()}
-                className="flex w-full items-center gap-3 rounded-2xl bg-primary px-4 py-4 text-left text-white shadow-sm transition hover:opacity-90 disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 active:scale-[0.99]"
+                className="flex w-full items-center gap-3 rounded-2xl bg-primary px-4 py-3.5 text-left text-white shadow-sm transition hover:opacity-90 disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 active:scale-[0.99]"
               >
                 <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-white/15">
                   <Sparkles className="h-5 w-5" />
@@ -1893,7 +1918,7 @@ export default function MaterialDetailClient({
             </div>
           </div>
 
-          <div className="overflow-hidden rounded-3xl border border-border bg-card">
+          <div className="overflow-hidden rounded-2xl border border-border bg-card shadow-sm">
             <div className="flex items-center justify-between border-b border-border px-4 py-3.5">
               <p className="flex items-center gap-2 text-sm font-bold text-foreground">
                 <PenLine className="h-4 w-4 text-primary" /> Your sets from this material
