@@ -4,6 +4,7 @@ import {
   type AiContentBlock,
   type AiChatMessage,
   type AiModelRole,
+  geminiErrorKeyAlias,
   geminiFallbackModelName,
   geminiModelName,
   geminiStream,
@@ -16,6 +17,7 @@ import {
   bedrockText,
   isBedrockConfigured,
 } from "./bedrock";
+import { currentAiUsageContext, recordAiUsageEvent } from "@/lib/aiUsage";
 
 export type { AiChatMessage, AiContentBlock, AiFileBlock, AiModelRole } from "./gemini";
 
@@ -43,8 +45,9 @@ export type AiTextResult =
       fallbackReason?: string;
       modelFallbackFrom?: string;
       modelFallbackReason?: string;
+      geminiKeyAlias?: string;
     }
-  | { ok: false; error: string; provider?: AiProvider; model?: string };
+  | { ok: false; error: string; provider?: AiProvider; model?: string; geminiKeyAlias?: string };
 
 export type AiJsonResult<T> =
   | {
@@ -62,8 +65,9 @@ export type AiJsonResult<T> =
       repairModel?: string;
       originalProvider?: AiProvider;
       originalModel?: string;
+      geminiKeyAlias?: string;
     }
-  | { ok: false; error: string; provider?: AiProvider; model?: string; rawText?: string };
+  | { ok: false; error: string; provider?: AiProvider; model?: string; rawText?: string; geminiKeyAlias?: string };
 
 export type AiStreamResult =
   | {
@@ -75,8 +79,9 @@ export type AiStreamResult =
       fallbackReason?: string;
       modelFallbackFrom?: string;
       modelFallbackReason?: string;
+      geminiKeyAlias?: string;
     }
-  | { ok: false; error: string; provider?: AiProvider; model?: string };
+  | { ok: false; error: string; provider?: AiProvider; model?: string; geminiKeyAlias?: string };
 
 function errorCode(error: unknown) {
   if (typeof error === "object" && error !== null && "code" in error) {
@@ -113,7 +118,41 @@ function sleep(ms: number) {
 function isTransientAiError(error: unknown) {
   const code = errorCode(error);
   const status = errorStatus(error);
-  return code === "network" || code === "timeout" || code === "server" || status === 429 || status === 503;
+  return code === "network" || code === "timeout" || code === "server" || status === 503;
+}
+
+function isQuotaAiError(error: unknown) {
+  return errorStatus(error) === 429;
+}
+
+function quotaExceededMessage(error: unknown) {
+  const message = errorMessage(error);
+  return `AI quota exceeded. ${message}`;
+}
+
+async function logAiUsage(params: {
+  operation: string;
+  provider?: AiProvider;
+  model?: string;
+  status: "success" | "failure";
+  error?: string;
+  geminiKeyAlias?: string;
+}) {
+  const context = currentAiUsageContext();
+  if (!context) return;
+  if (context.suppressProviderUsageEvents) return;
+  await recordAiUsageEvent({
+    ...context,
+    metadata: {
+      ...(context.metadata ?? {}),
+      ...(params.geminiKeyAlias ? { geminiKeyAlias: params.geminiKeyAlias } : {}),
+    },
+    provider: params.provider ?? null,
+    model: params.model ?? null,
+    status: params.status,
+    errorCode: params.error ? params.operation : null,
+    errorMessage: params.error ?? null,
+  });
 }
 
 function configured(provider: AiProvider) {
@@ -172,12 +211,14 @@ async function callStreamProvider(provider: AiProvider, config: AiRequestConfig)
 async function geminiTextWithModelFallback(config: AiRequestConfig) {
   const primaryModel = geminiModelName(config.modelRole, config.model);
   try {
-    return { text: await geminiText(config), model: primaryModel };
+    const result = await geminiText(config);
+    return { text: result.text, model: primaryModel, geminiKeyAlias: result.keyAlias };
   } catch (error) {
     if (!isTransientAiError(error)) throw error;
     await sleep(1200);
     try {
-      return { text: await geminiText(config), model: primaryModel };
+      const result = await geminiText(config);
+      return { text: result.text, model: primaryModel, geminiKeyAlias: result.keyAlias };
     } catch (retryError) {
       if (!isTransientAiError(retryError)) throw retryError;
       const fallbackModel = geminiFallbackModelName(config.modelRole, primaryModel);
@@ -188,11 +229,13 @@ async function geminiTextWithModelFallback(config: AiRequestConfig) {
         toModel: fallbackModel,
         reason: errorMessage(retryError).slice(0, 500),
       });
+      const result = await geminiText({ ...config, model: fallbackModel });
       return {
-        text: await geminiText({ ...config, model: fallbackModel }),
+        text: result.text,
         model: fallbackModel,
         modelFallbackFrom: primaryModel,
         modelFallbackReason: errorMessage(retryError),
+        geminiKeyAlias: result.keyAlias,
       };
     }
   }
@@ -201,12 +244,14 @@ async function geminiTextWithModelFallback(config: AiRequestConfig) {
 async function geminiStreamWithModelFallback(config: AiRequestConfig) {
   const primaryModel = geminiModelName(config.modelRole, config.model);
   try {
-    return { stream: await geminiStream(config), model: primaryModel };
+    const result = await geminiStream(config);
+    return { stream: result.stream, model: primaryModel, geminiKeyAlias: result.keyAlias };
   } catch (error) {
     if (!isTransientAiError(error)) throw error;
     await sleep(1200);
     try {
-      return { stream: await geminiStream(config), model: primaryModel };
+      const result = await geminiStream(config);
+      return { stream: result.stream, model: primaryModel, geminiKeyAlias: result.keyAlias };
     } catch (retryError) {
       if (!isTransientAiError(retryError)) throw retryError;
       const fallbackModel = geminiFallbackModelName(config.modelRole, primaryModel);
@@ -217,11 +262,13 @@ async function geminiStreamWithModelFallback(config: AiRequestConfig) {
         toModel: fallbackModel,
         reason: errorMessage(retryError).slice(0, 500),
       });
+      const result = await geminiStream({ ...config, model: fallbackModel });
       return {
-        stream: await geminiStream({ ...config, model: fallbackModel }),
+        stream: result.stream,
         model: fallbackModel,
         modelFallbackFrom: primaryModel,
         modelFallbackReason: errorMessage(retryError),
+        geminiKeyAlias: result.keyAlias,
       };
     }
   }
@@ -230,7 +277,7 @@ async function geminiStreamWithModelFallback(config: AiRequestConfig) {
 async function withProviderFallback<T>(
   operation: string,
   config: AiRequestConfig,
-  call: (provider: AiProvider) => Promise<T & { model: string; modelFallbackFrom?: string; modelFallbackReason?: string }>
+  call: (provider: AiProvider) => Promise<T & { model: string; modelFallbackFrom?: string; modelFallbackReason?: string; geminiKeyAlias?: string }>
 ): Promise<(T & {
   provider: AiProvider;
   model: string;
@@ -238,7 +285,8 @@ async function withProviderFallback<T>(
   fallbackReason?: string;
   modelFallbackFrom?: string;
   modelFallbackReason?: string;
-}) | { error: string; provider?: AiProvider; model?: string }> {
+  geminiKeyAlias?: string;
+}) | { error: string; provider?: AiProvider; model?: string; geminiKeyAlias?: string }> {
   const primary = primaryProvider(config);
   const fallback = fallbackProvider(primary);
   const candidates = [primary, fallback].filter(Boolean) as AiProvider[];
@@ -298,6 +346,14 @@ async function withProviderFallback<T>(
           primaryFailureReason = errorMessage(error);
         }
         logAiFailure(provider, operation, error);
+        if (isQuotaAiError(error)) {
+          return {
+            error: quotaExceededMessage(error),
+            provider,
+            model: modelFor(provider, config),
+            geminiKeyAlias: geminiErrorKeyAlias(error),
+          };
+        }
         if (attempt === 0 && isTransientAiError(error)) continue;
         break;
       }
@@ -308,6 +364,7 @@ async function withProviderFallback<T>(
     error: sawConfiguredProvider && lastError ? errorMessage(lastError) : "AI service is not configured.",
     provider: lastProvider,
     model: lastProvider ? modelFor(lastProvider, config) : undefined,
+    geminiKeyAlias: geminiErrorKeyAlias(lastError),
   };
 }
 
@@ -356,8 +413,23 @@ ${clipped}`;
 export async function generateText(config: AiRequestConfig): Promise<AiTextResult> {
   const result = await withProviderFallback("generateText", config, (provider) => callTextProvider(provider, config));
   if ("error" in result) {
-    return { ok: false, error: result.error, provider: result.provider, model: result.model };
+    await logAiUsage({
+      operation: "generateText",
+      provider: result.provider,
+      model: result.model,
+      status: "failure",
+      error: result.error,
+      geminiKeyAlias: result.geminiKeyAlias,
+    });
+    return { ok: false, error: result.error, provider: result.provider, model: result.model, geminiKeyAlias: result.geminiKeyAlias };
   }
+  await logAiUsage({
+    operation: "generateText",
+    provider: result.provider,
+    model: result.model,
+    status: "success",
+    geminiKeyAlias: result.geminiKeyAlias,
+  });
   return {
     ok: true,
     text: result.text,
@@ -367,6 +439,7 @@ export async function generateText(config: AiRequestConfig): Promise<AiTextResul
     fallbackReason: result.fallbackReason,
     modelFallbackFrom: result.modelFallbackFrom,
     modelFallbackReason: result.modelFallbackReason,
+    geminiKeyAlias: result.geminiKeyAlias,
   };
 }
 
@@ -374,9 +447,24 @@ export async function generateJson<T>(config: AiRequestConfig): Promise<AiJsonRe
   const jsonConfig: AiRequestConfig = { ...config, responseMimeType: "application/json" };
   const result = await withProviderFallback("generateJson", jsonConfig, (provider) => callTextProvider(provider, jsonConfig));
   if ("error" in result) {
-    return { ok: false, error: result.error, provider: result.provider, model: result.model };
+    await logAiUsage({
+      operation: "generateJson",
+      provider: result.provider,
+      model: result.model,
+      status: "failure",
+      error: result.error,
+      geminiKeyAlias: result.geminiKeyAlias,
+    });
+    return { ok: false, error: result.error, provider: result.provider, model: result.model, geminiKeyAlias: result.geminiKeyAlias };
   }
   try {
+    await logAiUsage({
+      operation: "generateJson",
+      provider: result.provider,
+      model: result.model,
+      status: "success",
+      geminiKeyAlias: result.geminiKeyAlias,
+    });
     return {
       ok: true,
       data: parseJsonText<T>(result.text),
@@ -387,6 +475,7 @@ export async function generateJson<T>(config: AiRequestConfig): Promise<AiJsonRe
       modelFallbackFrom: result.modelFallbackFrom,
       modelFallbackReason: result.modelFallbackReason,
       rawText: result.text,
+      geminiKeyAlias: result.geminiKeyAlias,
     };
   } catch (error) {
     logAiFailure(result.provider, "parseJson", error);
@@ -417,6 +506,7 @@ export async function generateJson<T>(config: AiRequestConfig): Promise<AiJsonRe
           repairModel: repaired.model,
           originalProvider: result.provider,
           originalModel: result.model,
+          geminiKeyAlias: result.geminiKeyAlias,
         };
       } catch (repairError) {
         logAiFailure(repaired.provider, "parseRepairedJson", repairError);
@@ -436,8 +526,23 @@ export async function generateJson<T>(config: AiRequestConfig): Promise<AiJsonRe
 export async function streamText(config: AiRequestConfig): Promise<AiStreamResult> {
   const result = await withProviderFallback("streamText", config, (provider) => callStreamProvider(provider, config));
   if ("error" in result) {
-    return { ok: false, error: result.error, provider: result.provider, model: result.model };
+    await logAiUsage({
+      operation: "streamText",
+      provider: result.provider,
+      model: result.model,
+      status: "failure",
+      error: result.error,
+      geminiKeyAlias: result.geminiKeyAlias,
+    });
+    return { ok: false, error: result.error, provider: result.provider, model: result.model, geminiKeyAlias: result.geminiKeyAlias };
   }
+  await logAiUsage({
+    operation: "streamText",
+    provider: result.provider,
+    model: result.model,
+    status: "success",
+    geminiKeyAlias: result.geminiKeyAlias,
+  });
   return {
     ok: true,
     stream: result.stream,
@@ -447,6 +552,7 @@ export async function streamText(config: AiRequestConfig): Promise<AiStreamResul
     fallbackReason: result.fallbackReason,
     modelFallbackFrom: result.modelFallbackFrom,
     modelFallbackReason: result.modelFallbackReason,
+    geminiKeyAlias: result.geminiKeyAlias,
   };
 }
 

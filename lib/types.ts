@@ -46,7 +46,6 @@ export type QuizOption = {
   position: number | null;
 };
 
-export type AnswerConfidence = "confident" | "unsure" | "guessed";
 
 export type WrittenAnswerGradeVerdict =
   | "correct"

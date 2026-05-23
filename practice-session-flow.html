@@ -1,0 +1,1136 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Practice Session Flow — Jabu Study</title>
+<style>
+:root {
+  --bg:        oklch(98% 0.004 270);
+  --surface:   oklch(100% 0 0);
+  --fg:        oklch(20% 0.02 270);
+  --muted:     oklch(52% 0.018 270);
+  --border:    oklch(90% 0.006 270);
+  --accent:    oklch(52% 0.22 290);
+  --accent-lt: oklch(95% 0.06 290);
+  --accent-dk: oklch(42% 0.22 290);
+  --green:     oklch(55% 0.16 145);
+  --green-lt:  oklch(95% 0.06 145);
+  --amber:     oklch(68% 0.18 75);
+  --amber-lt:  oklch(96% 0.06 75);
+  --red:       oklch(55% 0.18 25);
+  --red-lt:    oklch(96% 0.06 25);
+  --font: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+}
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  font-family: var(--font);
+  background: oklch(14% 0.02 270);
+  min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-start;
+  padding: 28px 16px 24px;
+  gap: 20px;
+}
+
+/* ── Demo label ── */
+.demo-label {
+  color: rgba(255,255,255,0.4);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+  text-align: center;
+}
+
+/* ── Phone frame ── */
+.phone {
+  width: 390px;
+  height: 760px;
+  background: var(--bg);
+  border-radius: 50px;
+  border: 9px solid oklch(20% 0.02 270);
+  box-shadow:
+    0 0 0 1px rgba(255,255,255,0.06),
+    0 40px 80px rgba(0,0,0,0.55);
+  overflow: hidden;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  flex-shrink: 0;
+}
+
+/* Dynamic Island */
+.phone::before {
+  content: '';
+  position: absolute;
+  top: 11px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 118px;
+  height: 32px;
+  background: oklch(20% 0.02 270);
+  border-radius: 18px;
+  z-index: 50;
+}
+
+/* ── Screen root ── */
+.screen {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  position: relative;
+  background: var(--bg);
+}
+
+/* ── Session top bar ── */
+.session-bar {
+  padding: 52px 16px 12px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.session-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.session-course {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--accent);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.session-close {
+  width: 26px; height: 26px;
+  border-radius: 50%;
+  background: oklch(95% 0.004 270);
+  border: none;
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 1;
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.tally-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.tally-q {
+  font-size: 14px;
+  font-weight: 800;
+  color: var(--fg);
+}
+
+.tally-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 9px;
+  border-radius: 999px;
+  background: var(--green-lt);
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--green);
+}
+
+.tally-pct {
+  margin-left: auto;
+  font-size: 14px;
+  font-weight: 800;
+  color: var(--fg);
+  font-variant-numeric: tabular-nums;
+}
+
+.prog-track {
+  height: 4px;
+  background: var(--border);
+  border-radius: 99px;
+  overflow: hidden;
+}
+
+.prog-fill {
+  height: 100%;
+  background: var(--accent);
+  border-radius: 99px;
+  transition: width .5s cubic-bezier(.4,0,.2,1);
+}
+
+/* ── Question scroll area ── */
+.q-area {
+  flex: 1;
+  overflow-y: auto;
+  padding: 14px 14px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  -webkit-overflow-scrolling: touch;
+}
+
+.batch-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: var(--accent-lt);
+  border: 1px solid oklch(87% 0.08 290);
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--accent);
+  width: fit-content;
+  letter-spacing: .02em;
+}
+
+.q-card {
+  background: var(--surface);
+  border-radius: 16px;
+  border: 1px solid var(--border);
+  padding: 14px;
+}
+
+.q-source {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--muted);
+  margin-bottom: 10px;
+}
+.q-source svg { width: 12px; height: 12px; flex-shrink: 0; }
+
+.q-text {
+  font-size: 15px;
+  font-weight: 700;
+  line-height: 1.5;
+  color: var(--fg);
+}
+
+/* ── Options ── */
+.options {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.opt {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 12px 13px;
+  border-radius: 12px;
+  border: 1.5px solid var(--border);
+  background: var(--surface);
+  cursor: pointer;
+  transition: border-color .12s, background .12s;
+  text-align: left;
+  width: 100%;
+  font-family: var(--font);
+}
+
+.opt:hover:not([disabled]) { border-color: var(--accent); background: var(--accent-lt); }
+
+.opt-letter {
+  width: 24px; height: 24px;
+  border-radius: 50%;
+  background: oklch(94% 0.004 270);
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 800;
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  transition: background .12s, color .12s;
+}
+
+.opt-text {
+  font-size: 13.5px;
+  line-height: 1.5;
+  color: var(--fg);
+  font-weight: 500;
+  flex: 1;
+}
+
+.opt.correct { border-color: var(--green); background: var(--green-lt); }
+.opt.correct .opt-letter { background: var(--green); color: white; }
+.opt.correct .opt-text { color: oklch(38% 0.12 145); font-weight: 600; }
+
+.opt.wrong { border-color: var(--red); background: var(--red-lt); }
+.opt.wrong .opt-letter { background: var(--red); color: white; }
+.opt.wrong .opt-text { color: oklch(38% 0.14 25); }
+
+/* ── Feedback ── */
+.feedback {
+  display: none;
+  padding: 11px 13px;
+  border-radius: 12px;
+  gap: 9px;
+  align-items: flex-start;
+}
+.feedback.show { display: flex; }
+.feedback.correct { background: var(--green-lt); }
+.feedback.wrong { background: var(--red-lt); }
+.feedback-icon { font-size: 17px; flex-shrink: 0; line-height: 1.3; }
+.feedback-body { font-size: 12.5px; line-height: 1.55; color: var(--fg); }
+.feedback-body strong { font-weight: 700; }
+
+.continue-btn {
+  width: 100%;
+  padding: 14px;
+  border-radius: 13px;
+  background: var(--accent);
+  color: white;
+  font-size: 15px;
+  font-weight: 800;
+  border: none;
+  cursor: pointer;
+  display: none;
+  transition: background .12s;
+}
+.continue-btn.show { display: block; }
+.continue-btn:hover { background: var(--accent-dk); }
+
+/* ── Batch complete sheet ── */
+.sheet-bg {
+  position: absolute;
+  inset: 0;
+  background: rgba(0,0,0,0.38);
+  z-index: 20;
+  display: none;
+  align-items: flex-end;
+}
+.sheet-bg.show { display: flex; animation: fadein .2s ease; }
+
+@keyframes fadein { from { opacity: 0; } to { opacity: 1; } }
+
+.sheet {
+  width: 100%;
+  background: var(--surface);
+  border-radius: 22px 22px 0 0;
+  padding-bottom: 28px;
+  max-height: 88%;
+  overflow-y: auto;
+  animation: slideup .28s cubic-bezier(.4,0,.2,1);
+}
+@keyframes slideup { from { transform: translateY(100%); } to { transform: translateY(0); } }
+
+.sheet-pill {
+  width: 36px; height: 4px;
+  background: var(--border);
+  border-radius: 99px;
+  margin: 10px auto 0;
+}
+
+.sheet-head {
+  padding: 14px 16px 12px;
+  border-bottom: 1px solid var(--border);
+}
+.sheet-title { font-size: 17px; font-weight: 800; color: var(--fg); margin-bottom: 2px; }
+.sheet-sub { font-size: 12.5px; color: var(--muted); }
+
+.sheet-body { padding: 14px 16px; display: flex; flex-direction: column; gap: 12px; }
+
+/* Score row */
+.score-row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 13px;
+  background: oklch(97% 0.004 270);
+  border-radius: 14px;
+  border: 1px solid var(--border);
+}
+
+.score-ring-wrap {
+  position: relative;
+  width: 52px; height: 52px;
+  flex-shrink: 0;
+}
+.score-ring-wrap svg { width: 100%; height: 100%; transform: rotate(-90deg); }
+.ring-bg { fill: none; stroke: var(--border); stroke-width: 5; }
+.ring-fill {
+  fill: none;
+  stroke: var(--green);
+  stroke-width: 5;
+  stroke-linecap: round;
+  stroke-dasharray: 113;
+  stroke-dashoffset: 113;
+  transition: stroke-dashoffset .9s ease;
+}
+.ring-label {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  font-weight: 800;
+  color: var(--fg);
+}
+
+.score-info { flex: 1; }
+.score-main { font-size: 22px; font-weight: 800; color: var(--fg); line-height: 1; }
+.score-main em { font-size: 13px; font-weight: 600; color: var(--muted); font-style: normal; }
+.score-running { font-size: 11px; color: var(--muted); font-weight: 600; margin-top: 3px; }
+
+/* Weak areas */
+.weak-head {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .08em;
+  color: var(--muted);
+}
+
+.weak-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: var(--red-lt);
+  border: 1px solid oklch(88% 0.06 25);
+}
+.weak-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--red); flex-shrink: 0; }
+.weak-name { flex: 1; font-size: 13px; font-weight: 700; color: var(--fg); }
+.weak-score { font-size: 12px; font-weight: 700; color: var(--red); font-variant-numeric: tabular-nums; }
+
+/* Generate config block */
+.gen-config {
+  padding: 13px;
+  background: var(--accent-lt);
+  border-radius: 14px;
+  border: 1px solid oklch(87% 0.08 290);
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+}
+
+.gen-config-title {
+  font-size: 12px;
+  font-weight: 800;
+  color: var(--accent-dk);
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.gen-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 12.5px;
+}
+.gen-key { color: var(--muted); font-weight: 600; }
+.gen-val { color: var(--fg); font-weight: 700; }
+.gen-val.hi { color: var(--accent); }
+
+.gen-cost-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 7px 11px;
+  background: var(--surface);
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  font-size: 12px;
+}
+.gen-cost-lbl { color: var(--muted); font-weight: 600; }
+.gen-cost-val { color: var(--amber); font-weight: 800; }
+
+.gen-btn {
+  width: 100%;
+  padding: 13px;
+  border-radius: 13px;
+  background: var(--accent);
+  color: white;
+  font-size: 14px;
+  font-weight: 800;
+  border: none;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  transition: background .12s;
+}
+.gen-btn:hover { background: var(--accent-dk); }
+.gen-btn svg { width: 15px; height: 15px; }
+
+/* ── Generating overlay ── */
+.gen-overlay {
+  position: absolute;
+  inset: 0;
+  background: var(--bg);
+  z-index: 30;
+  display: none;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 18px;
+  padding: 28px;
+}
+.gen-overlay.show { display: flex; }
+
+.spinner {
+  width: 48px; height: 48px;
+  border: 3px solid var(--border);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: spin .65s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+.gen-ov-title {
+  font-size: 17px;
+  font-weight: 800;
+  color: var(--fg);
+  text-align: center;
+}
+.gen-ov-sub {
+  font-size: 12.5px;
+  color: var(--muted);
+  text-align: center;
+  line-height: 1.6;
+}
+
+.gen-stream {
+  width: 100%;
+  background: var(--surface);
+  border-radius: 13px;
+  border: 1px solid var(--border);
+  padding: 11px 13px;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  max-height: 200px;
+  overflow: hidden;
+}
+
+.stream-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--muted);
+  line-height: 1.4;
+  animation: appear .25s ease both;
+}
+.stream-item.ready { color: var(--fg); }
+@keyframes appear { from { opacity: 0; transform: translateY(3px); } to { opacity: 1; transform: none; } }
+
+.stream-dot {
+  width: 6px; height: 6px;
+  border-radius: 50%;
+  background: var(--border);
+  flex-shrink: 0;
+  margin-top: 4px;
+}
+.stream-item.ready .stream-dot { background: var(--green); }
+
+/* ── Resume view ── */
+.resume-view {
+  position: absolute;
+  inset: 0;
+  background: var(--bg);
+  z-index: 40;
+  display: none;
+  flex-direction: column;
+}
+.resume-view.show { display: flex; }
+
+.resume-top {
+  padding: 52px 16px 16px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+}
+
+.resume-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 9px;
+  border-radius: 999px;
+  background: var(--amber-lt);
+  border: 1px solid oklch(87% 0.07 75);
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--amber);
+  margin-bottom: 9px;
+}
+
+.resume-title { font-size: 18px; font-weight: 800; color: var(--fg); margin-bottom: 3px; }
+.resume-sub { font-size: 12.5px; color: var(--muted); line-height: 1.5; }
+
+.resume-body { padding: 14px 16px; display: flex; flex-direction: column; gap: 12px; overflow-y: auto; flex: 1; }
+
+.stats-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+}
+
+.stat-card {
+  background: var(--surface);
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  padding: 11px;
+  text-align: center;
+}
+.stat-val {
+  display: block;
+  font-size: 22px;
+  font-weight: 800;
+  color: var(--fg);
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+}
+.stat-lbl {
+  display: block;
+  font-size: 10px;
+  color: var(--muted);
+  font-weight: 600;
+  margin-top: 3px;
+}
+
+.prog-card {
+  background: var(--surface);
+  border-radius: 13px;
+  border: 1px solid var(--border);
+  padding: 13px;
+}
+.prog-card-title {
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--fg);
+  margin-bottom: 9px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.prog-card-title span { font-weight: 600; color: var(--muted); font-size: 12px; }
+
+.prog-track-lg {
+  height: 8px;
+  background: var(--border);
+  border-radius: 99px;
+  overflow: hidden;
+  margin-bottom: 7px;
+}
+.prog-fill-lg {
+  height: 100%;
+  background: linear-gradient(90deg, var(--accent), oklch(57% 0.22 305));
+  border-radius: 99px;
+}
+
+.batches-row {
+  display: flex;
+  gap: 6px;
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--muted);
+}
+.batch-chip {
+  padding: 3px 8px;
+  border-radius: 6px;
+  background: oklch(95% 0.004 270);
+  border: 1px solid var(--border);
+}
+.batch-chip.done { background: var(--green-lt); color: var(--green); border-color: oklch(88% 0.06 145); }
+.batch-chip.pending { background: var(--accent-lt); color: var(--accent); border-color: oklch(87% 0.08 290); }
+
+.resume-actions { display: flex; gap: 8px; }
+
+.resume-continue {
+  flex: 2;
+  padding: 14px;
+  border-radius: 13px;
+  background: var(--accent);
+  color: white;
+  font-size: 14px;
+  font-weight: 800;
+  border: none;
+  cursor: pointer;
+  transition: background .12s;
+}
+.resume-continue:hover { background: var(--accent-dk); }
+
+.resume-fresh {
+  flex: 1;
+  padding: 14px;
+  border-radius: 13px;
+  background: var(--surface);
+  border: 1.5px solid var(--border);
+  color: var(--muted);
+  font-size: 12.5px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background .12s;
+}
+.resume-fresh:hover { background: oklch(95% 0.004 270); }
+
+.expire-note {
+  text-align: center;
+  font-size: 11.5px;
+  color: var(--muted);
+  line-height: 1.65;
+}
+.expire-note strong { color: var(--fg); font-weight: 700; }
+
+/* ── Demo controls ── */
+.demo-row {
+  display: flex;
+  gap: 7px;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+.demo-btn {
+  padding: 7px 14px;
+  border-radius: 999px;
+  border: 1px solid rgba(255,255,255,0.12);
+  background: rgba(255,255,255,0.07);
+  color: rgba(255,255,255,0.55);
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+  font-family: var(--font);
+  transition: background .12s, color .12s;
+}
+.demo-btn:hover { background: rgba(255,255,255,0.14); color: rgba(255,255,255,0.8); }
+.demo-btn.on { background: rgba(255,255,255,0.18); color: white; border-color: rgba(255,255,255,0.25); }
+
+/* ── Mobile full-screen ── */
+@media (max-width: 430px) {
+  body { padding: 0; background: var(--bg); }
+  .demo-label, .demo-row { display: none; }
+  .phone {
+    width: 100%; height: 100dvh;
+    border-radius: 0; border: none;
+    box-shadow: none;
+  }
+  .phone::before { display: none; }
+  .session-bar { padding-top: 16px; }
+}
+</style>
+</head>
+<body>
+
+<div class="demo-label">PRACTICE SESSION FLOW &mdash; JABU STUDY PROTOTYPE</div>
+
+<div class="phone">
+  <div class="screen">
+
+    <!-- Always-visible session bar -->
+    <div class="session-bar">
+      <div class="session-meta">
+        <div class="session-course">Biochemistry 301 &mdash; Chapter 7</div>
+        <button class="session-close">&#x2715;</button>
+      </div>
+      <div class="tally-row">
+        <span class="tally-q" id="tally-q">Q7 of 12</span>
+        <span class="tally-pill" id="tally-pill">
+          <!-- check icon -->
+          <svg width="11" height="11" viewBox="0 0 11 11" fill="none"><circle cx="5.5" cy="5.5" r="4.5" stroke="currentColor" stroke-width="1.4"/><path d="M3.5 5.5l1.4 1.4 2.6-2.8" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          <span id="tally-n">5</span> correct
+        </span>
+        <span class="tally-pct" id="tally-pct">71%</span>
+      </div>
+      <div class="prog-track">
+        <div class="prog-fill" id="prog-fill" style="width:58%"></div>
+      </div>
+    </div>
+
+    <!-- Scrollable question area -->
+    <div class="q-area" id="q-area">
+
+      <div class="batch-tag" id="batch-tag">
+        <!-- star icon -->
+        <svg width="9" height="9" viewBox="0 0 9 9" fill="none"><path d="M4.5 1L5.6 3.4l2.6.4L6.3 5.6l.5 2.5-2.3-1.2-2.3 1.2.5-2.5L.8 3.8l2.6-.4L4.5 1z" fill="currentColor"/></svg>
+        Batch 1 &mdash; 12 questions
+      </div>
+
+      <div class="q-card">
+        <div class="q-source">
+          <svg viewBox="0 0 12 12" fill="none"><rect x="1" y="1" width="10" height="10" rx="2" stroke="currentColor" stroke-width="1.2"/><path d="M3.5 4h5M3.5 6h5M3.5 8h3" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/></svg>
+          Page 4, Section 2.3
+        </div>
+        <div class="q-text" id="q-text">
+          What is the primary function of the electron transport chain in cellular respiration?
+        </div>
+      </div>
+
+      <div class="options" id="options">
+        <button class="opt" onclick="pick(this,false)">
+          <span class="opt-letter">A</span>
+          <span class="opt-text">To break down glucose directly into CO&#x2082; and water</span>
+        </button>
+        <button class="opt" onclick="pick(this,false)">
+          <span class="opt-letter">B</span>
+          <span class="opt-text">To synthesise ATP directly from ADP and phosphate without a proton gradient</span>
+        </button>
+        <button class="opt" onclick="pick(this,true)">
+          <span class="opt-letter">C</span>
+          <span class="opt-text">To pump protons across the inner mitochondrial membrane, building a gradient that drives ATP synthase</span>
+        </button>
+        <button class="opt" onclick="pick(this,false)">
+          <span class="opt-letter">D</span>
+          <span class="opt-text">To convert pyruvate into acetyl-CoA in the mitochondrial matrix</span>
+        </button>
+      </div>
+
+      <div class="feedback" id="feedback">
+        <div class="feedback-icon" id="fb-icon">&#x2713;</div>
+        <div class="feedback-body" id="fb-body"></div>
+      </div>
+
+      <button class="continue-btn" id="continue-btn" onclick="openBatchSheet()">
+        Continue &rarr;
+      </button>
+
+    </div>
+
+    <!-- Batch complete sheet -->
+    <div class="sheet-bg" id="sheet-bg">
+      <div class="sheet">
+        <div class="sheet-pill"></div>
+        <div class="sheet-head">
+          <div class="sheet-title">Batch 1 done &#x1F389;</div>
+          <div class="sheet-sub">12 questions &mdash; Biochemistry 301, Ch. 7</div>
+        </div>
+        <div class="sheet-body">
+
+          <div class="score-row">
+            <div class="score-ring-wrap">
+              <svg viewBox="0 0 44 44">
+                <circle class="ring-bg" cx="22" cy="22" r="18"/>
+                <circle class="ring-fill" id="ring-fill" cx="22" cy="22" r="18"/>
+              </svg>
+              <div class="ring-label">75%</div>
+            </div>
+            <div class="score-info">
+              <div class="score-main">9 <em>/ 12 correct</em></div>
+              <div class="score-running">Running total: 9 / 12</div>
+            </div>
+          </div>
+
+          <div>
+            <div class="weak-head" style="margin-bottom:7px">Needs more practice</div>
+            <div style="display:flex;flex-direction:column;gap:6px">
+              <div class="weak-item">
+                <div class="weak-dot"></div>
+                <div class="weak-name">Krebs Cycle</div>
+                <div class="weak-score">0 / 3</div>
+              </div>
+              <div class="weak-item">
+                <div class="weak-dot"></div>
+                <div class="weak-name">ATP Synthesis</div>
+                <div class="weak-score">1 / 2</div>
+              </div>
+            </div>
+          </div>
+
+          <div class="gen-config">
+            <div class="gen-config-title">
+              <svg width="13" height="13" viewBox="0 0 13 13" fill="none"><path d="M6.5 1l1.4 2.9 3.2.5L8.9 6.7l.5 3-2.9-1.5-2.9 1.5.5-3L1.9 4.4l3.2-.5L6.5 1z" fill="currentColor"/></svg>
+              Generate more &mdash; targeting weak areas
+            </div>
+            <div class="gen-row">
+              <span class="gen-key">Focus</span>
+              <span class="gen-val hi">Krebs Cycle + ATP Synthesis</span>
+            </div>
+            <div class="gen-row">
+              <span class="gen-key">Questions</span>
+              <span class="gen-val">10 MCQ</span>
+            </div>
+            <div class="gen-row">
+              <span class="gen-key">Difficulty</span>
+              <span class="gen-val">Same level</span>
+            </div>
+            <div class="gen-cost-row">
+              <span class="gen-cost-lbl">Cost</span>
+              <span class="gen-cost-val">4 credits &nbsp;&bull;&nbsp; 8 remaining</span>
+            </div>
+          </div>
+
+          <button class="gen-btn" onclick="startGen()">
+            <svg viewBox="0 0 15 15" fill="none"><path d="M7.5 1.5l1.6 3.3 3.6.5-2.6 2.6.6 3.6-3.2-1.7-3.2 1.7.6-3.6L2.3 5.3l3.6-.5 1.6-3.3z" fill="currentColor"/></svg>
+            Generate 10 more questions
+          </button>
+
+        </div>
+      </div>
+    </div>
+
+    <!-- Generating overlay -->
+    <div class="gen-overlay" id="gen-overlay">
+      <div class="spinner"></div>
+      <div class="gen-ov-title">Generating 10 questions</div>
+      <div class="gen-ov-sub">Targeting your weak areas<br>from this session</div>
+      <div class="gen-stream" id="gen-stream"></div>
+    </div>
+
+    <!-- Resume view (separate entry state) -->
+    <div class="resume-view" id="resume-view">
+      <div class="resume-top">
+        <div class="resume-tag">
+          <!-- clock icon -->
+          <svg width="9" height="9" viewBox="0 0 9 9" fill="none"><circle cx="4.5" cy="4.5" r="3.8" stroke="currentColor" stroke-width="1.3"/><path d="M4.5 2.8v2l1.2.9" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>
+          Paused 3 hours ago
+        </div>
+        <div class="resume-title">Session in progress</div>
+        <div class="resume-sub">Biochemistry 301 &mdash; Chapter 7: Cellular Respiration</div>
+      </div>
+
+      <div class="resume-body">
+
+        <div class="stats-grid">
+          <div class="stat-card">
+            <span class="stat-val">22</span>
+            <span class="stat-lbl">Answered</span>
+          </div>
+          <div class="stat-card">
+            <span class="stat-val" style="color:var(--green)">16</span>
+            <span class="stat-lbl">Correct</span>
+          </div>
+          <div class="stat-card">
+            <span class="stat-val" style="color:var(--accent)">73%</span>
+            <span class="stat-lbl">Score</span>
+          </div>
+        </div>
+
+        <div class="prog-card">
+          <div class="prog-card-title">
+            Your progress
+            <span>Q1&ndash;Q22 answered</span>
+          </div>
+          <div class="prog-track-lg">
+            <div class="prog-fill-lg" style="width:100%"></div>
+          </div>
+          <div class="batches-row">
+            <div class="batch-chip done">Batch 1: 9/12 &#x2713;</div>
+            <div class="batch-chip done">Batch 2: 7/10 &#x2713;</div>
+            <div class="batch-chip pending">Batch 3 &rarr;</div>
+          </div>
+        </div>
+
+        <div class="resume-actions">
+          <button class="resume-continue" onclick="resumeToAnswering()">Continue from Q23 &rarr;</button>
+          <button class="resume-fresh">Start fresh</button>
+        </div>
+
+        <div class="expire-note">
+          Session resumes if returned within 24 hours.<br>
+          <strong>8 credits remaining</strong>
+        </div>
+
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- Demo controls -->
+<div class="demo-row">
+  <button class="demo-btn on" id="db-q" onclick="demo('q')">Answering Q7</button>
+  <button class="demo-btn" id="db-batch" onclick="demo('batch')">Batch done</button>
+  <button class="demo-btn" id="db-resume" onclick="demo('resume')">Resume prompt</button>
+</div>
+
+<script>
+// ── State ────────────────────────────────────────────────────────────────
+let picked = false;
+
+function pick(el, correct) {
+  if (picked) return;
+  picked = true;
+
+  document.querySelectorAll('.opt').forEach(o => { o.disabled = true; });
+
+  const fb = document.getElementById('feedback');
+  const fbIcon = document.getElementById('fb-icon');
+  const fbBody = document.getElementById('fb-body');
+  const btn = document.getElementById('continue-btn');
+
+  if (correct) {
+    el.classList.add('correct');
+    fb.classList.add('correct', 'show');
+    fbIcon.textContent = '✓';
+    fbBody.innerHTML = '<strong>Correct!</strong> The ETC pumps H⁺ ions into the intermembrane space. The resulting gradient drives ATP synthase to produce ATP.';
+  } else {
+    el.classList.add('wrong');
+    document.querySelectorAll('.opt').forEach(o => {
+      if (o.getAttribute('onclick') && o.getAttribute('onclick').includes('true'))
+        o.classList.add('correct');
+    });
+    fb.classList.add('wrong', 'show');
+    fbIcon.textContent = '✗';
+    fbBody.innerHTML = '<strong>Not quite.</strong> Option C is correct — the ETC pumps protons to create the gradient that powers ATP synthase.';
+  }
+
+  btn.classList.add('show');
+}
+
+function openBatchSheet() {
+  document.getElementById('sheet-bg').classList.add('show');
+  setTimeout(() => {
+    // 75% filled → offset = 113 * (1 - 0.75) = 28.25
+    document.getElementById('ring-fill').style.strokeDashoffset = 28;
+  }, 80);
+  setDemo('db-batch');
+}
+
+const STREAM_QS = [
+  'What is the net ATP yield from the Krebs cycle per glucose molecule?',
+  'Where in the cell does the Krebs cycle take place?',
+  'How many NADH are produced per acetyl-CoA in the Krebs cycle?',
+  'What is the role of oxaloacetate in the Krebs cycle?',
+  'Which enzyme catalyses the first step of the Krebs cycle?',
+];
+
+function startGen() {
+  document.getElementById('sheet-bg').classList.remove('show');
+  const ov = document.getElementById('gen-overlay');
+  ov.classList.add('show');
+
+  const stream = document.getElementById('gen-stream');
+  stream.innerHTML = '';
+
+  STREAM_QS.forEach((txt, i) => {
+    setTimeout(() => {
+      const div = document.createElement('div');
+      div.className = 'stream-item';
+      div.innerHTML = `<div class="stream-dot"></div><span>${txt}</span>`;
+      stream.appendChild(div);
+      setTimeout(() => div.classList.add('ready'), 280);
+      if (i === STREAM_QS.length - 1) setTimeout(loadBatch2, 1000);
+    }, i * 380);
+  });
+}
+
+function loadBatch2() {
+  document.getElementById('gen-overlay').classList.remove('show');
+
+  // Update tally
+  document.getElementById('tally-q').textContent = 'Q13 of 22';
+  document.getElementById('tally-n').textContent = '9';
+  document.getElementById('tally-pct').textContent = '75%';
+  document.getElementById('prog-fill').style.width = '59%';
+
+  // New batch tag
+  document.getElementById('batch-tag').innerHTML = `
+    <svg width="9" height="9" viewBox="0 0 9 9" fill="none"><path d="M4.5 1L5.6 3.4l2.6.4L6.3 5.6l.5 2.5-2.3-1.2-2.3 1.2.5-2.5L.8 3.8l2.6-.4L4.5 1z" fill="currentColor"/></svg>
+    Batch 2 &mdash; targeting Krebs Cycle + ATP Synthesis
+  `;
+
+  // New question
+  document.getElementById('q-text').textContent =
+    'What is the net yield of GTP (or ATP) produced directly by the Krebs cycle per molecule of glucose?';
+
+  // Reset options
+  document.getElementById('options').innerHTML = `
+    <button class="opt" onclick="pick(this,true)">
+      <span class="opt-letter">A</span>
+      <span class="opt-text">2 GTP — one per acetyl-CoA turn, two turns per glucose</span>
+    </button>
+    <button class="opt" onclick="pick(this,false)">
+      <span class="opt-letter">B</span>
+      <span class="opt-text">32 ATP — the full aerobic yield including oxidative phosphorylation</span>
+    </button>
+    <button class="opt" onclick="pick(this,false)">
+      <span class="opt-letter">C</span>
+      <span class="opt-text">4 ATP — two from glycolysis and two from the Krebs cycle</span>
+    </button>
+    <button class="opt" onclick="pick(this,false)">
+      <span class="opt-letter">D</span>
+      <span class="opt-text">10 ATP — counting all NADH converted in the cycle directly</span>
+    </button>
+  `;
+
+  // Reset state
+  picked = false;
+  const fb = document.getElementById('feedback');
+  fb.className = 'feedback';
+  document.getElementById('continue-btn').className = 'continue-btn';
+
+  // Scroll to top of q-area
+  document.getElementById('q-area').scrollTop = 0;
+
+  setDemo('db-q');
+}
+
+function resumeToAnswering() {
+  document.getElementById('resume-view').classList.remove('show');
+  demo('q');
+}
+
+// ── Demo switcher ────────────────────────────────────────────────────────
+function demo(state) {
+  document.getElementById('sheet-bg').classList.remove('show');
+  document.getElementById('gen-overlay').classList.remove('show');
+  document.getElementById('resume-view').classList.remove('show');
+
+  if (state === 'batch') {
+    document.getElementById('sheet-bg').classList.add('show');
+    setTimeout(() => {
+      document.getElementById('ring-fill').style.strokeDashoffset = 28;
+    }, 80);
+    setDemo('db-batch');
+  } else if (state === 'resume') {
+    document.getElementById('resume-view').classList.add('show');
+    setDemo('db-resume');
+  } else {
+    // Reset to answering Q7
+    document.getElementById('tally-q').textContent = 'Q7 of 12';
+    document.getElementById('tally-n').textContent = '5';
+    document.getElementById('tally-pct').textContent = '71%';
+    document.getElementById('prog-fill').style.width = '58%';
+    document.getElementById('batch-tag').innerHTML = `
+      <svg width="9" height="9" viewBox="0 0 9 9" fill="none"><path d="M4.5 1L5.6 3.4l2.6.4L6.3 5.6l.5 2.5-2.3-1.2-2.3 1.2.5-2.5L.8 3.8l2.6-.4L4.5 1z" fill="currentColor"/></svg>
+      Batch 1 &mdash; 12 questions
+    `;
+    document.getElementById('q-text').textContent =
+      'What is the primary function of the electron transport chain in cellular respiration?';
+    document.getElementById('options').innerHTML = `
+      <button class="opt" onclick="pick(this,false)"><span class="opt-letter">A</span><span class="opt-text">To break down glucose directly into CO&#x2082; and water</span></button>
+      <button class="opt" onclick="pick(this,false)"><span class="opt-letter">B</span><span class="opt-text">To synthesise ATP directly from ADP and phosphate without a proton gradient</span></button>
+      <button class="opt" onclick="pick(this,true)"><span class="opt-letter">C</span><span class="opt-text">To pump protons across the inner mitochondrial membrane, building a gradient that drives ATP synthase</span></button>
+      <button class="opt" onclick="pick(this,false)"><span class="opt-letter">D</span><span class="opt-text">To convert pyruvate into acetyl-CoA in the mitochondrial matrix</span></button>
+    `;
+    picked = false;
+    document.getElementById('feedback').className = 'feedback';
+    document.getElementById('continue-btn').className = 'continue-btn';
+    document.getElementById('q-area').scrollTop = 0;
+    setDemo('db-q');
+  }
+}
+
+function setDemo(id) {
+  document.querySelectorAll('.demo-btn').forEach(b => b.classList.remove('on'));
+  const el = document.getElementById(id);
+  if (el) el.classList.add('on');
+}
+</script>
+
+</body>
+</html>

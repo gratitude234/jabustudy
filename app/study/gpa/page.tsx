@@ -1070,7 +1070,7 @@ export default function GpaPage() {
 
   async function copySummary() {
     const lines: string[] = [];
-    lines.push("Jabu Study GPA Summary");
+    lines.push("JabuStudy GPA Summary");
     lines.push(`Scale: ${scaleKey === "ng_5" ? "Nigeria (5.0)" : scaleKey === "us_4" ? "4.0" : "Custom"}`);
     lines.push(`CGPA: ${format2(totals.cgpa)} / ${scaleMax}`);
     if (honours) lines.push(`Class: ${honours.label}`);

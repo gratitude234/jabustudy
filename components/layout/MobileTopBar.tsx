@@ -73,8 +73,8 @@ export default function MobileTopBar() {
       <div className="mx-auto max-w-6xl px-4 py-3">
         <div className="flex items-center justify-between gap-3">
           <Link href="/study" className="inline-flex items-center gap-2 no-underline focus-visible:outline-none">
-            <span className="h-2 w-2 shrink-0 rounded-full bg-primary" />
-            <span className="font-bold text-lg text-foreground">Jabu Study</span>
+            <img src="/logo-icon.png" alt="" className="h-7 w-7 shrink-0 object-contain" />
+            <span className="font-bold text-lg text-foreground">JabuStudy</span>
           </Link>
 
           <div className="flex items-center gap-2">

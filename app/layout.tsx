@@ -33,8 +33,8 @@ export const viewport: Viewport = {
 export const metadata: Metadata = {
   metadataBase: metadataBaseUrl(),
   title: {
-    default: "Jabu Study",
-    template: "%s - Jabu Study",
+    default: "JabuStudy",
+    template: "%s - JabuStudy",
   },
   description: "Course materials, MCQs, Q&A, tutors, and study tools for JABU students.",
   manifest: "/manifest.json",
@@ -50,13 +50,13 @@ export const metadata: Metadata = {
   appleWebApp: {
     capable: true,
     statusBarStyle: "default",
-    title: "Jabu Study",
+    title: "JabuStudy",
   },
   formatDetection: { telephone: false },
   openGraph: {
     type: "website",
-    siteName: "Jabu Study",
-    title: "Jabu Study",
+    siteName: "JabuStudy",
+    title: "JabuStudy",
     description: "Course materials, MCQs, Q&A, tutors, and study tools for JABU students.",
   },
   twitter: {

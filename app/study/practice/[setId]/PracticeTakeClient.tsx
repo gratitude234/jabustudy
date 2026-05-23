@@ -7,6 +7,7 @@ import { useParams, useRouter, useSearchParams } from "next/navigation";
 import {
   AlertTriangle,
   ArrowLeft,
+  ArrowRight,
   ExternalLink,
   FileText,
   Flag,
@@ -36,7 +37,7 @@ import { cn, msToClock, normalize } from "@/lib/utils";
 import { publicUrl } from "@/lib/publicUrl";
 import { usePracticeEngine } from "./usePracticeEngine";
 import { supabase } from "@/lib/supabase";
-import type { AnswerConfidence, WrittenAnswerGrade } from "@/lib/types";
+import type { WrittenAnswerGrade } from "@/lib/types";
 
 type AnyOption = {
   id: string;
@@ -210,49 +211,6 @@ function hasStudyRef(ref: PracticeStudyRef) {
   return Boolean(ref?.chunkId?.trim() || ref?.topic?.trim() || ref?.instruction?.trim() || ref?.quote?.trim() || studyRefPage(ref?.page));
 }
 
-const CONFIDENCE_OPTIONS: Array<{ value: AnswerConfidence; label: string; desc: string }> = [
-  { value: "confident", label: "Got it", desc: "I can answer this again" },
-  { value: "unsure", label: "Partly", desc: "I need one more review" },
-  { value: "guessed", label: "Still weak", desc: "Keep this in revision" },
-];
-
-function ConfidencePicker({
-  value,
-  onChange,
-  compact = false,
-}: {
-  value: AnswerConfidence | null | undefined;
-  onChange: (value: AnswerConfidence) => void;
-  compact?: boolean;
-}) {
-  return (
-    <div className="rounded-2xl border border-border bg-card px-3 py-3">
-      <p className="text-xs font-extrabold text-foreground">How sure were you?</p>
-      <div className={cn("mt-2 grid gap-2", compact ? "sm:grid-cols-3" : "md:grid-cols-3")}>
-        {CONFIDENCE_OPTIONS.map((option) => {
-          const active = value === option.value;
-          return (
-            <button
-              key={option.value}
-              type="button"
-              onClick={() => onChange(option.value)}
-              className={cn(
-                "rounded-xl border px-3 py-2 text-left transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
-                active
-                  ? "border-[#5B35D5]/35 bg-[#EEEDFE] text-[#3B24A8] dark:border-[#5B35D5]/40 dark:bg-[#5B35D5]/10 dark:text-indigo-300"
-                  : "border-border bg-background text-foreground hover:bg-secondary/50"
-              )}
-            >
-              <span className="block text-xs font-extrabold">{option.label}</span>
-              <span className="mt-0.5 block text-[11px] font-medium text-muted-foreground">{option.desc}</span>
-            </button>
-          );
-        })}
-      </div>
-    </div>
-  );
-}
-
 function PracticeGuidedHint({
   studyRef,
   sourceMaterial,
@@ -391,7 +349,6 @@ export default function PracticeTakeClient() {
     answers,
     writtenAnswers,
     writtenGrades,
-    confidences,
     writtenSaving,
     submitted,
     setSubmitted,
@@ -402,7 +359,6 @@ export default function PracticeTakeClient() {
     finalizing,
     weakSummary,
     choose,
-    setAnswerConfidence,
     writeAnswer,
     setWrittenGrade,
     softReset,
@@ -550,7 +506,6 @@ export default function PracticeTakeClient() {
     : "mcq";
   const isWrittenCurrent = currentQuestionType !== "mcq";
   const currentWrittenAnswer = current ? writtenAnswers[current.id] ?? "" : "";
-  const currentConfidence = current ? confidences[current.id] ?? null : null;
   const currentMarkingPoints = Array.isArray(current?.marking_points) ? current.marking_points : [];
   const currentGradeState: WrittenGradeState = current
     ? writtenGradeStates[current.id] ??
@@ -882,11 +837,11 @@ if (err || !meta) {
     const isWritten = item.q.question_type === "short_answer" || item.q.question_type === "theory";
     if (isWritten) return false;
     if (item.isWrong || item.isUnanswered) return true;
-    return item.confidence === "unsure" || item.confidence === "guessed";
+    return false;
   }).length;
 
   return (
-    <div className="pb-28 md:pb-6">
+    <div className="pb-32 md:pb-6">
       <GuidedSourceModal
         open={Boolean(readingRef?.open)}
         onResume={() => setReadingRef(null)}
@@ -973,38 +928,22 @@ if (err || !meta) {
           </div>
         </div>
 
-        <div className="mt-3">
-          <div className="flex items-end justify-between gap-3">
-            <div className="min-w-0">
-              <div className="flex items-center gap-1.5 min-w-0">
-                {isDueMode && (
-                  <span className="shrink-0 inline-flex items-center gap-1 rounded-full border border-[#5B35D5]/25 bg-[#EEEDFE] px-2 py-0.5 text-[10px] font-extrabold text-[#3B24A8] dark:border-[#5B35D5]/30 dark:bg-[#5B35D5]/10 dark:text-indigo-300">
-                    Due
-                  </span>
-                )}
-                <p className="truncate text-sm font-extrabold text-foreground">{normalize(meta.title)}</p>
-              </div>
-              <p className="mt-0.5 text-[12px] font-semibold text-muted-foreground">
-                Answered <span className="tabular-nums">{stats.answered}</span>
-                {!learningMode ? (
-                  <>
-                    {" "}<span className="text-muted-foreground">•</span>{" "}
-                    feedback after submit
-                  </>
-                ) : null}
-              </p>
+        <div className="mt-2">
+          <div className="flex items-center justify-between gap-2">
+            <div className="flex min-w-0 items-center gap-1.5">
+              {isDueMode && (
+                <span className="shrink-0 inline-flex items-center gap-1 rounded-full border border-[#5B35D5]/25 bg-[#EEEDFE] px-2 py-0.5 text-[10px] font-extrabold text-[#3B24A8] dark:border-[#5B35D5]/30 dark:bg-[#5B35D5]/10 dark:text-indigo-300">
+                  Due
+                </span>
+              )}
+              <p className="truncate text-xs font-extrabold text-foreground">{normalize(meta.title)}</p>
             </div>
-
-          </div>
-
-          <div className="mt-2 h-2 w-full overflow-hidden rounded-full bg-secondary" aria-hidden="true">
-            <div className="h-full rounded-full bg-[#5B35D5]" style={{ width: `${answeredPct}%` }} />
-          </div>
-          <div className="mt-1 flex items-center justify-between text-[11px] font-semibold text-muted-foreground">
-            <span className="tabular-nums">{answeredPct}% done</span>
-            <span className="tabular-nums">
+            <span className="shrink-0 text-[11px] font-semibold text-muted-foreground tabular-nums">
               {stats.total - stats.answered} left
             </span>
+          </div>
+          <div className="mt-1.5 h-1.5 w-full overflow-hidden rounded-full bg-secondary" aria-hidden="true">
+            <div className="h-full rounded-full bg-[#5B35D5]" style={{ width: `${answeredPct}%` }} />
           </div>
         </div>
       </div>
@@ -1172,7 +1111,7 @@ if (err || !meta) {
                   type="button"
                   aria-label="Share score"
                   onClick={async () => {
-                    const text = `I scored ${resultPct}% on "${normalize(meta.title)}" on Jabu Study!`;
+                    const text = `I scored ${resultPct}% on "${normalize(meta.title)}" on JabuStudy!`;
                     try {
                       if (typeof navigator.share === "function") {
                         await navigator.share({ text, title: "My Practice Score" });
@@ -1192,7 +1131,7 @@ if (err || !meta) {
                     onClick={() => {
                       const streakLine = streakCount && streakCount > 1 ? `\n🔥 ${streakCount}-day streak!` : "";
                       const msg = encodeURIComponent(
-                        `I scored ${resultPct}% on "${normalize(meta?.title ?? "a practice set")}"${meta?.course_code ? ` (${meta.course_code})` : ""} on Jabu Study!${streakLine}\n\nPractice for free: ${publicUrl("/study")}`
+                        `I scored ${resultPct}% on "${normalize(meta?.title ?? "a practice set")}"${meta?.course_code ? ` (${meta.course_code})` : ""} on JabuStudy!${streakLine}\n\nPractice for free: ${publicUrl("/study")}`
                       );
                       window.open(`https://wa.me/?text=${msg}`, "_blank", "noopener,noreferrer");
                     }}
@@ -1225,7 +1164,7 @@ if (err || !meta) {
             <Card className="rounded-3xl">
               <div className="mb-3">
                 <p className="text-sm font-extrabold text-foreground">Review answers</p>
-                <p className="text-xs text-muted-foreground">Explanations and confidence update your revision queue.</p>
+                <p className="text-xs text-muted-foreground">Explanations update your revision queue.</p>
               </div>
               <div className="space-y-3">
                 {reviewItems.map((item) => {
@@ -1291,13 +1230,6 @@ if (err || !meta) {
                               {item.q.explanation}
                             </p>
                           ) : null}
-                          <div className="mt-3">
-                            <ConfidencePicker
-                              compact
-                              value={item.confidence}
-                              onChange={(value) => setAnswerConfidence(item.q.id, value)}
-                            />
-                          </div>
                         </div>
                       </div>
                     </div>
@@ -1330,7 +1262,7 @@ if (err || !meta) {
                   type="button"
                   onClick={() => {
                     const msg = encodeURIComponent(
-                      `🔥 I just hit a ${streakMilestone}-day study streak on Jabu Study!\n\n` +
+                      `🔥 I just hit a ${streakMilestone}-day study streak on JabuStudy!\n\n` +
                       `${streakMilestone === 7 ? "One full week" : streakMilestone === 14 ? "Two weeks straight" : streakMilestone === 30 ? "30 days straight" : streakMilestone === 60 ? "60 days of consistent study" : "100 days"} of consistent practice.\n\n` +
                       `Study smarter: ${publicUrl("/study")}`
                     );
@@ -1377,7 +1309,7 @@ if (err || !meta) {
                       </div>
                       <div className="mt-2 flex items-center gap-2 pl-4">
                         <span className="rounded-full bg-rose-50 px-2 py-0.5 text-[10px] font-extrabold text-rose-600 dark:bg-rose-950/30 dark:text-rose-400">
-                          {r.reviewReason === "low_confidence" ? "needs review" : `×${r.missCount} missed`}
+                          {`×${r.missCount} missed`}
                         </span>
                         {r.nextDueAt && (
                           <span className="text-[10px] text-muted-foreground">
@@ -1569,12 +1501,7 @@ if (err || !meta) {
           )}
 
           <Card className="rounded-3xl">
-            <p className="text-xs font-extrabold text-muted-foreground">
-              Question <span className="tabular-nums">{idx + 1}</span> of{" "}
-              <span className="tabular-nums">{total}</span>
-            </p>
-
-            <p className="mt-2 whitespace-pre-wrap text-base font-extrabold leading-snug text-foreground">
+            <p className="whitespace-pre-wrap text-base font-extrabold leading-snug text-foreground">
               {normalize(String(current?.prompt ?? ""))}
             </p>
 
@@ -1586,7 +1513,7 @@ if (err || !meta) {
                     ? "Write your answer, then let AI grade it against the marking points."
                     : "Type a concise answer, then let AI grade it against the model answer."
                   : isRevealed
-                  ? "Review the feedback, then tap Next when you're ready."
+                  ? "Scroll down for the explanation, then tap Next."
                   : learningMode
                   ? "Pick an answer to reveal feedback and explanation."
                   : "Choose an answer. Feedback appears after you submit."}
@@ -1689,32 +1616,14 @@ if (err || !meta) {
                           </span>
                         </div>
                         <p className="mt-2 text-sm leading-relaxed text-foreground">{currentGradeState.grade.feedback}</p>
-                        {currentGradeState.grade.matchedPoints.length > 0 ? (
-                          <div className="mt-3">
-                            <p className="text-xs font-extrabold text-emerald-700 dark:text-emerald-300">You covered</p>
-                            <ul className="mt-1 list-disc space-y-1 pl-5 text-sm leading-relaxed text-foreground">
-                              {currentGradeState.grade.matchedPoints.map((point, pointIndex) => (
-                                <li key={`${point}-${pointIndex}`}>{point}</li>
-                              ))}
-                            </ul>
-                          </div>
-                        ) : null}
                         {currentGradeState.grade.missingPoints.length > 0 ? (
                           <div className="mt-3">
-                            <p className="text-xs font-extrabold text-amber-700 dark:text-amber-300">Missing points</p>
+                            <p className="text-xs font-extrabold text-amber-700 dark:text-amber-300">Focus on</p>
                             <ul className="mt-1 list-disc space-y-1 pl-5 text-sm leading-relaxed text-foreground">
                               {currentGradeState.grade.missingPoints.map((point, pointIndex) => (
                                 <li key={`${point}-${pointIndex}`}>{point}</li>
                               ))}
                             </ul>
-                          </div>
-                        ) : null}
-                        {currentGradeState.grade.improvedAnswer ? (
-                          <div className="mt-3">
-                            <p className="text-xs font-extrabold text-emerald-700 dark:text-emerald-300">Improved answer</p>
-                            <p className="mt-1 whitespace-pre-wrap text-sm leading-relaxed text-foreground">
-                              {currentGradeState.grade.improvedAnswer}
-                            </p>
                           </div>
                         ) : null}
                         <p className="mt-3 text-[11px] font-semibold text-muted-foreground">
@@ -1739,10 +1648,6 @@ if (err || !meta) {
                         </div>
                       ) : null}
                     </div>
-                    <ConfidencePicker
-                      value={currentConfidence}
-                      onChange={(value) => setAnswerConfidence(current.id, value)}
-                    />
                   </div>
                 ) : null}
               </div>
@@ -1840,94 +1745,17 @@ if (err || !meta) {
               </div>
             ) : null}
 
-            {/* Navigation + submit */}
-            <div className="mt-5 flex items-center justify-between gap-2">
-              <button
-                type="button"
-                onClick={goPrev}
-                disabled={idx === 0}
-                className={cn(
-                  "inline-flex items-center justify-center rounded-2xl border px-4 py-2 text-sm font-extrabold",
-                  "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-card",
-                  idx === 0
-                    ? "border-border/50 bg-background text-muted-foreground opacity-60"
-                    : "border-border bg-background text-foreground hover:bg-secondary/50"
-                )}
-              >
-                Prev
-              </button>
-
-              <div className="flex items-center gap-2">
-                {!isLast ? (
-                  <button
-                    type="button"
-                    onClick={goNext}
-                    className={cn(
-                      "inline-flex items-center justify-center rounded-2xl px-4 py-2 text-sm font-extrabold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-card",
-                      isRevealed
-                        ? "bg-[#5B35D5] text-white hover:bg-[#4526B8]"
-                        : "bg-secondary text-foreground hover:opacity-90"
-                    )}
-                  >
-                    Next
-                  </button>
-                ) : (
-                  <button
-                    type="button"
-                    onClick={handleSubmitClick}
-                    className={cn(
-                      "inline-flex items-center justify-center gap-2 rounded-2xl px-4 py-2 text-sm font-extrabold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-card",
-                      learningMode
-                        ? "bg-[#5B35D5] text-white hover:bg-[#4526B8]"
-                        : "bg-secondary text-foreground"
-                    )}
-                  >
-                    {learningMode ? (
-                      <><GraduationCap className="h-4 w-4" /> Finish session</>
-                    ) : (
-                      <><Send className="h-4 w-4" /> Submit</>
-                    )}
-                  </button>
-                )}
-              </div>
-            </div>
           </Card>
 
           {/* ── Explanation Panel — appears after student answers ────────── */}
           {isRevealed && current ? (
             <div className="space-y-2">
-              <ConfidencePicker
-                value={currentConfidence}
-                onChange={(value) => setAnswerConfidence(current.id, value)}
-              />
               {current.explanation ? (
                 <div className="rounded-2xl border border-[#5B35D5]/20 bg-[#EEEDFE] px-3 py-3 dark:border-[#5B35D5]/30 dark:bg-[#5B35D5]/10">
                   <p className="text-xs font-extrabold text-[#3B24A8] dark:text-indigo-300 mb-1">Explanation</p>
                   <p className="whitespace-pre-wrap text-sm leading-relaxed text-foreground">
                     {current.explanation}
                   </p>
-                </div>
-              ) : null}
-              {current.source_topic || current.study_ref?.topic || current.study_ref?.page || current.study_ref?.quote ? (
-                <div className="rounded-2xl border border-border bg-card px-3 py-3">
-                  <p className="text-xs font-extrabold text-foreground">Source focus</p>
-                  <div className="mt-1.5 flex flex-wrap gap-2">
-                    {current.source_topic || current.study_ref?.topic ? (
-                      <span className="rounded-full border border-border bg-background px-2 py-1 text-[11px] font-semibold text-muted-foreground">
-                        {current.source_topic ?? current.study_ref?.topic}
-                      </span>
-                    ) : null}
-                    {current.study_ref?.page ? (
-                      <span className="rounded-full border border-border bg-background px-2 py-1 text-[11px] font-semibold text-muted-foreground">
-                        Page {current.study_ref.page}
-                      </span>
-                    ) : null}
-                  </div>
-                  {current.study_ref?.quote ? (
-                    <p className="mt-2 line-clamp-3 text-xs leading-relaxed text-muted-foreground">
-                      {current.study_ref.quote}
-                    </p>
-                  ) : null}
                 </div>
               ) : null}
               {explanationOptions && chosenOptionKey && correctOptionKey ? (
@@ -1951,12 +1779,68 @@ if (err || !meta) {
         </div>
       )}
 
+      {/* ── Sticky bottom navigation ── */}
+      {!submitted && questions.length > 0 && current && (
+        <div className="fixed bottom-0 left-0 right-0 z-30 border-t border-border bg-background/95 backdrop-blur-sm px-4 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-3">
+          <div className="mx-auto flex max-w-2xl items-center gap-3">
+            <button
+              type="button"
+              onClick={goPrev}
+              disabled={idx === 0}
+              className={cn(
+                "inline-flex h-12 w-14 shrink-0 items-center justify-center rounded-2xl border transition",
+                "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring active:scale-95",
+                idx === 0
+                  ? "border-border/50 bg-background text-muted-foreground opacity-40"
+                  : "border-border bg-background text-foreground hover:bg-secondary/50"
+              )}
+            >
+              <ArrowLeft className="h-4 w-4" />
+            </button>
+
+            {!isLast ? (
+              <button
+                type="button"
+                onClick={goNext}
+                className={cn(
+                  "inline-flex h-12 flex-1 items-center justify-center gap-2 rounded-2xl text-sm font-extrabold transition active:scale-[0.98]",
+                  "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                  isRevealed
+                    ? "bg-[#5B35D5] text-white hover:bg-[#4526B8]"
+                    : "bg-secondary text-foreground hover:opacity-90"
+                )}
+              >
+                Next <ArrowRight className="h-4 w-4" />
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={handleSubmitClick}
+                className={cn(
+                  "inline-flex h-12 flex-1 items-center justify-center gap-2 rounded-2xl text-sm font-extrabold transition active:scale-[0.98]",
+                  "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                  learningMode
+                    ? "bg-[#5B35D5] text-white hover:bg-[#4526B8]"
+                    : "bg-secondary text-foreground hover:opacity-90"
+                )}
+              >
+                {learningMode ? (
+                  <><GraduationCap className="h-4 w-4" /> Finish session</>
+                ) : (
+                  <><Send className="h-4 w-4" /> Submit</>
+                )}
+              </button>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* ── Milestone toast ── */}
       {milestone && (
         <div
           role="status"
           aria-live="polite"
-          className="pointer-events-none fixed inset-x-0 bottom-24 z-50 flex justify-center px-4"
+          className="pointer-events-none fixed inset-x-0 bottom-28 z-50 flex justify-center px-4"
         >
           <div
             className={cn(

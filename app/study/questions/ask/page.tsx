@@ -3,7 +3,7 @@ import { Suspense } from "react";
 import AskQuestionClient from "./AskQuestionClient";
 
 export const metadata = {
-  title: "Ask a Question • Jabu Study",
+  title: "Ask a Question • JabuStudy",
 };
 
 export default function AskQuestionPage() {

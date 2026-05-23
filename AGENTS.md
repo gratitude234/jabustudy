@@ -21,7 +21,9 @@ Required in `.env.local`:
 NEXT_PUBLIC_SUPABASE_URL=
 NEXT_PUBLIC_SUPABASE_ANON_KEY=
 SUPABASE_SERVICE_ROLE_KEY=
-GEMINI_API_KEY=              # AI Study Plan / summarize features
+GEMINI_API_KEY=              # Legacy single Gemini key fallback
+GEMINI_API_KEYS=             # Optional comma-separated Gemini key pool; preferred for failover
+GEMINI_KEY_QUOTA_COOLDOWN_MS=3600000 # How long to skip a key after Gemini returns quota 429
 AI_PROVIDER=gemini           # Primary AI provider: gemini or bedrock
 AI_FALLBACK_PROVIDER=        # Leave blank while AWS Bedrock quota is unreliable
 AI_ENABLE_BEDROCK=false      # Bedrock is ignored unless explicitly set to true
@@ -109,7 +111,7 @@ Rep uploads go through a separate admin upload path (`/api/study-admin/upload/*`
 
 ### AI Integration
 
-`lib/ai/index.ts` is the provider-aware server-only AI wrapper. Production currently uses Gemini by default (`AI_PROVIDER=gemini`) with Bedrock hard-disabled unless `AI_ENABLE_BEDROCK=true`. `lib/ai/gemini.ts` routes by model role: `generation` and `document` use Gemini 2.5 Flash, while `fast` uses Gemini 2.5 Flash-Lite. If Gemini Flash returns a transient overload/rate/network/server failure, the wrapper retries once and then falls back to the role fallback model (Flash-Lite for generation/document by default). `lib/ai/bedrock.ts` remains available for later reactivation via env. **Never import AI wrappers in client components.**
+`lib/ai/index.ts` is the provider-aware server-only AI wrapper. Production currently uses Gemini by default (`AI_PROVIDER=gemini`) with Bedrock hard-disabled unless `AI_ENABLE_BEDROCK=true`. `lib/ai/gemini.ts` routes by model role: `generation` and `document` use Gemini 2.5 Flash, while `fast` uses Gemini 2.5 Flash-Lite. Gemini can use a comma-separated `GEMINI_API_KEYS` pool and skips a key temporarily after quota 429; quota errors fail fast once all keys are exhausted. Transient network/server failures still retry/fallback where configured. `lib/ai/bedrock.ts` remains available for later reactivation via env. **Never import AI wrappers in client components.**
 
 AI routes under `app/api/ai/`: `generate-questions`, `generate-questions-course`, material chat, and rep question-bank generation use Gemini 2.5 Flash for document/question quality; `parse-mcq`, answer explanations, material summaries, and study plans use the `fast` role (Gemini 2.5 Flash-Lite). Bedrock should not be called in production unless `AI_ENABLE_BEDROCK=true` and `AI_PROVIDER=bedrock` or `AI_FALLBACK_PROVIDER=bedrock` is explicitly set.
 

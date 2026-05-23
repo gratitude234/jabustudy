@@ -70,7 +70,7 @@ function buildMessage(to: string, count: number) {
   const plural = count === 1 ? "" : "s";
   const text =
     `You have ${count} spaced repetition card${plural} due today on ` +
-    `Jabu Study.\n\nReview now to keep your learning on track: ` +
+    `JabuStudy.\n\nReview now to keep your learning on track: ` +
     publicUrl("/study/practice?due=1");
 
   return {

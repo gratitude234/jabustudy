@@ -1,13 +1,12 @@
 "use client";
 import { cn, normalize, msToClock, safePushRecent } from "@/lib/utils";
-import type { AnswerConfidence, QuizSet, QuizQuestion, QuizOption, ReviewTab, WrittenAnswerGrade } from "@/lib/types";
+import type { QuizSet, QuizQuestion, QuizOption, ReviewTab, WrittenAnswerGrade } from "@/lib/types";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "@/lib/supabase";
 
 type LatestRestore = {
   answers?: Record<string, string>;
   writtenAnswers?: Record<string, string>;
-  confidences?: Record<string, AnswerConfidence>;
   flagged?: Record<string, boolean>;
 };
 
@@ -26,16 +25,6 @@ function normalizeMarkingPoints(value: unknown): string[] {
   return value.map((item) => String(item ?? "").trim()).filter(Boolean);
 }
 
-function confidenceOf(value: unknown): AnswerConfidence | null {
-  return value === "confident" || value === "unsure" || value === "guessed" ? value : null;
-}
-
-function isMissingConfidenceColumn(error: unknown) {
-  const message = typeof (error as { message?: unknown })?.message === "string"
-    ? String((error as { message?: unknown }).message).toLowerCase()
-    : "";
-  return message.includes("confidence");
-}
 
 function isMissingAiGradeColumn(error: unknown) {
   const message = typeof (error as { message?: unknown })?.message === "string"
@@ -49,10 +38,16 @@ function cleanString(value: unknown, maxLength = 4000) {
   return value.trim().slice(0, maxLength);
 }
 
+function compactText(value: unknown, maxLength = 180) {
+  const text = cleanString(value, maxLength + 80).replace(/\s+/g, " ");
+  if (text.length <= maxLength) return text;
+  return `${text.slice(0, maxLength).trimEnd().replace(/[.,;:\s]+$/, "")}...`;
+}
+
 function cleanArray(value: unknown, maxItems = 8) {
   if (!Array.isArray(value)) return [];
   return value
-    .map((item) => cleanString(item, 500))
+    .map((item) => compactText(item, 90))
     .filter(Boolean)
     .slice(0, maxItems);
 }
@@ -79,10 +74,10 @@ function writtenGradeFromRow(row: any): WrittenAnswerGrade | null {
     score: Math.round(Math.max(0, Math.min(10, score)) * 10) / 10,
     maxScore: Number(row.ai_grade_max_score) || 10,
     verdict,
-    feedback: cleanString(row.ai_grade_feedback, 3000),
-    matchedPoints: cleanArray(row.ai_grade_matched_points),
-    missingPoints: cleanArray(row.ai_grade_missing_points),
-    improvedAnswer: cleanString(row.ai_grade_improved_answer, 3000) || null,
+    feedback: compactText(row.ai_grade_feedback),
+    matchedPoints: cleanArray(row.ai_grade_matched_points, 2),
+    missingPoints: cleanArray(row.ai_grade_missing_points, 3),
+    improvedAnswer: compactText(row.ai_grade_improved_answer, 220) || null,
     gradedAt: cleanString(row.ai_graded_at, 80),
     provider: cleanString(row.ai_grade_provider, 80) || null,
     model: cleanString(row.ai_grade_model, 120) || null,
@@ -100,14 +95,6 @@ function readLocalDraft(key: string): LatestRestore {
       writtenAnswers:
         parsed?.writtenAnswers && typeof parsed.writtenAnswers === "object"
           ? parsed.writtenAnswers
-          : undefined,
-      confidences:
-        parsed?.confidences && typeof parsed.confidences === "object"
-          ? Object.entries(parsed.confidences).reduce<Record<string, AnswerConfidence>>((acc, [qid, value]) => {
-              const confidence = confidenceOf(value);
-              if (confidence) acc[qid] = confidence;
-              return acc;
-            }, {})
           : undefined,
       flagged: parsed?.flagged && typeof parsed.flagged === "object" ? parsed.flagged : undefined,
     };
@@ -146,7 +133,6 @@ export function usePracticeEngine({
   const [answers, setAnswers] = useState<Record<string, string>>({});
   const [writtenAnswers, setWrittenAnswers] = useState<Record<string, string>>({});
   const [writtenGrades, setWrittenGrades] = useState<Record<string, WrittenAnswerGrade>>({});
-  const [confidences, setConfidences] = useState<Record<string, AnswerConfidence>>({});
   const [writtenSaving, setWrittenSaving] = useState(false);
   const [submitted, setSubmitted] = useState(false);
   const [flagged, setFlagged] = useState<Record<string, boolean>>({});
@@ -189,7 +175,7 @@ export function usePracticeEngine({
     missCount: number;
     nextDueAt: string;
     wasCorrect: boolean;
-    reviewReason?: "missed" | "low_confidence";
+    reviewReason?: "missed";
   }> | null>(null);
 
   // Local draft autosave (backup if DB upsert fails)
@@ -201,10 +187,10 @@ export function usePracticeEngine({
   async function loadAttemptAnswers(effectiveAttemptId: string) {
     let ansRes: any = await supabase
       .from("study_attempt_answers")
-      .select("question_id,selected_option_id,text_answer,confidence,ai_grade_score,ai_grade_max_score,ai_grade_verdict,ai_grade_feedback,ai_grade_matched_points,ai_grade_missing_points,ai_grade_improved_answer,ai_grade_provider,ai_grade_model,ai_graded_at")
+      .select("question_id,selected_option_id,text_answer,ai_grade_score,ai_grade_max_score,ai_grade_verdict,ai_grade_feedback,ai_grade_matched_points,ai_grade_missing_points,ai_grade_improved_answer,ai_grade_provider,ai_grade_model,ai_graded_at")
       .eq("attempt_id", effectiveAttemptId);
 
-    if (ansRes.error && (isMissingConfidenceColumn(ansRes.error) || isMissingAiGradeColumn(ansRes.error))) {
+    if (ansRes.error && isMissingAiGradeColumn(ansRes.error)) {
       ansRes = await supabase
         .from("study_attempt_answers")
         .select("question_id,selected_option_id,text_answer")
@@ -213,22 +199,18 @@ export function usePracticeEngine({
 
     const amap: Record<string, string> = {};
     const wmap: Record<string, string> = {};
-    const cmap: Record<string, AnswerConfidence> = {};
     const gmap: Record<string, WrittenAnswerGrade> = {};
     (ansRes.data ?? []).forEach((r: any) => {
       if (r?.question_id && r?.selected_option_id)
         amap[String(r.question_id)] = String(r.selected_option_id);
       if (r?.question_id && typeof r?.text_answer === "string")
         wmap[String(r.question_id)] = String(r.text_answer);
-      const confidence = confidenceOf(r?.confidence);
-      if (r?.question_id && confidence)
-        cmap[String(r.question_id)] = confidence;
       const grade = writtenGradeFromRow(r);
       if (r?.question_id && grade)
         gmap[String(r.question_id)] = grade;
     });
 
-    return { answers: amap, writtenAnswers: wmap, confidences: cmap, writtenGrades: gmap };
+    return { answers: amap, writtenAnswers: wmap, writtenGrades: gmap };
   }
 
   // The active question list — either the full set or a weak-only subset
@@ -279,7 +261,6 @@ export function usePracticeEngine({
       finalizedRef.current = false;
       setIdx(0);
       setAnswers({});
-      setConfidences({});
       setFlagged({});
       setTimeLeftMs(null);
       deadlineRef.current = null;
@@ -415,19 +396,16 @@ export function usePracticeEngine({
             const restored = await loadAttemptAnswers(effectiveAttemptId);
             const amap = restored.answers;
             const wmap = restored.writtenAnswers;
-            const cmap = restored.confidences;
             const gmap = restored.writtenGrades;
 
             // Merge local draft (localStorage wins for latest unsaved answers)
             const local = readLocalDraft(`jabu:practiceDraft:${setId}:${effectiveAttemptId}`);
             if (local.answers) Object.assign(amap, local.answers);
             if (local.writtenAnswers) Object.assign(wmap, local.writtenAnswers);
-            if (local.confidences) Object.assign(cmap, local.confidences);
 
             if (!cancelled) {
               setAnswers(amap);
               setWrittenAnswers(wmap);
-              setConfidences(cmap);
               setWrittenGrades(gmap);
               if (local.flagged) setFlagged(local.flagged);
             }
@@ -457,7 +435,6 @@ export function usePracticeEngine({
             if (!cancelled) {
               setAnswers(restored.answers);
               setWrittenAnswers(restored.writtenAnswers);
-              setConfidences(restored.confidences);
               setWrittenGrades(restored.writtenGrades);
             }
           } else {
@@ -559,19 +536,19 @@ export function usePracticeEngine({
     return () => clearInterval(t);
   }, [submitted]);
 
-  // Autosave to localStorage (answers + written answers + confidence + flags)
+  // Autosave to localStorage (answers + written answers + flags)
   useEffect(() => {
     if (typeof window === "undefined") return;
     if (!setId || !attemptId) return;
     try {
       window.localStorage.setItem(
         draftKey,
-        JSON.stringify({ answers, writtenAnswers, confidences, flagged, updatedAt: Date.now() })
+        JSON.stringify({ answers, writtenAnswers, flagged, updatedAt: Date.now() })
       );
     } catch {
       // ignore
     }
-  }, [answers, writtenAnswers, confidences, flagged, draftKey, setId, attemptId]);
+  }, [answers, writtenAnswers, flagged, draftKey, setId, attemptId]);
 
   // Debounced Supabase autosave for written answers. MCQs still persist immediately on tap.
   useEffect(() => {
@@ -586,10 +563,9 @@ export function usePracticeEngine({
       const now = new Date().toISOString();
       const rows = writtenQuestions.map((q) => ({
         attempt_id: attemptId,
-        user_id: userId,
         question_id: q.id,
         text_answer: writtenAnswers[q.id] ?? "",
-        updated_at: now,
+        answered_at: now,
       }));
 
       supabase
@@ -606,12 +582,6 @@ export function usePracticeEngine({
   function choose(qid: string, oid: string) {
     if (submitted) return;
     setAnswers((prev) => ({ ...prev, [qid]: oid }));
-    setConfidences((prev) => {
-      if (!prev[qid]) return prev;
-      const next = { ...prev };
-      delete next[qid];
-      return next;
-    });
 
     // Persist answer (best-effort)
     (async () => {
@@ -621,73 +591,11 @@ export function usePracticeEngine({
         await supabase.from("study_attempt_answers").upsert(
           {
             attempt_id: attemptId,
-            user_id: userId,
             question_id: qid,
             selected_option_id: oid,
-            updated_at: new Date().toISOString(),
+            answered_at: new Date().toISOString(),
           } as any,
           { onConflict: "attempt_id,question_id" }
-        );
-      } catch {
-        // ignore
-      }
-    })();
-  }
-
-  function setAnswerConfidence(qid: string, confidence: AnswerConfidence) {
-    setConfidences((prev) => ({ ...prev, [qid]: confidence }));
-
-    // Persist confidence best-effort. If the migration is not applied yet,
-    // the UI still works and localStorage keeps the signal for this session.
-    (async () => {
-      const now = new Date().toISOString();
-      try {
-        const userId = userIdRef.current;
-        if (!userId || !attemptId) return;
-        await supabase.from("study_attempt_answers").upsert(
-          {
-            attempt_id: attemptId,
-            user_id: userId,
-            question_id: qid,
-            confidence,
-            updated_at: now,
-          } as any,
-          { onConflict: "attempt_id,question_id" }
-        );
-      } catch {
-        // ignore
-      }
-
-      try {
-        const userId = userIdRef.current;
-        if (!submitted || !userId) return;
-        const q = activeQuestions.find((item) => item.id === qid);
-        if (!q || isWrittenQuestion(q)) return;
-        const chosen = answers[qid];
-        const isCorrect = chosen ? Boolean((optionsByQ[qid] ?? []).find((o) => o.id === chosen)?.is_correct) : false;
-        if (!isCorrect || confidence === "confident") return;
-
-        const { data: existing } = await supabase
-          .from("study_weak_questions")
-          .select("miss_count,last_missed_at")
-          .eq("user_id", userId)
-          .eq("question_id", qid)
-          .maybeSingle();
-
-        const missCount = Math.max(1, (existing as any)?.miss_count ?? 1);
-        const nextDue = new Date(Date.now() + 86_400_000).toISOString();
-        await supabase.from("study_weak_questions").upsert(
-          {
-            user_id: userId,
-            question_id: qid,
-            miss_count: missCount,
-            last_missed_at: (existing as any)?.last_missed_at ?? null,
-            next_due_at: nextDue,
-            correct_streak: 0,
-            graduated_at: null,
-            updated_at: now,
-          } as any,
-          { onConflict: "user_id,question_id" }
         );
       } catch {
         // ignore
@@ -724,7 +632,6 @@ export function usePracticeEngine({
   function softReset() {
     // Clear retry-weak filter so the full set is shown again
     setRetryWeakIds(null);
-    setConfidences({});
     // Clear per-question UI state (revealed answers, etc.) by resetting
     // session-level state. The load useEffect will re-run on resetKey change
     // and reset answers/flags/timer itself.
@@ -747,7 +654,7 @@ export function usePracticeEngine({
           if (!chosen) return true; // unanswered
           const o = (optionsByQ[q.id] ?? []).find((x) => x.id === chosen);
           if (!o?.is_correct) return true; // wrong
-          return confidences[q.id] === "unsure" || confidences[q.id] === "guessed";
+          return false;
         })
         .map((q) => q.id)
     );
@@ -771,10 +678,9 @@ export function usePracticeEngine({
     }
 
     setRetryWeakIds(weakIds);
-      setAnswers({});
-      setWrittenAnswers({});
-      setWrittenGrades({});
-      setConfidences({});
+    setAnswers({});
+    setWrittenAnswers({});
+    setWrittenGrades({});
     setFlagged({});
     setIdx(0);
     setSubmitted(false);
@@ -841,10 +747,9 @@ export function usePracticeEngine({
         await supabase.from("study_attempt_answers").upsert(
           writtenQuestions.map((q) => ({
             attempt_id: attemptId,
-            user_id: userId,
             question_id: q.id,
             text_answer: writtenAnswers[q.id] ?? "",
-            updated_at: submittedIso,
+            answered_at: submittedIso,
           })) as any[],
           { onConflict: "attempt_id,question_id" }
         );
@@ -935,16 +840,15 @@ export function usePracticeEngine({
         const chosen = answers[q.id];
         const opts = optionsByQ[q.id] ?? [];
         const isCorrect = chosen ? (opts.find((o) => o.id === chosen)?.is_correct ?? false) : false;
-        const isLowConfidence = isCorrect && (confidences[q.id] === "unsure" || confidences[q.id] === "guessed");
         const existing = existingMap[q.id];
 
-        if (isCorrect && !isLowConfidence && !existing) {
+        if (isCorrect && !existing) {
           // Never seen as wrong — no row needed.
           summaryRows.push({ questionId: q.id, prompt: q.prompt, missCount: 0, nextDueAt: "", wasCorrect: true });
           continue;
         }
 
-        if (isCorrect && !isLowConfidence && existing) {
+        if (isCorrect && existing) {
           const newStreak = existing.correct_streak + 1;
           const graduated = newStreak >= 3;
           srsUpserts.push({
@@ -958,30 +862,6 @@ export function usePracticeEngine({
             updated_at: submittedIso,
           });
           summaryRows.push({ questionId: q.id, prompt: q.prompt, missCount: existing.miss_count, nextDueAt: "", wasCorrect: true });
-          continue;
-        }
-
-        if (isLowConfidence) {
-          const missCount = Math.max(1, existing?.miss_count ?? 1);
-          const nextDue = computeNextDue(missCount, submittedIso);
-          srsUpserts.push({
-            user_id: userId,
-            question_id: q.id,
-            miss_count: missCount,
-            last_missed_at: existing?.last_missed_at ?? null,
-            next_due_at: nextDue,
-            correct_streak: 0,
-            graduated_at: null,
-            updated_at: submittedIso,
-          });
-          summaryRows.push({
-            questionId: q.id,
-            prompt: q.prompt,
-            missCount,
-            nextDueAt: nextDue,
-            wasCorrect: true,
-            reviewReason: "low_confidence",
-          });
           continue;
         }
 
@@ -1008,7 +888,7 @@ export function usePracticeEngine({
           .upsert(srsUpserts, { onConflict: "user_id,question_id" });
       }
 
-      // Surface wrong/unanswered plus correct-but-uncertain answers in the summary.
+      // Surface wrong/unanswered answers in the summary.
       setWeakSummary(summaryRows.filter((r) => r.reviewReason || r.missCount > 0));
       // ── end SRS ────────────────────────────────────────────────────────
 
@@ -1054,7 +934,6 @@ export function usePracticeEngine({
         chosen,
         writtenAnswer,
         writtenGrade: writtenGrades[q.id] ?? null,
-        confidence: confidences[q.id] ?? null,
         chosenOpt,
         correctOpt,
         isWrong,
@@ -1067,7 +946,7 @@ export function usePracticeEngine({
     if (reviewTab === "flagged") return list.filter((x) => x.isFlagged);
     if (reviewTab === "unanswered") return list.filter((x) => x.isUnanswered);
     return list;
-  }, [submitted, activeQuestions, answers, writtenAnswers, writtenGrades, confidences, optionsByQ, flagged, reviewTab]);
+  }, [submitted, activeQuestions, answers, writtenAnswers, writtenGrades, optionsByQ, flagged, reviewTab]);
 
   return {
     // data
@@ -1085,7 +964,6 @@ export function usePracticeEngine({
     answers,
     writtenAnswers,
     writtenGrades,
-    confidences,
     writtenSaving,
     flagged,
     submitted,
@@ -1106,7 +984,6 @@ export function usePracticeEngine({
 
     // actions
     choose,
-    setAnswerConfidence,
     writeAnswer,
     setWrittenGrade,
     toggleFlag,

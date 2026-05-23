@@ -77,7 +77,7 @@ export default function PWAInstallBanner() {
             />
             <div className="flex-1 min-w-0">
               <p className="text-sm font-semibold text-foreground">
-                Install Jabu Study
+                Install JabuStudy
               </p>
               <p className="text-xs text-muted-foreground mt-0.5">
                 Fast, offline-ready, no app store needed
@@ -110,7 +110,7 @@ export default function PWAInstallBanner() {
           <div className="pointer-events-auto w-full max-w-sm rounded-2xl border border-border bg-card shadow-lg p-4">
             <div className="flex items-start justify-between gap-3">
               <p className="text-sm font-semibold text-foreground">
-                Install Jabu Study on iPhone
+                Install JabuStudy on iPhone
               </p>
               <button
                 onClick={() => {

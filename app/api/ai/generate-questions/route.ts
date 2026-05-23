@@ -16,6 +16,16 @@ import {
 } from "@/lib/extractMaterialContent";
 import { saveGeneratedPracticeSet } from "@/lib/aiGeneratedPractice";
 import { generateCoverageAwareQuestions, type StudyGenerationIntent } from "@/lib/studyQuestionGeneration";
+import {
+  aiLimitFromEnv,
+  aiRateLimitMessage,
+  checkAiUsageLimit,
+  recordAiUsageEvent,
+  recordBlockedAiUsage,
+  withAiUsageContext,
+  type AiUsageContext,
+  type AiUsageStatus,
+} from "@/lib/aiUsage";
 
 const QUESTION_GEN_TEXT_CHARS = 24_000;
 const AI_QUESTION_TIMEOUT_MS =
@@ -23,6 +33,8 @@ const AI_QUESTION_TIMEOUT_MS =
   parsePositiveInt(process.env.GEMINI_QUESTION_TIMEOUT_MS) ??
   60_000;
 const MAX_QUESTION_COUNT = 20;
+const ENABLE_COVERAGE_AWARE_MCQ =
+  process.env.AI_ENABLE_COVERAGE_AWARE_QUESTIONS?.trim().toLowerCase() === "true";
 
 function parsePositiveInt(value: string | undefined) {
   const parsed = Number.parseInt(value ?? "", 10);
@@ -299,7 +311,8 @@ function mimeTypeFromPath(path: string): string | null {
 }
 
 function computeBatches(total: number): number[] {
-  const numBatches = Math.min(3, Math.ceil(total / 3));
+  if (total <= 10) return [total];
+  const numBatches = 2;
   const base = Math.floor(total / numBatches);
   const rem = total % numBatches;
   return Array.from({ length: numBatches }, (_, i) => base + (i < rem ? 1 : 0));
@@ -309,6 +322,35 @@ type DirectGenResult = {
   questions: GeneratedQuestion[];
   ai: Record<string, unknown>;
 };
+
+function aiProviderFromMeta(ai: Record<string, unknown> | null | undefined): "bedrock" | "gemini" | null {
+  const provider = ai?.provider;
+  return provider === "bedrock" || provider === "gemini" ? provider : null;
+}
+
+function aiModelFromMeta(ai: Record<string, unknown> | null | undefined): string | null {
+  return typeof ai?.model === "string" && ai.model.trim() ? ai.model.trim() : null;
+}
+
+async function recordQuestionGenerationUsage(
+  context: AiUsageContext,
+  status: AiUsageStatus,
+  ai?: Record<string, unknown> | null,
+  error?: unknown
+) {
+  await recordAiUsageEvent({
+    ...context,
+    provider: aiProviderFromMeta(ai),
+    model: aiModelFromMeta(ai),
+    status,
+    errorCode: status === "failure" ? "GENERATE_QUESTIONS_FAILED" : null,
+    errorMessage: status === "failure"
+      ? error instanceof Error
+        ? error.message
+        : "Question generation failed."
+      : null,
+  });
+}
 
 async function runDirectGeneration(args: {
   material: StudyMaterialRow;
@@ -553,7 +595,10 @@ async function handleGenerateQuestionsRequest(req: NextRequest) {
   const topicId = typeof body.topicId === "string" && body.topicId.trim() ? body.topicId.trim() : null;
   const subtopicId = typeof body.subtopicId === "string" && body.subtopicId.trim() ? body.subtopicId.trim() : null;
   if (!materialId) return NextResponse.json({ error: "Missing materialId" }, { status: 400 });
-  const questionCount = Math.max(1, Math.min(MAX_QUESTION_COUNT, Math.floor(Number(count) || 10)));
+  const requestedQuestionCount = Math.max(1, Math.min(MAX_QUESTION_COUNT, Math.floor(Number(count) || 10)));
+  const questionCount = questionFormat === "mcq"
+    ? Math.min(requestedQuestionCount, aiLimitFromEnv("AI_MAX_MCQ_QUESTIONS_PER_REQUEST", 6))
+    : requestedQuestionCount;
   const effectiveDifficulty = generationIntent === "hard" || generationIntent === "past_question_style" ? "hard" : difficulty;
 
   // ── Fetch material ─────────────────────────────────────────────────────────
@@ -569,6 +614,78 @@ async function handleGenerateQuestionsRequest(req: NextRequest) {
   const material = mat as StudyMaterialRow;
   const filePath = material.file_path;
   if (!filePath) return NextResponse.json({ error: "No file attached to this material." }, { status: 400 });
+
+  const usageContext: AiUsageContext = {
+    userId: user.id,
+    endpoint: "generate-questions",
+    route: "/api/ai/generate-questions",
+    materialId,
+    requestedCount: questionCount,
+    metadata: {
+      questionFormat,
+      difficulty: effectiveDifficulty,
+      generationIntent,
+      topicId,
+      subtopicId,
+    },
+  };
+  const limit = await checkAiUsageLimit({
+    userId: user.id,
+    endpoint: usageContext.endpoint,
+    limit: aiLimitFromEnv("AI_LIMIT_GENERATE_QUESTIONS_PER_DAY", 4),
+    windowMs: 24 * 60 * 60 * 1000,
+  });
+  if (!limit.allowed) {
+    await recordBlockedAiUsage(usageContext, "Daily question generation limit reached.");
+    return NextResponse.json(
+      { error: aiRateLimitMessage(limit), code: "AI_RATE_LIMITED" },
+      { status: 429, headers: { "Retry-After": String(limit.retryAfterSeconds) } }
+    );
+  }
+
+  // ── Credits check ─────────────────────────────────────────────────────────
+  const creditCost = Math.ceil(requestedQuestionCount / 5);
+  let creditsRemaining = 0;
+
+  // Ensure row exists (INSERT ... ON CONFLICT DO NOTHING)
+  await admin
+    .from("study_user_credits")
+    .upsert(
+      { user_id: user.id, balance: 20, updated_at: new Date().toISOString() },
+      { onConflict: "user_id", ignoreDuplicates: true }
+    );
+
+  const { data: creditsRow } = await admin
+    .from("study_user_credits")
+    .select("balance")
+    .eq("user_id", user.id)
+    .maybeSingle();
+
+  const currentBalance = typeof creditsRow?.balance === "number" ? creditsRow.balance : 20;
+
+  if (currentBalance < creditCost) {
+    return NextResponse.json(
+      { ok: false, code: "INSUFFICIENT_CREDITS", message: "Not enough credits to generate questions" },
+      { status: 402 }
+    );
+  }
+
+  // Atomic deduct — optimistic lock on current balance
+  const { data: deducted } = await admin
+    .from("study_user_credits")
+    .update({ balance: currentBalance - creditCost, updated_at: new Date().toISOString() })
+    .eq("user_id", user.id)
+    .eq("balance", currentBalance)
+    .select("user_id");
+
+  if (!deducted || deducted.length === 0) {
+    return NextResponse.json(
+      { ok: false, code: "INSUFFICIENT_CREDITS", message: "Not enough credits to generate questions" },
+      { status: 402 }
+    );
+  }
+
+  creditsRemaining = currentBalance - creditCost;
 
   // ── Build prompt components ────────────────────────────────────────────────
   const difficultyInstruction = {
@@ -640,6 +757,17 @@ Return ONLY a valid JSON object with no markdown, no backticks, no preamble:
 
   const stream = new ReadableStream({
     async start(controller) {
+      await withAiUsageContext({ ...usageContext, suppressProviderUsageEvents: true }, async () => {
+      let usageRecorded = false;
+      const recordUsage = async (
+        status: AiUsageStatus,
+        ai?: Record<string, unknown> | null,
+        error?: unknown
+      ) => {
+        if (usageRecorded) return;
+        usageRecorded = true;
+        await recordQuestionGenerationUsage(usageContext, status, ai, error);
+      };
       const emit = (obj: object) => {
         controller.enqueue(encoder.encode(JSON.stringify(obj) + "\n"));
       };
@@ -670,7 +798,7 @@ Return ONLY a valid JSON object with no markdown, no backticks, no preamble:
       try {
         emitStatus("Starting question generation.", "start");
         // Coverage-aware MCQ path
-        if (questionFormat === "mcq") {
+        if (questionFormat === "mcq" && ENABLE_COVERAGE_AWARE_MCQ) {
           let emittedAny = false;
 
           try {
@@ -727,6 +855,7 @@ Return ONLY a valid JSON object with no markdown, no backticks, no preamble:
                 },
               };
               const draft = await persistDraftIfNeeded(coverageResult.questions as GeneratedQuestion[], ai);
+              await recordUsage("success", ai);
               emit({
                 type: "done",
                 ai,
@@ -736,20 +865,23 @@ Return ONLY a valid JSON object with no markdown, no backticks, no preamble:
                 repaired: draft?.repaired,
                 replacedCount: draft?.replacedCount,
                 skippedCount: draft?.skippedCount,
+                creditCost,
+                creditsRemaining,
               });
               return;
             }
           } catch (coverageError) {
             if (emittedAny) {
-              // Some questions already streamed — emit done with what we have
+              const ai = {
+                provider: "gemini",
+                model: process.env.GEMINI_MODEL_GENERATION?.trim() ?? process.env.GEMINI_MODEL?.trim() ?? "gemini-2.5-flash",
+                inputMode: "coverage-aware",
+                reason: "Partial coverage-aware generation.",
+              };
+              await recordUsage("success", ai);
               emit({
                 type: "done",
-                ai: {
-                  provider: "gemini",
-                  model: process.env.GEMINI_MODEL_GENERATION?.trim() ?? process.env.GEMINI_MODEL?.trim() ?? "gemini-2.5-flash",
-                  inputMode: "coverage-aware",
-                  reason: "Partial coverage-aware generation.",
-                },
+                ai,
               });
               return;
             }
@@ -774,6 +906,7 @@ Return ONLY a valid JSON object with no markdown, no backticks, no preamble:
           onQuestion: (q) => emit({ type: "question", question: q }),
         });
         const draft = await persistDraftIfNeeded(directResult.questions, directResult.ai);
+        await recordUsage("success", directResult.ai);
         emit({
           type: "done",
           ai: directResult.ai,
@@ -783,14 +916,18 @@ Return ONLY a valid JSON object with no markdown, no backticks, no preamble:
           repaired: draft?.repaired,
           replacedCount: draft?.replacedCount,
           skippedCount: draft?.skippedCount,
+          creditCost,
+          creditsRemaining,
         });
       } catch (error) {
+        await recordUsage("failure", null, error);
         try {
           emit({ type: "error", message: routeErrorMessage(error) });
         } catch { /* controller already closed */ }
       } finally {
         controller.close();
       }
+      });
     },
   });
 

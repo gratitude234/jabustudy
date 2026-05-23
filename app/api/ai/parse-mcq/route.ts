@@ -1,6 +1,13 @@
 // app/api/ai/parse-mcq/route.ts
 import { NextRequest, NextResponse } from "next/server";
 import { generateJson, userMessage } from "@/lib/ai";
+import {
+  aiLimitFromEnv,
+  aiRateLimitMessage,
+  checkAiUsageLimit,
+  recordBlockedAiUsage,
+  withAiUsageContext,
+} from "@/lib/aiUsage";
 
 type ParsedOption = { text: string; is_correct: boolean };
 type ParsedQuestion = {
@@ -15,6 +22,25 @@ export async function POST(req: NextRequest) {
 
   if (!text || text.trim().length < 20) {
     return NextResponse.json({ error: "Text too short" }, { status: 400 });
+  }
+
+  const usageContext = {
+    endpoint: "parse-mcq",
+    route: "/api/ai/parse-mcq",
+    requestedCount: null,
+    metadata: { inputChars: typeof text === "string" ? text.length : 0 },
+  };
+  const limit = await checkAiUsageLimit({
+    endpoint: usageContext.endpoint,
+    limit: aiLimitFromEnv("AI_LIMIT_PARSE_MCQ_PER_DAY", 20),
+    windowMs: 24 * 60 * 60 * 1000,
+  });
+  if (!limit.allowed) {
+    await recordBlockedAiUsage(usageContext, "Daily MCQ parsing limit reached.");
+    return NextResponse.json(
+      { error: aiRateLimitMessage(limit), code: "AI_RATE_LIMITED" },
+      { status: 429, headers: { "Retry-After": String(limit.retryAfterSeconds) } }
+    );
   }
 
   const prompt = `You are a quiz parser. Extract MCQ questions from the raw document text below and return ONLY a JSON array. No markdown, no explanation, no backticks — just the raw JSON array.
@@ -42,13 +68,13 @@ Rules:
 Document text:
 ${text}`;
 
-  const result = await generateJson<ParsedQuestion[]>({
+  const result = await withAiUsageContext(usageContext, () => generateJson<ParsedQuestion[]>({
     messages: [userMessage(prompt)],
     maxTokens: 8000,
     temperature: 0.1,
     timeoutMs: 60_000,
     modelRole: "fast",
-  });
+  }));
 
   if (!result.ok) {
     return NextResponse.json({ error: result.error }, { status: 500 });

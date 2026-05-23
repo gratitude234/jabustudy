@@ -8,6 +8,13 @@ import { NextRequest, NextResponse } from "next/server";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { generateText, userMessage } from "@/lib/ai";
 import { adminSupabase } from "@/lib/supabase/admin";
+import {
+  aiLimitFromEnv,
+  aiRateLimitMessage,
+  checkAiUsageLimit,
+  recordBlockedAiUsage,
+  withAiUsageContext,
+} from "@/lib/aiUsage";
 
 export async function POST(req: NextRequest) {
   // ── Auth ───────────────────────────────────────────────────────────────────
@@ -53,6 +60,26 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ answer: existing, cached: true });
   }
 
+  const usageContext = {
+    userId: user.id,
+    endpoint: "qa-answer",
+    route: "/api/ai/qa-answer",
+    metadata: { questionId, courseCode, level },
+  };
+  const limit = await checkAiUsageLimit({
+    userId: user.id,
+    endpoint: usageContext.endpoint,
+    limit: aiLimitFromEnv("AI_LIMIT_QA_ANSWER_PER_DAY", 10),
+    windowMs: 24 * 60 * 60 * 1000,
+  });
+  if (!limit.allowed) {
+    await recordBlockedAiUsage(usageContext, "Daily Q&A AI answer limit reached.");
+    return NextResponse.json(
+      { error: aiRateLimitMessage(limit), code: "AI_RATE_LIMITED" },
+      { status: 429, headers: { "Retry-After": String(limit.retryAfterSeconds) } }
+    );
+  }
+
   // ── Build prompt ───────────────────────────────────────────────────────────
   const contextLine = [
     courseCode ? `Course: ${courseCode}` : null,
@@ -77,13 +104,13 @@ Write in plain English. No markdown formatting. No greetings or sign-offs.
 Note at the end in one line: "— AI-generated answer. Verify with your lecturer or textbook."`;
 
   // ── Call Gemini ────────────────────────────────────────────────────────────
-  const result = await generateText({
+  const result = await withAiUsageContext(usageContext, () => generateText({
     messages: [userMessage(prompt)],
     temperature: 0.5,
     maxTokens: 500,
     timeoutMs: 45_000,
     modelRole: "generation",
-  });
+  }));
 
   if (!result.ok) {
     return NextResponse.json({ error: result.error }, { status: 502 });

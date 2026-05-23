@@ -8,7 +8,7 @@ export const metadata = {
   description:
     "Course materials, MCQ practice sets, Q&A forum, AI study plans and GPA calculator for JABU students.",
   openGraph: {
-    title: "Jabu Study",
+    title: "JabuStudy",
     description:
       "Course materials, MCQ practice sets, Q&A forum, AI study plans and GPA calculator for JABU students.",
     type: "website",

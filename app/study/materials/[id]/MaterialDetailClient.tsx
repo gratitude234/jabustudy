@@ -12,22 +12,26 @@ import {
   Bookmark,
   BookmarkCheck,
   CheckCircle2,
+  ChevronRight,
   ChevronDown,
   ChevronUp,
-  Clock,
+  Coins,
   Download,
+  Eye,
   ExternalLink,
   File,
   FileText,
   Image as ImageIcon,
   Lightbulb,
   Loader2,
+  PenLine,
   RefreshCw,
   RotateCcw,
   Share2,
   ShieldCheck,
   Sparkles,
   Star,
+  ThumbsUp,
   X,
   ZoomIn,
   ZoomOut,
@@ -143,13 +147,26 @@ type ActiveAiDraft = {
   attempt?: { id: string; status: string | null; updatedAt: string | null } | null;
 };
 
+type PreviousGeneratedSet = {
+  id: string;
+  title: string | null;
+  created_at: string | null;
+  total_questions: number | null;
+  attempt: {
+    set_id: string;
+    status: string | null;
+    completed_at: string | null;
+    updated_at: string | null;
+  } | null;
+};
+
 const STUDENT_GENERATION_MODES: Array<{ value: GenerationMode; label: string; sub: string }> = [
-  { value: "auto", label: "Auto", sub: "Let Jabu choose the best next set." },
-  { value: "weak_areas", label: "Cover weak areas", sub: "Prioritize topics with fewer questions." },
-  { value: "untested_sections", label: "Use untested sections", sub: "Pull from parts not covered well yet." },
-  { value: "application", label: "More application questions", sub: "Practice using ideas, not just recalling them." },
-  { value: "hard", label: "Harder questions", sub: "Make it closer to exam difficulty." },
-  { value: "topic", label: "Focus on a topic", sub: "Use the focus area you type below." },
+  { value: "auto",              label: "Let Jabu decide",            sub: "Auto-selects the best next set for you" },
+  { value: "weak_areas",        label: "Strengthen weak spots",      sub: "Focus on topics you've struggled with in this material" },
+  { value: "untested_sections", label: "Cover new ground",           sub: "Pull from parts of the material not yet tested" },
+  { value: "application",       label: "Practice applying concepts", sub: "Go beyond recall — use and analyse ideas" },
+  { value: "hard",              label: "Exam-style hard",            sub: "Questions that require deeper reasoning and application" },
+  { value: "topic",             label: "Focus on a topic",          sub: "Use the focus area you type below." },
 ];
 
 const QUESTION_FORMATS: Array<{ value: QuestionFormat; label: string; sub: string }> = [
@@ -335,6 +352,7 @@ async function readNdjsonQuestions(
   repaired?: boolean;
   replacedCount?: number;
   skippedCount?: number;
+  creditsRemaining?: number;
 }> {
   if (!res.ok) {
     let errorMsg = "Failed to generate questions.";
@@ -397,6 +415,7 @@ async function readNdjsonQuestions(
     repaired: typeof doneMeta.repaired === "boolean" ? doneMeta.repaired : undefined,
     replacedCount: typeof doneMeta.replacedCount === "number" ? doneMeta.replacedCount : undefined,
     skippedCount: typeof doneMeta.skippedCount === "number" ? doneMeta.skippedCount : undefined,
+    creditsRemaining: typeof doneMeta.creditsRemaining === "number" ? doneMeta.creditsRemaining : undefined,
   };
 }
 
@@ -792,9 +811,19 @@ function ReviewBeforeAnswer({
 
 
 export default function MaterialDetailClient({
-  material: m, initialSaved = false, relatedMaterials: initialRelatedMaterials = [], fromCourse = null,
+  material: m,
+  initialSaved = false,
+  relatedMaterials: initialRelatedMaterials = [],
+  fromCourse = null,
+  initialCredits = 20,
+  userId,
 }: {
-  material: Material; initialSaved?: boolean; relatedMaterials?: any[]; fromCourse?: string | null;
+  material: Material;
+  initialSaved?: boolean;
+  relatedMaterials?: any[];
+  fromCourse?: string | null;
+  initialCredits?: number;
+  userId?: string;
 }) {
   const router = useRouter();
   const kind = detectKind(m);
@@ -803,6 +832,7 @@ export default function MaterialDetailClient({
   const title = (m.title ?? course?.course_code ?? "Untitled material").trim();
   const fileUrl = m.file_path ? `/api/study/materials/${m.id}/download` : "";
   const hasFile = fileUrl.length > 0;
+  const aiSupported = isAiGenSupported(m);
 
   const [saved, setSaved] = useState(initialSaved);
   const [saving, setSaving] = useState(false);
@@ -830,9 +860,12 @@ export default function MaterialDetailClient({
   const [activeDraft, setActiveDraft] = useState<ActiveAiDraft | null>(null);
   const [draftLoading, setDraftLoading] = useState(false);
   const [draftAction, setDraftAction] = useState<"discard" | "new" | null>(null);
+  const [credits, setCredits] = useState(initialCredits);
+  const [activeTab, setActiveTab] = useState<"practice" | "read" | "info">("practice");
+  const [prevSets, setPrevSets] = useState<PreviousGeneratedSet[]>([]);
 
   // Quiz state machine
-  const [quizState, setQuizState] = useState<"idle" | "config" | "loading" | "quiz" | "results">("idle");
+  const [quizState, setQuizState] = useState<"idle" | "loading" | "quiz" | "results">("idle");
   const [quizConfig, setQuizConfig] = useState<{ count: number; difficulty: "easy" | "mixed" | "hard"; focus: string; questionFormat: QuestionFormat }>({
     count: 10,
     difficulty: "mixed",
@@ -875,6 +908,54 @@ export default function MaterialDetailClient({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [m.id]);
 
+  useEffect(() => {
+    if (!userId) {
+      setPrevSets([]);
+      return;
+    }
+
+    let cancelled = false;
+
+    void (async () => {
+      const { data: sets } = await supabase
+        .from("study_quiz_sets")
+        .select("id, title, created_at, total_questions")
+        .eq("source_material_id", m.id)
+        .order("created_at", { ascending: false })
+        .limit(5);
+
+      const materialSets = (sets ?? []) as Array<{
+        id: string;
+        title: string | null;
+        created_at: string | null;
+        total_questions: number | null;
+      }>;
+
+      if (!materialSets.length) {
+        if (!cancelled) setPrevSets([]);
+        return;
+      }
+
+      const { data: attempts } = await supabase
+        .from("study_practice_attempts")
+        .select("set_id, status, completed_at, updated_at")
+        .eq("user_id", userId)
+        .in("set_id", materialSets.map((set) => set.id))
+        .order("updated_at", { ascending: false });
+
+      const attemptMap = new Map<string, PreviousGeneratedSet["attempt"]>();
+      for (const attempt of (attempts ?? []) as NonNullable<PreviousGeneratedSet["attempt"]>[]) {
+        if (!attemptMap.has(attempt.set_id)) attemptMap.set(attempt.set_id, attempt);
+      }
+
+      if (!cancelled) {
+        setPrevSets(materialSets.map((set) => ({ ...set, attempt: attemptMap.get(set.id) ?? null })));
+      }
+    })();
+
+    return () => { cancelled = true; };
+  }, [m.id, userId]);
+
   // Hide bottom nav while quiz sheet is open
   useEffect(() => {
     if (quizState !== "idle") {
@@ -897,6 +978,13 @@ export default function MaterialDetailClient({
     .filter((item): item is { q: GeneratedMcqQuestion; i: number; ans: { chosen: string; correct: boolean; skipped: boolean } } =>
       isMcqQuestion(item.q) && Boolean(item.ans) && !item.ans.correct && !item.ans.skipped
     );
+  const missedTopicsForDisplay = Array.from(
+    new Set(
+      missedList
+        .map(({ q }) => q.sourceTopic ?? q.studyRef?.topic)
+        .filter((t): t is string => Boolean(t))
+    )
+  ).slice(0, 2);
 
   useEffect(() => {
     if (quizState !== "results" || !savedSetId || missedList.length === 0) return;
@@ -1028,11 +1116,12 @@ export default function MaterialDetailClient({
           generationIntent: resolveGenerationIntent(generationMode, quizConfig),
         }),
       });
-      const { questions, ai, draftSetId, savedCount, repaired, replacedCount, skippedCount } = await readNdjsonQuestions(res, (q) => {
+      const { questions, ai, draftSetId, savedCount, repaired, replacedCount, skippedCount, creditsRemaining } = await readNdjsonQuestions(res, (q) => {
         setStreamingQuestions((prev) => [...prev, q]);
       }, (status) => {
         setGenerationStatus(status.message);
       });
+      if (typeof creditsRemaining === "number") setCredits(creditsRemaining);
       if (!questions.length) throw new Error("Failed to generate questions.");
       if (!draftSetId) throw new Error("Questions generated, but the draft could not be saved. Please try again.");
       console.info("[study-ai] generated questions", {
@@ -1057,7 +1146,7 @@ export default function MaterialDetailClient({
       return;
     } catch (e: unknown) {
       setGenQsError(e instanceof Error ? e.message : "Something went wrong.");
-      setQuizState("config");
+      setQuizState("idle");
     }
   }
 
@@ -1081,12 +1170,13 @@ export default function MaterialDetailClient({
           generationIntent: intent,
         }),
       });
-      const { questions: moreQuestions, ai: moreAi } = await readNdjsonQuestions(res, (q) => {
+      const { questions: moreQuestions, ai: moreAi, creditsRemaining } = await readNdjsonQuestions(res, (q) => {
         setStreamingQuestions((prev) => [...prev, q]);
       }, (status) => {
         setGenerationStatus(status.message);
       });
       if (!moreQuestions.length) throw new Error("Failed to generate questions.");
+      if (typeof creditsRemaining === "number") setCredits(creditsRemaining);
       console.info("[study-ai] generated more questions", {
         provider: moreAi?.provider ?? "unknown",
         model: moreAi?.model ?? "unknown",
@@ -1096,6 +1186,60 @@ export default function MaterialDetailClient({
         fallbackReason: moreAi?.fallbackReason ?? null,
         count: moreQuestions.length,
       });
+      setGeneratedQuestions(moreQuestions);
+      setGenerationAi(moreAi);
+      setAnswers({});
+      setWrittenAnswers({});
+      setWrittenCompared({});
+      setWrittenGradeStates({});
+      setCurrentQuestionIndex(0);
+      setRetryPool(null);
+      setHintShown({});
+      setSavedSetId(null);
+      setSaveQsError(null);
+      syncedQuizMissesRef.current = null;
+      setQuizState("quiz");
+    } catch (e: unknown) {
+      setGenerateMoreError(e instanceof Error ? e.message : "Something went wrong.");
+    } finally {
+      setGeneratingMore(false);
+      setStreamingQuestions([]);
+    }
+  }
+
+  async function handleGenerateMoreFromMistakes() {
+    const uniqueTopics = Array.from(
+      new Set(
+        missedList
+          .map(({ q }) => q.sourceTopic ?? q.studyRef?.topic)
+          .filter((t): t is string => Boolean(t))
+      )
+    );
+    if (!uniqueTopics.length) return handleGenerateMore("weak_areas");
+    setGeneratingMore(true);
+    setGenerateMoreError(null);
+    setStreamingQuestions([]);
+    setGenerationStatus("Generating questions on your weak topics...");
+    setGenerationMode("weak_areas");
+    try {
+      const res = await fetch("/api/ai/generate-questions", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          materialId: m.id,
+          count: quizConfig.count,
+          difficulty: quizConfig.difficulty,
+          focus: uniqueTopics.join(", "),
+          questionFormat: quizConfig.questionFormat,
+          coveredQuestions: generatedQuestions?.map((q) => q.question) ?? [],
+          generationIntent: "weak_areas",
+        }),
+      });
+      const { questions: moreQuestions, ai: moreAi, creditsRemaining } = await readNdjsonQuestions(res,
+        (q) => { setStreamingQuestions((prev) => [...prev, q]); },
+        (status) => { setGenerationStatus(status.message); }
+      );
+      if (!moreQuestions.length) throw new Error("Failed to generate questions.");
+      if (typeof creditsRemaining === "number") setCredits(creditsRemaining);
       setGeneratedQuestions(moreQuestions);
       setGenerationAi(moreAi);
       setAnswers({});
@@ -1140,7 +1284,7 @@ export default function MaterialDetailClient({
       if (!res.ok || !data?.ok) throw new Error(data?.message || "Could not discard draft.");
       setActiveDraft(null);
       showToast("Draft discarded");
-      if (action === "new") setQuizState("config");
+      if (action === "new") void handleGenerateQuestions();
     } catch (error: unknown) {
       showToast(error instanceof Error ? error.message : "Could not discard draft.");
     } finally {
@@ -1222,288 +1366,569 @@ export default function MaterialDetailClient({
     setQuizState("idle");
   }
 
-  const MetaPill = ({ children }: { children: React.ReactNode }) => (
-    <span className="inline-flex items-center rounded-full border border-white/20 bg-white/10 px-2.5 py-0.5 text-[11px] font-medium text-white/90">
+  const HeroBadge = ({
+    children,
+    variant = "default",
+  }: {
+    children: React.ReactNode;
+    variant?: "default" | "verified" | "featured";
+  }) => (
+    <span
+      className={cn(
+        "inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-[11px] font-bold text-white",
+        variant === "default" && "border-white/20 bg-white/10",
+        variant === "verified" && "border-green-300/30 bg-green-400/20",
+        variant === "featured" && "border-amber-300/30 bg-amber-400/20"
+      )}
+    >
       {children}
     </span>
   );
 
-  return (
-    <div className="space-y-3 pb-28 md:pb-8">
+  const HeroStat = ({
+    icon: Icon,
+    children,
+  }: {
+    icon: typeof Download;
+    children: React.ReactNode;
+  }) => (
+    <div className="inline-flex min-w-0 items-center gap-1.5 text-xs font-bold text-white/85">
+      <Icon className="h-3.5 w-3.5 shrink-0" />
+      <span className="truncate">{children}</span>
+    </div>
+  );
 
-      {/* Back */}
-      <div>
+  const backHref = fromCourse ? `/study/courses/${encodeURIComponent(fromCourse)}` : "/study/library";
+  const backLabel = fromCourse ?? "Materials";
+  const creditCost = Math.ceil(quizConfig.count / 5);
+  const canGenerate = aiSupported && credits >= creditCost && quizState !== "loading";
+  const tabLabels: Array<{ value: typeof activeTab; label: string }> = [
+    { value: "practice", label: "Practice" },
+    { value: "read", label: "Read" },
+    { value: "info", label: "Info" },
+  ];
+
+  return (
+    <div className="min-h-[calc(100vh-56px)] bg-background">
+      <div className="px-4 pb-0 pt-4 md:px-6">
         <Link
-          href={fromCourse ? `/study/courses/${encodeURIComponent(fromCourse)}` : "/study/library"}
-          className="inline-flex items-center gap-2 rounded-2xl border border-border bg-background px-3 py-2 text-sm font-semibold text-foreground transition hover:bg-secondary/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2">
+          href={backHref}
+          className="inline-flex items-center gap-2 rounded-2xl border border-border bg-card px-3 py-2 text-sm font-semibold text-foreground transition hover:bg-secondary/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+        >
           <ArrowLeft className="h-4 w-4" />
-          {fromCourse ?? "Materials"}
+          {backLabel}
         </Link>
       </div>
 
-      {/* ══ HERO CARD ══ */}
-      <div className="overflow-hidden rounded-3xl border border-border shadow-sm">
+      <div className="sticky top-[56px] z-20 border-b border-border bg-card px-4 md:hidden">
+        <div className="flex">
+          {tabLabels.map((tab) => (
+            <button
+              key={tab.value}
+              type="button"
+              onClick={() => setActiveTab(tab.value)}
+              className={cn(
+                "flex-1 border-b-2 py-3 text-sm font-semibold transition focus-visible:outline-none",
+                activeTab === tab.value
+                  ? "border-primary text-primary"
+                  : "border-transparent text-muted-brand"
+              )}
+            >
+              {tab.label}
+            </button>
+          ))}
+        </div>
+      </div>
 
-        {/* Purple gradient banner */}
-        <div className="relative bg-gradient-to-br from-primary to-primary/60 px-5 pt-5 pb-6">
-          <div className="pointer-events-none absolute -top-10 -right-8 h-40 w-40 rounded-full bg-white/[0.06]" />
-          <div className="pointer-events-none absolute -bottom-8 left-4 h-24 w-24 rounded-full bg-white/[0.04]" />
-
-          {/* Context chips */}
-          <div className="relative mb-4 flex flex-wrap items-center gap-1.5">
-            {course?.course_code && <MetaPill>{course.course_code}</MetaPill>}
-            {course?.level && <MetaPill>{course.level}L</MetaPill>}
-            {course?.semester && <MetaPill>{course.semester} sem</MetaPill>}
-            {m.session && <MetaPill>{m.session}</MetaPill>}
-          </div>
-
-          {/* Icon + title */}
-          <div className="relative flex items-start gap-4">
-            <div className="grid h-12 w-12 shrink-0 place-items-center rounded-2xl bg-white/15 text-white">
-              <FileIcon kind={kind} />
-            </div>
-            <div className="min-w-0 flex-1">
-              <div className="flex flex-wrap items-center gap-2">
-                <h1 className="font-[family-name:var(--font-bricolage)] text-xl font-bold leading-snug tracking-tight text-white">{title}</h1>
+      <div className="mx-auto grid max-w-7xl items-start gap-5 p-4 pb-24 md:grid-cols-[1fr_420px] md:p-6 md:pt-5 md:pb-12">
+        <section
+          className={cn(
+            "flex flex-col gap-4",
+            activeTab !== "read" && activeTab !== "info" ? "hidden md:flex" : "flex"
+          )}
+        >
+          <div
+            className="relative overflow-hidden rounded-3xl"
+            style={{ background: "linear-gradient(135deg, var(--primary) 0%, oklch(46% 0.22 305) 100%)" }}
+          >
+            <div className="pointer-events-none absolute -right-10 -top-10 h-36 w-36 rounded-full border border-white/10" />
+            <div className="pointer-events-none absolute bottom-4 right-16 h-16 w-16 rounded-full bg-white/10 blur-2xl" />
+            <div className="relative px-5 pb-5 pt-5">
+              <div className="mb-3 flex flex-wrap gap-1.5">
+                {course?.course_code && <HeroBadge>{course.course_code}</HeroBadge>}
+                {course?.level && <HeroBadge>{course.level}L</HeroBadge>}
+                {course?.semester && <HeroBadge>{course.semester}</HeroBadge>}
+                {m.session && <HeroBadge>{m.session}</HeroBadge>}
                 {m.verified && (
-                  <span className="inline-flex items-center gap-1 rounded-full bg-emerald-400/20 px-2 py-0.5 text-[11px] font-semibold text-emerald-100">
+                  <HeroBadge variant="verified">
                     <CheckCircle2 className="h-3 w-3" /> Verified
-                  </span>
+                  </HeroBadge>
                 )}
                 {m.featured && (
-                  <span className="inline-flex items-center gap-1 rounded-full bg-amber-400/20 px-2 py-0.5 text-[11px] font-semibold text-amber-100">
+                  <HeroBadge variant="featured">
                     <Star className="h-3 w-3" /> Featured
-                  </span>
+                  </HeroBadge>
                 )}
               </div>
-              <div className="mt-2 flex flex-wrap gap-1.5">
-                <MetaPill>{badge}</MetaPill>
-                {m.material_type && <MetaPill>{formatMaterialType(m.material_type)}</MetaPill>}
-                <MetaPill><Clock className="mr-1 h-2.5 w-2.5" />{timeAgo(m.created_at)}</MetaPill>
+              <div className="flex items-start gap-3">
+                <div className="grid h-12 w-12 shrink-0 place-items-center rounded-2xl bg-white/15 text-white">
+                  <FileIcon kind={kind} />
+                </div>
+                <div className="min-w-0">
+                  <p className="mb-1 text-[11px] font-bold uppercase tracking-widest text-white/70">
+                    {formatMaterialType(m.material_type)} · {badge}
+                  </p>
+                  <h1 className="text-xl font-extrabold leading-snug text-white">{title}</h1>
+                  <p className="mt-1 text-sm text-white/75">
+                    Uploaded by {obfuscateEmail(m.uploader_email)} · {timeAgo(m.created_at ?? "")}
+                  </p>
+                </div>
+              </div>
+              <div className="mt-4 flex gap-4 border-t border-white/15 pt-3.5">
+                <HeroStat icon={Download}>{downloads.toLocaleString("en-NG")} downloads</HeroStat>
+                <HeroStat icon={ThumbsUp}>{upvoteCount.toLocaleString("en-NG")} upvotes</HeroStat>
               </div>
             </div>
           </div>
 
-          {m.description && (
-            <p className="relative mt-3 text-sm leading-relaxed text-white/75">{m.description}</p>
-          )}
-        </div>
-
-        {/* Action area */}
-        <div className="space-y-4 bg-card px-5 pb-5 pt-4">
-          <div className="rounded-3xl border border-border bg-background p-3">
-            <div className="mb-3 flex items-start justify-between gap-3">
-              <div>
-                <p className="text-xs font-semibold uppercase tracking-wider text-muted-brand">File actions</p>
-                <p className="mt-1 text-sm font-semibold text-foreground">Download, save, or share this material.</p>
-              </div>
-              <span className="shrink-0 rounded-full border border-border bg-card px-2.5 py-1 text-[11px] font-semibold text-muted-brand">
-                {badge}
-              </span>
-            </div>
-
-          {/* Primary action row */}
-          <div className="flex items-center gap-2">
-            <a href={hasFile ? `/api/study/materials/${m.id}/download` : "#"} download
-              onClick={(e) => { if (!hasFile) { e.preventDefault(); return; } handleDownload(); }}
+          <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={() => setPreviewOpen(true)}
+              disabled={!hasFile}
+              className="inline-flex flex-1 items-center justify-center gap-2 rounded-2xl border border-primary bg-primary px-4 py-2.5 text-sm font-semibold text-white transition hover:opacity-90 disabled:border-border disabled:bg-muted disabled:text-muted-brand disabled:opacity-70"
+            >
+              <Eye className="h-4 w-4" /> Read {badge}
+            </button>
+            <a
+              href={hasFile ? fileUrl : "#"}
+              download
+              onClick={(e) => {
+                if (!hasFile) {
+                  e.preventDefault();
+                  return;
+                }
+                void handleDownload();
+              }}
               className={cn(
-                "inline-flex flex-1 items-center justify-center gap-2 rounded-2xl px-4 py-3 text-sm font-semibold no-underline transition",
-                "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2",
-                !hasFile ? "pointer-events-none border border-border/60 bg-muted text-muted-brand"
-                  : "bg-primary text-white hover:opacity-90 active:scale-[0.98]"
-              )}>
-              <Download className="h-4 w-4" /> Download PDF
+                "inline-flex flex-1 items-center justify-center gap-2 rounded-2xl border border-border bg-card px-4 py-2.5 text-sm font-semibold text-foreground transition hover:bg-secondary/50",
+                !hasFile && "pointer-events-none opacity-50"
+              )}
+            >
+              <Download className="h-4 w-4" /> Download
             </a>
-
-            <button type="button" onClick={handleToggleSave} disabled={saving} aria-label={saved ? "Remove from library" : "Save to library"}
+            <button
+              type="button"
+              onClick={handleToggleSave}
+              disabled={saving}
+              aria-label={saved ? "Remove from library" : "Save to library"}
               className={cn(
-                "inline-flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl border transition",
-                "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
-                saved ? "border-primary/30 bg-primary-light text-primary-text" : "border-border/60 bg-background text-foreground hover:bg-secondary/50",
-                saving ? "opacity-60" : ""
-              )}>
+                "grid h-11 w-11 shrink-0 place-items-center rounded-2xl border transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
+                saved ? "border-primary/30 bg-primary-light text-primary-text" : "border-border bg-card text-foreground hover:bg-secondary/50",
+                saving && "opacity-60"
+              )}
+            >
               {saved ? <BookmarkCheck className="h-4 w-4" /> : <Bookmark className="h-4 w-4" />}
             </button>
-
-            <button type="button" onClick={handleShare} aria-label="Share"
-              className="inline-flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl border border-border/60 bg-background text-foreground transition hover:bg-secondary/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2">
+            <button
+              type="button"
+              onClick={handleShare}
+              aria-label="Share"
+              className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl border border-border bg-card text-foreground transition hover:bg-secondary/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+            >
               <Share2 className="h-4 w-4" />
             </button>
           </div>
 
-          <p className="mt-3 text-xs text-muted-brand">
-            {downloads.toLocaleString("en-NG")} downloads
-            {upvoteCount > 0 && ` · ${upvoteCount} found helpful`}
-          </p>
-
-          </div>
-
-          {/* AI feature cluster */}
-          {isAiGenSupported(m) && (
-          <div className="space-y-3 rounded-3xl border border-primary/20 bg-primary-light/40 p-3">
-            <div>
-              <p className="text-xs font-semibold uppercase tracking-wider text-primary">AI study tools</p>
-              <p className="mt-1 text-sm font-semibold text-primary-text">Turn this file into practice questions.</p>
+          {hasFile ? (
+            <InlinePreview url={fileUrl} title={title} kind={kind} />
+          ) : (
+            <div className="rounded-2xl border border-border bg-card p-5 text-sm text-muted-brand">
+              This material does not have a readable file attached.
             </div>
-
-            <div className="space-y-2">
-              {draftLoading ? (
-                <div className="rounded-xl border border-primary/15 bg-background/70 px-4 py-3 text-xs font-semibold text-primary">
-                  Checking for saved AI drafts...
-                </div>
-              ) : activeDraft ? (
-                <div className="space-y-2 rounded-xl border border-primary/20 bg-background/80 p-3">
-                  <div>
-                    <p className="text-sm font-bold text-primary-text">AI practice draft found</p>
-                    <p className="mt-0.5 text-xs text-primary/70">
-                      {activeDraft.questionsCount} question{activeDraft.questionsCount === 1 ? "" : "s"} saved from this material.
-                    </p>
-                  </div>
-                  <div className="grid gap-2 sm:grid-cols-3">
-                    <Link
-                      href={`/study/practice/${encodeURIComponent(activeDraft.setId)}${activeDraft.attempt?.id ? `?attempt=${encodeURIComponent(activeDraft.attempt.id)}` : ""}`}
-                      className="inline-flex items-center justify-center rounded-xl bg-primary px-3 py-2 text-xs font-bold text-white transition hover:opacity-90"
-                    >
-                      Resume
-                    </Link>
-                    <button
-                      type="button"
-                      onClick={() => void discardActiveDraft("new")}
-                      disabled={draftAction !== null}
-                      className="inline-flex items-center justify-center rounded-xl border border-primary/20 bg-primary-light px-3 py-2 text-xs font-bold text-primary-text transition hover:bg-primary-light/80 disabled:opacity-60"
-                    >
-                      {draftAction === "new" ? "Starting..." : "Start new"}
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => void discardActiveDraft("discard")}
-                      disabled={draftAction !== null}
-                      className="inline-flex items-center justify-center rounded-xl border border-border bg-background px-3 py-2 text-xs font-bold text-muted-brand transition hover:bg-secondary/50 disabled:opacity-60"
-                    >
-                      {draftAction === "discard" ? "Discarding..." : "Discard"}
-                    </button>
-                  </div>
-                </div>
-              ) : null}
-              <button type="button"
-                onClick={() => setQuizState("config")}
-                className="flex w-full items-center gap-3 rounded-xl border border-primary/20 bg-primary-light/70 px-4 py-3.5 text-left transition hover:bg-primary-light focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary">
-                <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-primary text-white">
-                  <Sparkles className="h-4 w-4" />
-                </span>
-                <div className="min-w-0 flex-1">
-                  <p className="text-sm font-bold text-primary-text">Generate Practice Questions</p>
-                  <p className="text-xs text-primary/70">AI-powered exam prep from this material</p>
-                </div>
-              </button>
-            </div>
-
-          </div>
           )}
-        </div>
-      </div>
 
-      {/* Inline preview */}
-      {hasFile && (
-        <InlinePreview
-          url={fileUrl}
-          title={title}
-          kind={kind}
-        />
-      )}
-
-      {/* About card */}
-      <div className="rounded-2xl border border-border bg-card p-5">
-        <p className="mb-4 text-xs font-semibold uppercase tracking-wider text-muted-brand">About this material</p>
-        <div className="grid grid-cols-2 gap-x-6 gap-y-4">
-          <div>
-            <p className="text-xs text-muted-brand">Course</p>
-            {course ? (
-              <>
-                <p className="mt-1 text-base font-bold text-foreground">{course.course_code}</p>
-                {course.course_title && <p className="mt-0.5 text-xs text-muted-brand line-clamp-1">{course.course_title}</p>}
-                <Link href={`/study/courses/${encodeURIComponent(course.course_code)}`}
-                  className="mt-2 inline-flex items-center gap-1 text-xs font-semibold text-primary hover:underline">
-                  View course <ArrowRight className="h-3 w-3" />
-                </Link>
-              </>
-            ) : <p className="mt-1 text-sm text-muted-brand">—</p>}
-          </div>
-          <div>
-            <p className="text-xs text-muted-brand">Level</p>
-            <p className="mt-1 text-base font-bold text-foreground">{course?.level ? `${course.level}L` : "—"}</p>
-            {m.verified && (
-              <span className="mt-1.5 inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-[11px] font-semibold text-emerald-700 dark:bg-emerald-900/20 dark:text-emerald-400">
-                <CheckCircle2 className="h-3 w-3" /> Verified
-              </span>
-            )}
-          </div>
-        </div>
-        <div className="my-4 border-t border-border/60" />
-        <div className="flex items-center justify-between gap-3">
-          <div className="flex min-w-0 items-center gap-2.5">
-            <div className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-primary-light text-[11px] font-bold text-primary">
-              {getInitials(m.uploader_email)}
+          {m.ai_summary && (
+            <div className="rounded-3xl border border-border bg-card p-5">
+              <div className="mb-3 flex items-center gap-2">
+                <div className="grid h-9 w-9 place-items-center rounded-2xl bg-primary-light text-primary">
+                  <Lightbulb className="h-4 w-4" />
+                </div>
+                <div>
+                  <p className="text-sm font-extrabold text-foreground">AI Summary</p>
+                  <p className="text-xs text-muted-brand">Quick scan before reading</p>
+                </div>
+              </div>
+              <p className="text-sm leading-relaxed text-muted-brand">{m.ai_summary}</p>
             </div>
-            <div className="min-w-0">
-              <p className="text-[10px] text-muted-brand">Uploaded by</p>
-              <div className="flex min-w-0 flex-wrap items-center gap-2">
-                <p className="truncate text-xs font-semibold text-foreground">
-                  {m.uploader_email ? obfuscateEmail(m.uploader_email) : "A student"}
-                </p>
-                {uploaderIsRep && (
-                  <span
-                    className={cn(
-                      "inline-flex items-center gap-1 rounded-full px-2 py-0.5",
-                      "border border-primary/30 bg-primary-light text-[10px] font-semibold",
-                      "text-primary-text dark:border-primary/40 dark:bg-primary/10",
-                      "dark:text-indigo-200"
-                    )}
+          )}
+
+          <div className={cn("space-y-4", activeTab === "info" ? "block" : "hidden md:block")}>
+            <div className="rounded-3xl border border-border bg-card p-5">
+              <div className="mb-4 flex items-start justify-between gap-4">
+                <div>
+                  <p className="text-xs font-bold uppercase tracking-wider text-muted-brand">Material info</p>
+                  <p className="mt-1 text-sm font-bold text-foreground">{course?.course_code ?? "Source file"}</p>
+                  {course?.course_title && <p className="mt-0.5 text-xs text-muted-brand">{course.course_title}</p>}
+                </div>
+                {course?.course_code && (
+                  <Link
+                    href={`/study/courses/${encodeURIComponent(course.course_code)}`}
+                    className="inline-flex items-center gap-1 rounded-xl border border-border bg-background px-3 py-2 text-xs font-bold text-primary transition hover:bg-secondary/50"
                   >
-                    <ShieldCheck className="h-3 w-3" />
-                    Course Rep
-                  </span>
+                    Course <ArrowRight className="h-3 w-3" />
+                  </Link>
                 )}
               </div>
+              <div className="grid grid-cols-2 gap-3 text-sm">
+                <div className="rounded-2xl border border-border bg-background px-3 py-3">
+                  <p className="text-[11px] font-bold uppercase tracking-wider text-muted-brand">Level</p>
+                  <p className="mt-1 font-extrabold text-foreground">{course?.level ? `${course.level}L` : "-"}</p>
+                </div>
+                <div className="rounded-2xl border border-border bg-background px-3 py-3">
+                  <p className="text-[11px] font-bold uppercase tracking-wider text-muted-brand">Semester</p>
+                  <p className="mt-1 font-extrabold text-foreground">{course?.semester ?? "-"}</p>
+                </div>
+                <div className="rounded-2xl border border-border bg-background px-3 py-3">
+                  <p className="text-[11px] font-bold uppercase tracking-wider text-muted-brand">Type</p>
+                  <p className="mt-1 font-extrabold text-foreground">{formatMaterialType(m.material_type)}</p>
+                </div>
+                <div className="rounded-2xl border border-border bg-background px-3 py-3">
+                  <p className="text-[11px] font-bold uppercase tracking-wider text-muted-brand">Session</p>
+                  <p className="mt-1 font-extrabold text-foreground">{m.session ?? "-"}</p>
+                </div>
+              </div>
+              {m.description && <p className="mt-4 text-sm leading-relaxed text-muted-brand">{m.description}</p>}
+              <div className="mt-4 flex items-center justify-between gap-3 border-t border-border pt-4">
+                <div className="flex min-w-0 items-center gap-2.5">
+                  <div className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-primary-light text-xs font-bold text-primary">
+                    {getInitials(m.uploader_email)}
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-[10px] text-muted-brand">Uploaded by</p>
+                    <div className="flex min-w-0 flex-wrap items-center gap-2">
+                      <p className="truncate text-xs font-semibold text-foreground">
+                        {m.uploader_email ? obfuscateEmail(m.uploader_email) : "A student"}
+                      </p>
+                      {uploaderIsRep && (
+                        <span className="inline-flex items-center gap-1 rounded-full border border-primary/30 bg-primary-light px-2 py-0.5 text-[10px] font-semibold text-primary-text">
+                          <ShieldCheck className="h-3 w-3" />
+                          Course Rep
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                </div>
+                <div className="shrink-0 text-right">
+                  <p className="text-[10px] text-muted-brand">Downloads</p>
+                  <p className="text-xl font-extrabold text-foreground">{downloads.toLocaleString("en-NG")}</p>
+                </div>
+              </div>
+            </div>
+
+            {relatedMaterials.length > 0 && (
+              <div className="rounded-3xl border border-border bg-card p-4">
+                <div className="mb-3">
+                  <p className="text-xs font-bold uppercase tracking-wider text-muted-brand">Related materials</p>
+                  <p className="mt-1 text-sm font-semibold text-foreground">More for {course?.course_code ?? "this course"}</p>
+                </div>
+                <div className="space-y-2">
+                  {relatedMaterials.map((r) => (
+                    <Link
+                      key={r.id}
+                      href={`/study/materials/${r.id}`}
+                      className="flex items-center justify-between gap-3 rounded-2xl border border-border bg-background px-4 py-3 no-underline transition hover:bg-secondary/50"
+                    >
+                      <div className="min-w-0">
+                        <p className="truncate text-sm font-semibold text-foreground">{r.title ?? "Untitled"}</p>
+                        <p className="mt-0.5 text-xs text-muted-brand">
+                          {r.material_type?.replace("_", " ")} · {r.downloads ?? 0} downloads
+                        </p>
+                      </div>
+                      <ChevronRight className="h-4 w-4 shrink-0 text-muted-brand" />
+                    </Link>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            <div className="rounded-2xl border border-border/50 bg-background p-3 text-center">
+              <Link href="/study/report" className="inline-flex items-center gap-1.5 text-xs text-muted-brand transition hover:text-foreground">
+                Something wrong with this material? Report it →
+              </Link>
             </div>
           </div>
-          <div className="shrink-0 text-right">
-            <p className="text-[10px] text-muted-brand">Downloads</p>
-            <p className="text-xl font-bold text-foreground">{downloads.toLocaleString("en-NG")}</p>
-          </div>
-        </div>
-      </div>
+        </section>
 
-      {/* Related materials */}
-      {relatedMaterials.length > 0 && (
-        <div className="rounded-3xl border border-border bg-card p-4">
-          <div className="mb-3">
-            <p className="text-xs font-semibold uppercase tracking-wider text-muted-brand">Related materials</p>
-            <p className="mt-1 text-sm font-semibold text-foreground">More for {course?.course_code ?? "this course"}</p>
+        <aside
+          className={cn(
+            "flex flex-col gap-3 md:sticky md:top-[76px]",
+            activeTab !== "practice" ? "hidden md:flex" : "flex"
+          )}
+        >
+          <div className="flex items-center gap-3 rounded-3xl border border-border bg-card px-4 py-3.5">
+            <div className="grid h-10 w-10 shrink-0 place-items-center rounded-2xl bg-amber-50">
+              <Coins className="h-5 w-5 text-amber-500" />
+            </div>
+            <div className="min-w-0 flex-1">
+              <p className="text-[11px] font-bold uppercase tracking-wider text-muted-brand">AI Credits</p>
+              <p className="text-lg font-extrabold text-foreground">
+                {credits} <span className="text-sm font-semibold text-muted-brand">remaining</span>
+              </p>
+              <div className="mt-1.5 h-1 overflow-hidden rounded-full bg-border">
+                <div
+                  className={cn(
+                    "h-full rounded-full transition-all",
+                    credits <= 2
+                      ? "bg-gradient-to-r from-red-500 to-red-400"
+                      : "bg-gradient-to-r from-amber-500 to-amber-400"
+                  )}
+                  style={{ width: `${Math.min(100, (credits / 20) * 100)}%` }}
+                />
+              </div>
+            </div>
+            <button
+              type="button"
+              className="shrink-0 rounded-xl border border-primary bg-primary-light px-3 py-1.5 text-xs font-bold text-primary"
+            >
+              + Get more
+            </button>
           </div>
-          <div className="space-y-2">
-            {relatedMaterials.map((r) => (
-              <Link key={r.id} href={`/study/materials/${r.id}`}
-                className="flex items-center justify-between gap-3 rounded-2xl border border-border bg-card px-4 py-3 no-underline transition hover:bg-secondary/50">
-                <div className="min-w-0">
-                  <p className="truncate text-sm font-semibold text-foreground">{r.title ?? "Untitled"}</p>
-                  <p className="mt-0.5 text-xs text-muted-brand">{r.material_type?.replace("_", " ")} · {r.downloads ?? 0} downloads</p>
+
+          {draftLoading ? (
+            <div className="rounded-3xl border border-primary/20 bg-primary-light/40 px-4 py-3 text-xs font-semibold text-primary">
+              Checking for saved AI drafts...
+            </div>
+          ) : activeDraft ? (
+            <div className="rounded-3xl border border-primary/20 bg-primary-light/45 p-4">
+              <p className="text-sm font-extrabold text-primary-text">Draft found</p>
+              <p className="mt-1 text-xs leading-relaxed text-primary/75">
+                {activeDraft.questionsCount} question{activeDraft.questionsCount === 1 ? "" : "s"} saved from this material.
+              </p>
+              <div className="mt-3 grid grid-cols-2 gap-2">
+                <Link
+                  href={`/study/practice/${encodeURIComponent(activeDraft.setId)}${activeDraft.attempt?.id ? `?attempt=${encodeURIComponent(activeDraft.attempt.id)}` : ""}`}
+                  className="inline-flex items-center justify-center rounded-xl bg-primary px-3 py-2.5 text-xs font-bold text-white transition hover:opacity-90"
+                >
+                  Resume draft
+                </Link>
+                <button
+                  type="button"
+                  onClick={() => void discardActiveDraft("discard")}
+                  disabled={draftAction !== null}
+                  className="inline-flex items-center justify-center rounded-xl border border-primary/25 bg-card px-3 py-2.5 text-xs font-bold text-primary-text transition hover:bg-background disabled:opacity-60"
+                >
+                  {draftAction === "discard" ? "Discarding..." : "Discard"}
+                </button>
+              </div>
+              <button
+                type="button"
+                onClick={() => void discardActiveDraft("new")}
+                disabled={draftAction !== null}
+                className="mt-2 inline-flex w-full items-center justify-center rounded-xl border border-border bg-card px-3 py-2.5 text-xs font-bold text-muted-brand transition hover:bg-background disabled:opacity-60"
+              >
+                {draftAction === "new" ? "Starting..." : "Start new"}
+              </button>
+            </div>
+          ) : null}
+
+          <div className="overflow-hidden rounded-3xl border border-border bg-card">
+            <div className="border-b border-border px-4 py-4">
+              <p className="flex items-center gap-2 text-base font-extrabold text-foreground">
+                <Sparkles className="h-4 w-4 text-primary" />
+                Configure Your Practice
+              </p>
+              <p className="mt-1 text-xs text-muted-brand">Generate from this material and open practice immediately.</p>
+            </div>
+            <div className="space-y-4 p-4">
+              <div>
+                <p className="mb-2 text-[11px] font-bold uppercase tracking-wider text-muted-brand">Questions</p>
+                <div className="flex gap-2">
+                  {([5, 10, 15, 20] as const).map((n) => (
+                    <button
+                      key={n}
+                      type="button"
+                      onClick={() => setQuizConfig((c) => ({ ...c, count: n }))}
+                      className={cn(
+                        "flex-1 rounded-xl border py-2.5 text-sm font-bold transition focus-visible:outline-none",
+                        quizConfig.count === n
+                          ? "border-primary bg-primary text-white"
+                          : "border-border bg-background text-foreground hover:bg-secondary/50"
+                      )}
+                    >
+                      {n}
+                    </button>
+                  ))}
                 </div>
-                <ArrowRight className="h-4 w-4 shrink-0 text-muted-brand" />
-              </Link>
-            ))}
-          </div>
-        </div>
-      )}
+              </div>
 
-      {/* Report */}
-      <div className="rounded-2xl border border-border/50 bg-background p-3 text-center">
-        <Link href="/study/report" className="inline-flex items-center gap-1.5 text-xs text-muted-brand transition hover:text-foreground">
-          Something wrong with this material? Report it →
-        </Link>
+              <div>
+                <p className="mb-2 text-[11px] font-bold uppercase tracking-wider text-muted-brand">Format</p>
+                <div className="space-y-2">
+                  {QUESTION_FORMATS.map(({ value, label, sub }) => (
+                    <button
+                      key={value}
+                      type="button"
+                      onClick={() => setQuizConfig((c) => ({ ...c, questionFormat: value }))}
+                      className={cn(
+                        "flex w-full items-start gap-3 rounded-2xl border px-3 py-3 text-left transition focus-visible:outline-none",
+                        quizConfig.questionFormat === value
+                          ? "border-primary bg-primary-light"
+                          : "border-border bg-background hover:bg-secondary/40"
+                      )}
+                    >
+                      <span
+                        className={cn(
+                          "mt-0.5 h-4 w-4 shrink-0 rounded-full border-2",
+                          quizConfig.questionFormat === value ? "border-primary bg-primary" : "border-border bg-card"
+                        )}
+                      />
+                      <span>
+                        <span className={cn("block text-sm font-bold", quizConfig.questionFormat === value ? "text-primary-text" : "text-foreground")}>
+                          {label}
+                        </span>
+                        <span className="mt-0.5 block text-[11px] leading-snug text-muted-brand">{sub}</span>
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div>
+                <p className="mb-2 text-[11px] font-bold uppercase tracking-wider text-muted-brand">Difficulty</p>
+                <div className="grid grid-cols-3 gap-2">
+                  {([
+                    { value: "easy", label: "Easy" },
+                    { value: "mixed", label: "Mixed" },
+                    { value: "hard", label: "Exam-hard" },
+                  ] as const).map(({ value, label }) => (
+                    <button
+                      key={value}
+                      type="button"
+                      onClick={() => setQuizConfig((c) => ({ ...c, difficulty: value }))}
+                      className={cn(
+                        "rounded-xl border px-2 py-2 text-xs font-extrabold transition focus-visible:outline-none",
+                        quizConfig.difficulty !== value && "border-border bg-background text-foreground hover:bg-secondary/50",
+                        quizConfig.difficulty === "easy" && value === "easy" && "border-green-300 bg-green-50 text-green-700",
+                        quizConfig.difficulty === "mixed" && value === "mixed" && "border-amber-300 bg-amber-50 text-amber-700",
+                        quizConfig.difficulty === "hard" && value === "hard" && "border-red-300 bg-red-50 text-red-600"
+                      )}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div>
+                <p className="mb-2 text-[11px] font-bold uppercase tracking-wider text-muted-brand">Smart targeting</p>
+                <div className="relative rounded-2xl border border-border bg-background px-3 py-3">
+                  <select
+                    value={generationMode}
+                    onChange={(e) => setGenerationMode(e.target.value as GenerationMode)}
+                    className="w-full appearance-none bg-transparent pr-8 text-sm font-bold text-foreground outline-none"
+                  >
+                    {STUDENT_GENERATION_MODES.map(({ value, label }) => (
+                      <option key={value} value={value}>{label}</option>
+                    ))}
+                  </select>
+                  <ChevronDown className="pointer-events-none absolute right-3 top-3.5 h-4 w-4 text-muted-brand" />
+                  <p className="mt-2 text-xs leading-snug text-muted-brand">
+                    {generationModeCopy(generationMode, quizConfig)}
+                  </p>
+                </div>
+              </div>
+
+              {(generationMode === "topic" || quizConfig.focus) && (
+                <div>
+                  <p className="mb-2 text-[11px] font-bold uppercase tracking-wider text-muted-brand">Focus area</p>
+                  <input
+                    type="text"
+                    value={quizConfig.focus}
+                    onChange={(e) => setQuizConfig((c) => ({ ...c, focus: e.target.value }))}
+                    placeholder="e.g. continuity and limits"
+                    className="w-full rounded-2xl border border-border bg-background px-4 py-3 text-sm outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/20"
+                  />
+                </div>
+              )}
+
+              <div className="flex items-center justify-between rounded-2xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm">
+                <span className="font-semibold text-amber-800">
+                  {quizConfig.count} questions · cost
+                </span>
+                <span className="font-extrabold text-amber-700">
+                  {creditCost} credit{creditCost === 1 ? "" : "s"}
+                </span>
+              </div>
+
+              {genQsError && <p className="text-center text-xs text-red-500">{genQsError}</p>}
+              {!aiSupported && (
+                <p className="text-center text-xs text-muted-brand">AI practice is available for PDF, image, Word, and PowerPoint files.</p>
+              )}
+              {aiSupported && credits < creditCost && (
+                <p className="text-center text-xs font-semibold text-amber-700">Not enough credits for this set.</p>
+              )}
+
+              <button
+                type="button"
+                disabled={!canGenerate}
+                onClick={() => void handleGenerateQuestions()}
+                className="flex w-full items-center gap-3 rounded-2xl bg-primary px-4 py-4 text-left text-white shadow-sm transition hover:opacity-90 disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 active:scale-[0.99]"
+              >
+                <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-white/15">
+                  <Sparkles className="h-5 w-5" />
+                </span>
+                <span className="min-w-0 flex-1">
+                  <span className="block text-base font-extrabold">Generate Questions</span>
+                  <span className="text-xs font-medium text-white/75">Opens practice immediately</span>
+                </span>
+              </button>
+
+              <Link
+                href={`/study/materials/${m.id}/practice`}
+                className="flex w-full items-center justify-center gap-2 rounded-2xl border border-border bg-background px-4 py-3 text-sm font-bold text-foreground transition hover:bg-secondary/50"
+              >
+                <PenLine className="h-4 w-4" /> Open practice session
+              </Link>
+            </div>
+          </div>
+
+          <div className="overflow-hidden rounded-3xl border border-border bg-card">
+            <div className="flex items-center justify-between border-b border-border px-4 py-3.5">
+              <p className="flex items-center gap-2 text-sm font-bold text-foreground">
+                <PenLine className="h-4 w-4 text-primary" /> Your sets from this material
+              </p>
+              <Link href="/study/library" className="text-xs font-semibold text-primary">See all</Link>
+            </div>
+            {prevSets.length === 0 ? (
+              <p className="px-4 py-5 text-center text-xs text-muted-brand">No sets generated yet</p>
+            ) : (
+              prevSets.map((set) => (
+                <Link
+                  key={set.id}
+                  href={`/study/practice/${set.id}`}
+                  className="flex items-center gap-3 border-b border-border px-4 py-3 transition last:border-0 hover:bg-background"
+                >
+                  <div className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-primary-light">
+                    <PenLine className="h-4 w-4 text-primary" />
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-sm font-bold text-foreground">
+                      {set.title ?? `${course?.course_code ?? "Set"} - ${set.total_questions ?? 0}Q`}
+                    </p>
+                    <p className="mt-0.5 text-[11px] text-muted-brand">{timeAgo(set.created_at ?? "")}</p>
+                  </div>
+                  {set.attempt?.status === "in_progress" ? (
+                    <span className="rounded-full bg-primary-light px-2 py-0.5 text-[10px] font-bold text-primary">Continue</span>
+                  ) : null}
+                  <ChevronRight className="h-4 w-4 shrink-0 text-muted-brand" />
+                </Link>
+              ))
+            )}
+          </div>
+        </aside>
       </div>
 
-      {/* Preview modal */}
       <PreviewModal open={previewOpen} onClose={() => setPreviewOpen(false)} title={title} url={fileUrl} kind={kind} />
       <GuidedSourceModal
         open={Boolean(readingRef?.open)}
@@ -1516,7 +1941,6 @@ export default function MaterialDetailClient({
         page={readingRef?.page}
       />
 
-      {/* Toast */}
       {toast && (
         <div className="pointer-events-none fixed inset-x-0 bottom-24 z-50 flex justify-center px-4">
           <div role="status" className="pointer-events-auto w-full max-w-sm rounded-2xl border border-border bg-card px-4 py-3 text-sm font-semibold text-foreground shadow-lg">
@@ -1525,8 +1949,39 @@ export default function MaterialDetailClient({
         </div>
       )}
 
+      {quizState === "loading" && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4 backdrop-blur-sm">
+          <div className="w-full max-w-sm rounded-3xl bg-card p-8 text-center shadow-2xl">
+            <div className="mx-auto mb-4 grid h-14 w-14 place-items-center rounded-full bg-primary-light">
+              <Loader2 className="h-7 w-7 animate-spin text-primary" />
+            </div>
+            <p className="mb-1.5 text-lg font-extrabold text-foreground">Generating questions...</p>
+            <p className="text-sm text-muted-brand">{generationStatus}</p>
+            <div className="mt-5 h-0.5 overflow-hidden rounded-full bg-border">
+              <div
+                className="h-full rounded-full bg-primary transition-all duration-500"
+                style={{
+                  width: streamingQuestions.length === 0
+                    ? "30%"
+                    : `${Math.min(100, (streamingQuestions.length / quizConfig.count) * 100)}%`,
+                }}
+              />
+            </div>
+            {streamingQuestions.length > 0 && (
+              <div className="mt-4 max-h-28 space-y-2 overflow-hidden">
+                {streamingQuestions.slice(-3).map((q, i) => (
+                  <div key={`${q.question}-${i}`} className="rounded-xl border border-border bg-background px-3 py-2 text-left text-xs text-foreground">
+                    {typeof q.question === "string" ? q.question : ""}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* Practice Questions Sheet — config / loading / quiz / results */}
-      {quizState !== "idle" && (() => {
+      {quizState !== "idle" && quizState !== "loading" && (() => {
         const currentQ = qs[currentQuestionIndex];
         const currentQuestionType = currentQ ? questionTypeOf(currentQ) : "mcq";
         const currentWrittenAnswer = writtenAnswers[currentQuestionIndex] ?? "";
@@ -1543,8 +1998,6 @@ export default function MaterialDetailClient({
         const scoreRingPct = mcqCount === 0 ? 0 : Math.round((correctCount / mcqCount) * 100);
         const scoreRingOffset = scoreRingCirc * (1 - scoreRingPct / 100);
         const scoreRingColor = scoreRingPct >= 80 ? "#22c55e" : scoreRingPct >= 60 ? "#f59e0b" : "#ef4444";
-        const closeDisabled = quizState === "loading";
-
         return (
           <>
             <div
@@ -1559,9 +2012,7 @@ export default function MaterialDetailClient({
                     AI practice workspace
                   </p>
                   <p className="text-sm font-bold text-foreground">
-                    {quizState === "config" ? "Configure Questions" :
-                     quizState === "loading" ? "Generating…" :
-                     quizState === "quiz" ? `Q ${currentQuestionIndex + 1} / ${qs.length}` :
+                    {quizState === "quiz" ? `Q ${currentQuestionIndex + 1} / ${qs.length}` :
                      "Results"}
                   </p>
                   {quizState === "quiz" && (
@@ -1595,162 +2046,14 @@ export default function MaterialDetailClient({
                     </p>
                   )}
                 </div>
-                <button type="button" onClick={closeAiPracticeWorkspace} disabled={closeDisabled}
-                  className="grid h-9 w-9 shrink-0 place-items-center rounded-full border border-border bg-background text-muted-brand transition hover:bg-secondary/50 disabled:cursor-not-allowed disabled:opacity-45 focus-visible:outline-none"
-                  aria-label={closeDisabled ? "Generation is still saving" : "Close AI practice workspace"}
-                  title={closeDisabled ? "Generation is still saving" : "Close"}
+                <button type="button" onClick={closeAiPracticeWorkspace}
+                  className="grid h-9 w-9 shrink-0 place-items-center rounded-full border border-border bg-background text-muted-brand transition hover:bg-secondary/50 focus-visible:outline-none"
+                  aria-label="Close AI practice workspace"
+                  title="Close"
                 >
                   <X className="h-4 w-4" />
                 </button>
               </div>
-
-              {/* ── Panel A: Config ── */}
-              {quizState === "config" && (
-                <div className="flex-1 space-y-6 overflow-y-auto px-4 py-5 md:px-6">
-                  <div>
-                    <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-muted-brand">Number of questions</p>
-                    <div className="flex gap-2">
-                      {([5, 10, 15, 20] as const).map((n) => (
-                        <button key={n} type="button"
-                          onClick={() => setQuizConfig((c) => ({ ...c, count: n }))}
-                          className={cn("flex-1 rounded-xl border py-2.5 text-sm font-semibold transition focus-visible:outline-none",
-                            quizConfig.count === n
-                              ? "border-primary bg-primary text-white"
-                              : "border-border bg-background text-foreground hover:bg-secondary/50"
-                          )}>
-                          {n}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-
-                  <div>
-                    <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-muted-brand">Format</p>
-                    <div className="grid gap-2 sm:grid-cols-3">
-                      {QUESTION_FORMATS.map(({ value, label, sub }) => (
-                        <button
-                          key={value}
-                          type="button"
-                          onClick={() => setQuizConfig((c) => ({ ...c, questionFormat: value }))}
-                          className={cn(
-                            "rounded-xl border px-3 py-3 text-left transition focus-visible:outline-none",
-                            quizConfig.questionFormat === value
-                              ? "border-primary bg-primary-light"
-                              : "border-border bg-background hover:bg-secondary/40"
-                          )}
-                        >
-                          <p className={cn("text-sm font-semibold", quizConfig.questionFormat === value ? "text-primary-text" : "text-foreground")}>{label}</p>
-                          <p className="mt-0.5 text-[11px] leading-snug text-muted-brand">{sub}</p>
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-
-                  <div>
-                    <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-muted-brand">Difficulty</p>
-                    <div className="flex flex-col gap-2">
-                      {([
-                        { value: "easy", label: "Easy warm-up", sub: "Recall & definitions" },
-                        { value: "mixed", label: "Mixed", sub: "Recall, application & analysis" },
-                        { value: "hard", label: "Exam-hard", sub: "Deep understanding & application" },
-                      ] as const).map(({ value, label, sub }) => (
-                        <button key={value} type="button"
-                          onClick={() => setQuizConfig((c) => ({ ...c, difficulty: value }))}
-                          className={cn("flex items-center gap-3 rounded-xl border px-4 py-3 text-left transition focus-visible:outline-none",
-                            quizConfig.difficulty === value
-                              ? "border-primary bg-primary-light"
-                              : "border-border bg-background hover:bg-secondary/40"
-                          )}>
-                          <div className={cn("h-4 w-4 shrink-0 rounded-full border-2",
-                            quizConfig.difficulty === value ? "border-primary bg-primary" : "border-border")} />
-                          <div>
-                            <p className={cn("text-sm font-semibold", quizConfig.difficulty === value ? "text-primary-text" : "text-foreground")}>{label}</p>
-                            <p className="text-xs text-muted-brand">{sub}</p>
-                          </div>
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-
-                  <div>
-                    <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-muted-brand">Smart targeting</p>
-                    <div className="rounded-xl border border-border bg-background px-3 py-3">
-                      <div className="flex items-center gap-3">
-                        <Sparkles className="h-4 w-4 shrink-0 text-primary" />
-                        <select
-                          value={generationMode}
-                          onChange={(e) => setGenerationMode(e.target.value as GenerationMode)}
-                          className="min-w-0 flex-1 bg-transparent text-sm font-semibold text-foreground outline-none"
-                        >
-                          {STUDENT_GENERATION_MODES.map(({ value, label }) => (
-                            <option key={value} value={value}>{label}</option>
-                          ))}
-                        </select>
-                      </div>
-                      <p className="mt-2 text-xs leading-snug text-muted-brand">
-                        {generationModeCopy(generationMode, quizConfig)}
-                      </p>
-                    </div>
-                  </div>
-
-                  <div>
-                    <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-muted-brand">Focus area <span className="normal-case font-normal text-muted-brand">(optional)</span></p>
-                    <input type="text" value={quizConfig.focus}
-                      onChange={(e) => setQuizConfig((c) => ({ ...c, focus: e.target.value }))}
-                      placeholder="e.g. continuity and limits"
-                      className="w-full rounded-xl border border-border bg-background px-4 py-2.5 text-sm outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/20" />
-                  </div>
-
-                  {genQsError && <p className="text-center text-xs text-red-500">{genQsError}</p>}
-
-                  <div className="sticky bottom-0 -mx-4 bg-card px-4 pb-[max(1rem,env(safe-area-inset-bottom))] pt-2 md:-mx-6 md:px-6">
-                    <button type="button" onClick={handleGenerateQuestions}
-                      className="inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-primary px-4 py-3.5 text-sm font-semibold text-white transition hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary">
-                      <Sparkles className="h-4 w-4" />
-                      Generate {quizConfig.count} {formatQuestionFormat(quizConfig.questionFormat)} questions
-                    </button>
-                  </div>
-                </div>
-              )}
-
-              {/* ── Panel B: Loading ── */}
-              {quizState === "loading" && (
-                <div className="flex flex-1 flex-col items-center justify-center gap-5 px-5 py-16 text-center md:px-6">
-                  <div className="grid h-14 w-14 place-items-center rounded-2xl bg-primary-light text-primary">
-                    <Loader2 className="h-7 w-7 animate-spin" />
-                  </div>
-                  <div className="max-w-sm space-y-2">
-                    <p className="text-base font-bold text-foreground">
-                      {streamingQuestions.length > 0
-                        ? `Generated ${streamingQuestions.length} of ${quizConfig.count} questions`
-                        : `Generating ${quizConfig.count} ${formatQuestionFormat(quizConfig.questionFormat)} questions`}
-                    </p>
-                    <p className="text-sm leading-relaxed text-muted-brand">{generationStatus}</p>
-                  </div>
-                  <div className="h-2 w-full max-w-xs overflow-hidden rounded-full bg-secondary">
-                    <div
-                      className={cn(
-                        "h-full rounded-full bg-primary transition-all duration-500",
-                        streamingQuestions.length === 0 && "w-1/3 animate-pulse"
-                      )}
-                      style={streamingQuestions.length > 0
-                        ? { width: `${Math.min(100, Math.round((streamingQuestions.length / quizConfig.count) * 100))}%` }
-                        : undefined}
-                    />
-                  </div>
-                  {streamingQuestions.length > 0 && (
-                    <div className="w-full max-w-sm space-y-2 text-left">
-                      {streamingQuestions.slice(-3).map((question, index) => (
-                        <div key={`${question.question}-${index}`} className="rounded-xl border border-border bg-background px-3 py-2">
-                          <p className="line-clamp-2 text-xs font-semibold leading-relaxed text-foreground">
-                            {question.question}
-                          </p>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              )}
 
               {/* ── Panel C: Quiz ── */}
               {quizState === "quiz" && currentQ && (
@@ -1916,32 +2219,14 @@ export default function MaterialDetailClient({
                                 </span>
                               </div>
                               <p className="mt-2 text-sm leading-relaxed text-foreground">{currentGradeState.grade.feedback}</p>
-                              {currentGradeState.grade.matchedPoints.length > 0 ? (
-                                <div className="mt-3">
-                                  <p className="text-xs font-extrabold text-emerald-700 dark:text-emerald-300">You covered</p>
-                                  <ul className="mt-1 list-disc space-y-1 pl-5 text-sm leading-relaxed text-foreground">
-                                    {currentGradeState.grade.matchedPoints.map((point, pointIndex) => (
-                                      <li key={`${point}-${pointIndex}`}>{point}</li>
-                                    ))}
-                                  </ul>
-                                </div>
-                              ) : null}
                               {currentGradeState.grade.missingPoints.length > 0 ? (
                                 <div className="mt-3">
-                                  <p className="text-xs font-extrabold text-amber-700 dark:text-amber-300">Missing points</p>
+                                  <p className="text-xs font-extrabold text-amber-700 dark:text-amber-300">Focus on</p>
                                   <ul className="mt-1 list-disc space-y-1 pl-5 text-sm leading-relaxed text-foreground">
                                     {currentGradeState.grade.missingPoints.map((point, pointIndex) => (
                                       <li key={`${point}-${pointIndex}`}>{point}</li>
                                     ))}
                                   </ul>
-                                </div>
-                              ) : null}
-                              {currentGradeState.grade.improvedAnswer ? (
-                                <div className="mt-3">
-                                  <p className="text-xs font-extrabold text-emerald-700 dark:text-emerald-300">Improved answer</p>
-                                  <p className="mt-1 whitespace-pre-wrap text-sm leading-relaxed text-foreground">
-                                    {currentGradeState.grade.improvedAnswer}
-                                  </p>
                                 </div>
                               ) : null}
                               <p className="mt-3 text-[11px] font-semibold text-muted-brand">
@@ -2115,6 +2400,7 @@ export default function MaterialDetailClient({
                     </div>
                   )}
                   {missedList.length > 0 && (
+                    <>
                     <button type="button"
                       onClick={() => {
                         const missed = missedList.map(({ q }) => q);
@@ -2133,6 +2419,23 @@ export default function MaterialDetailClient({
                       <RotateCcw className="h-4 w-4" />
                       Retry missed ({missedList.length})
                     </button>
+                    <button
+                      type="button"
+                      onClick={() => void handleGenerateMoreFromMistakes()}
+                      disabled={generatingMore}
+                      className="inline-flex w-full items-center justify-center gap-2 rounded-2xl border border-primary/30 bg-primary-light px-4 py-3 text-sm font-semibold text-primary-text transition hover:opacity-90 disabled:opacity-50 focus-visible:outline-none"
+                    >
+                      {generatingMore
+                        ? <><Loader2 className="h-4 w-4 animate-spin" /> Generating…</>
+                        : <>
+                            <Sparkles className="h-4 w-4" />
+                            {missedTopicsForDisplay.length > 0
+                              ? `You got ${missedList.length} wrong — practice ${missedTopicsForDisplay.join(" & ")}`
+                              : `Generate on what I got wrong (${missedList.length})`}
+                          </>
+                      }
+                    </button>
+                    </>
                   )}
                   {savedSetId ? (
                     <Link href="/study/practice"

@@ -1,0 +1,20 @@
+{
+  "version": 1,
+  "kind": "html",
+  "title": "Material Detail — Question-first redesign",
+  "entry": "material-detail-prototype.html",
+  "renderer": "html",
+  "status": "complete",
+  "exports": [
+    "html",
+    "pdf",
+    "zip"
+  ],
+  "createdAt": "2026-05-23T06:40:57.371Z",
+  "updatedAt": "2026-05-23T06:40:57.431Z",
+  "metadata": {
+    "identifier": "material-detail-prototype",
+    "artifactType": "text/html",
+    "inferred": false
+  }
+}

@@ -9,6 +9,12 @@ import {
 import { assertQuestionsNotDuplicateForCourse } from "@/lib/studyDuplicateGate";
 import { generateCoverageAwareQuestions, type StudyGenerationIntent } from "@/lib/studyQuestionGeneration";
 import { validateSourceBackedQuestions } from "@/lib/studyQuestionGrounding";
+import {
+  aiLimitFromEnv,
+  checkAiUsageLimit,
+  recordBlockedAiUsage,
+  withAiUsageContext,
+} from "@/lib/aiUsage";
 
 type BankRunRow = {
   status?: string | null;
@@ -90,7 +96,7 @@ export async function POST(
   let runIdForError: string | null = null;
   let materialRowIdForError: string | null = null;
   try {
-    const { scope } = await requireStudyModeratorFromRequest(req);
+    const { userId, scope } = await requireStudyModeratorFromRequest(req);
     const { runId } = await params;
     runIdForError = runId ?? null;
     if (!runId) return jsonError("Missing runId.", 400, "MISSING_RUN_ID");
@@ -163,7 +169,27 @@ export async function POST(
       .limit(80);
 
     const requestedCount = Math.max(1, Math.min(10, Number(bankRun.batch_size ?? 5)));
-    const generation = await generateCoverageAwareQuestions({
+    const usageContext = {
+      userId,
+      endpoint: "rep-question-bank-generate-batch",
+      route: "/api/study/rep-question-bank/[runId]/generate-batch",
+      materialId,
+      courseId: String(bankRun.course_id),
+      requestedCount,
+      metadata: { runId, generationIntent },
+    };
+    const limit = await checkAiUsageLimit({
+      userId,
+      endpoint: usageContext.endpoint,
+      limit: aiLimitFromEnv("AI_LIMIT_REP_QUESTION_BATCH_PER_DAY", 20),
+      windowMs: 24 * 60 * 60 * 1000,
+    });
+    if (!limit.allowed) {
+      await recordBlockedAiUsage(usageContext, "Daily rep question-bank generation limit reached.");
+      return jsonError(`AI limit reached (${limit.used}/${limit.limit}). Try again later.`, 429, "AI_RATE_LIMITED");
+    }
+
+    const generation = await withAiUsageContext(usageContext, () => generateCoverageAwareQuestions({
       materialId,
       materialTitle: String(materialRow.title ?? "Untitled material"),
       count: requestedCount,
@@ -172,7 +198,7 @@ export async function POST(
       coveredQuestions: ((existing ?? []) as ExistingQuestionRow[])
         .map((row) => String(row.prompt ?? ""))
         .filter(Boolean),
-    });
+    }));
 
     if (!generation?.questions.length) throw new Error("AI did not return usable source-backed questions for this batch.");
     const questions = await validateSourceBackedQuestions(materialId, generation.questions);
