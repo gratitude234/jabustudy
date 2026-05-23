@@ -17,7 +17,8 @@ function buildNextUrl(pathname: string, sp: URLSearchParams, nextQ: string) {
 
   const qs = copy.toString();
   if (pathname.startsWith("/study/library")) return qs ? `/study/library?${qs}` : "/study/library";
-  return q ? `/study/library?q=${encodeURIComponent(q)}` : pathname;
+  if (q) return `/study/library?q=${encodeURIComponent(q)}`;
+  return qs ? `${pathname}?${qs}` : pathname;
 }
 
 export default function MobileTopBar() {

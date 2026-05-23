@@ -478,7 +478,6 @@ export default function OnboardingClient() {
       setStep(isEditMode ? 1 : step2Ready ? 3 : step1Ready ? 2 : 1);
 
       setLoading(false);
-      setLoading(false);
     })();
 
     return () => {
