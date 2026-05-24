@@ -179,11 +179,17 @@ export async function withGeminiKeyFailover<T>(
       if (!shouldTryAnotherGeminiKey(error)) throw lastError;
 
       markGeminiKeyExhausted(key.alias);
-      console.warn("[ai] gemini key unavailable", {
+      const quotaReason = isQuotaError(error) ? "quota_429" : "invalid_key";
+      const rawMessage = error instanceof Error ? error.message : String(error);
+      console.error("[gemini] key exhausted — switching to next key", {
         operation,
         keyAlias: key.alias,
-        reason: isQuotaError(error) ? "quota" : "invalid_key",
+        reason: quotaReason,
         cooldownMs: geminiKeyQuotaCooldownMs(),
+        errorMessage: rawMessage.slice(0, 400),
+        tip: quotaReason === "quota_429"
+          ? "Add more keys to GEMINI_API_KEYS or wait for quota reset. Check token usage logs above."
+          : "Check that this API key is valid and has Gemini API access.",
       });
     }
   }
@@ -329,6 +335,18 @@ export async function geminiText(config: GeminiTextConfig): Promise<{ text: stri
       }
 
       const data = await res.json();
+      const usage = data?.usageMetadata;
+      if (usage) {
+        console.info("[gemini] token usage", {
+          model: geminiModelName(config.modelRole, config.model),
+          keyAlias: key.alias,
+          promptTokens: usage.promptTokenCount,
+          candidatesTokens: usage.candidatesTokenCount,
+          thinkingTokens: usage.thoughtsTokenCount ?? usage.thinkingTokenCount,
+          totalTokens: usage.totalTokenCount,
+          cachedTokens: usage.cachedContentTokenCount,
+        });
+      }
       const text: string = data?.candidates?.[0]?.content?.parts?.[0]?.text ?? "";
       if (!text.trim()) throw Object.assign(new Error("Gemini returned an empty response."), { code: "empty" });
       return text.trim();

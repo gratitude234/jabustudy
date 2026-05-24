@@ -886,6 +886,18 @@ Return ONLY a valid JSON object with no markdown, no backticks, no preamble:
 
       try {
         emitStatus("Starting question generation.", "start");
+        console.info("[generate-questions] START", {
+          userId: user.id,
+          materialId,
+          questionCount,
+          questionFormat,
+          effectiveDifficulty,
+          generationIntent,
+          model: process.env.GEMINI_MODEL_GENERATION?.trim() ?? process.env.GEMINI_MODEL?.trim() ?? "gemini-2.5-flash",
+          coverageAwarePath: questionFormat === "mcq" && ENABLE_COVERAGE_AWARE_MCQ,
+          hasCachedFileUri: Boolean(material.gemini_file_uri?.trim()),
+          inputMode: material.gemini_file_uri?.trim() ? "file-uri" : "text-or-inline",
+        });
         // Coverage-aware MCQ path
         if (questionFormat === "mcq" && ENABLE_COVERAGE_AWARE_MCQ) {
           let emittedAny = false;
@@ -1006,6 +1018,16 @@ Return ONLY a valid JSON object with no markdown, no backticks, no preamble:
           receiptMessage: receipt.receiptMessage,
         });
       } catch (error) {
+        console.error("[generate-questions] FAILED", {
+          userId: user.id,
+          materialId,
+          questionCount,
+          questionFormat,
+          error: error instanceof Error ? error.message : String(error),
+          code: (error as { code?: unknown })?.code,
+          status: (error as { status?: unknown })?.status,
+          cause: error instanceof Error && error.cause instanceof Error ? error.cause.message : undefined,
+        });
         await recordUsage("failure", null, error);
         try {
           emit({ type: "error", message: routeErrorMessage(error), chargeStatus: "not_charged" });
