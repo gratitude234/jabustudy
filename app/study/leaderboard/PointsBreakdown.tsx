@@ -1,7 +1,7 @@
 "use client";
 
-import { useState } from "react";
-import { Star } from "lucide-react";
+import { useId, useState } from "react";
+import { Flame, Star } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 type LeaderRow = {
@@ -26,15 +26,18 @@ const POINT_RULES: Array<{ key: keyof LeaderRow; label: string; multiplier: numb
 
 export function PointsBreakdown({ row }: { row: LeaderRow }) {
   const [open, setOpen] = useState(false);
+  const panelId = useId();
 
   return (
     <div>
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
+        aria-expanded={open}
+        aria-controls={panelId}
         className={cn(
           "flex items-center gap-1 text-[11px] font-semibold text-muted-brand select-none",
-          "hover:text-foreground transition-colors focus-visible:outline-none"
+          "hover:text-foreground transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
         )}
       >
         <Star className="h-3 w-3" />
@@ -43,7 +46,7 @@ export function PointsBreakdown({ row }: { row: LeaderRow }) {
 
       {open && (
         <>
-          <div className="mt-2 grid grid-cols-2 gap-1.5 sm:grid-cols-5">
+          <div id={panelId} className="mt-2 grid grid-cols-2 gap-1.5 sm:grid-cols-5">
             {POINT_RULES.map(({ key, label, multiplier }) => {
               const count = row[key] as number;
               const earned = count * multiplier;
@@ -66,8 +69,9 @@ export function PointsBreakdown({ row }: { row: LeaderRow }) {
           </div>
 
           {row.practice_days > 0 && (
-            <p className="mt-2 text-[10px] text-muted-brand">
-              🔥 Practiced on {row.practice_days} day{row.practice_days !== 1 ? "s" : ""}
+            <p className="mt-2 inline-flex items-center gap-1 text-[10px] text-muted-brand">
+              <Flame className="h-3 w-3 text-[#B45309]" aria-hidden="true" />
+              Practiced on {row.practice_days} day{row.practice_days !== 1 ? "s" : ""}
             </p>
           )}
         </>

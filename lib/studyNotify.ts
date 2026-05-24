@@ -13,6 +13,7 @@
 
 import { createSupabaseAdminClient } from "./supabase/admin";
 import { sendUserPushIfAllowed } from "./webPush";
+import { sendAnswerPostedEmail, sendAnswerAcceptedEmail } from "./email";
 
 const UPVOTE_MILESTONES = new Set([1, 5, 10, 25, 50]);
 
@@ -63,6 +64,7 @@ export async function notifyAnswerPosted({
     });
 
     void sendUserPushIfAllowed(questionAuthorId, { title, body, href, tag: `study-answer-${answerId}` }, 'answers');
+    void sendAnswerPostedEmail({ questionAuthorId, questionTitle, questionId, answerId });
   } catch {
     // notification failure must never break the post-answer flow
   }
@@ -111,6 +113,7 @@ export async function notifyAnswerAccepted({
     });
 
     void sendUserPushIfAllowed(answerAuthorId, { title, body, href, tag: `study-accepted-${answerId}` }, 'answers');
+    void sendAnswerAcceptedEmail({ answerAuthorId, questionTitle, questionId, answerId });
   } catch {
     // notification failure must never break the accept flow
   }

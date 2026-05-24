@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { requireStudyModeratorFromRequest } from "@/lib/studyAdmin/requireStudyModeratorFromRequest";
 import { sendUserPushIfAllowed } from "@/lib/webPush";
+import { sendRepApprovedEmail } from "@/lib/email";
 
 function jsonError(message: string, status: number, code: string, extra?: Record<string, unknown>) {
   return NextResponse.json({ ok: false, code, message, ...(extra ?? {}) }, { status });
@@ -160,6 +161,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       href,
     });
     void sendUserPushIfAllowed(appRow.user_id, { title: notifTitle, body, href, tag: `rep-approved-${id}` }, 'materials');
+    void sendRepApprovedEmail({ userId: appRow.user_id, role });
   } catch { /* non-critical */ }
 
   return NextResponse.json({

@@ -4,7 +4,7 @@
 
 import { cn } from "@/lib/utils";
 import Link from "next/link";
-import { ArrowLeft, ShieldCheck } from "lucide-react";
+import { ArrowLeft, BookOpen, Flame, Medal, ShieldCheck, Trophy, Users } from "lucide-react";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { PointsBreakdown } from "./PointsBreakdown";
 import { HowPointsWork } from "./HowPointsWork";
@@ -102,6 +102,14 @@ function initials(name: string): string {
   const a = parts[0]?.[0] ?? "?";
   const b = parts[1]?.[0] ?? "";
   return (a + b).toUpperCase();
+}
+
+function formatNumber(value: number): string {
+  return value.toLocaleString("en-NG");
+}
+
+function rankLabel(rank: number | null): string {
+  return rank ? `#${rank}` : "Unranked";
 }
 
 // ─── Data fetch ───────────────────────────────────────────────────────────────
@@ -333,16 +341,17 @@ function PeriodTabs({
   ];
 
   return (
-    <div className="flex items-center gap-2 overflow-x-auto [scrollbar-width:none]">
+    <nav className="flex items-center gap-2 overflow-x-auto [scrollbar-width:none]" aria-label="Leaderboard period">
       {tabs.map((t) => {
         const active = period === t.key;
         return (
           <Link
             key={t.key}
             href={leaderboardHref(t.key, scope, courseCode)}
+            aria-current={active ? "page" : undefined}
             className={cn(
               "shrink-0 rounded-full border px-3 py-1.5 text-xs font-semibold transition",
-              "focus-visible:outline-none",
+              "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/70 focus-visible:ring-offset-2 focus-visible:ring-offset-primary",
               active
                 ? "border-white bg-white text-primary-text"
                 : "border-white/25 bg-white/10 text-white/70 hover:bg-white/20 hover:text-white"
@@ -352,7 +361,7 @@ function PeriodTabs({
           </Link>
         );
       })}
-    </div>
+    </nav>
   );
 }
 
@@ -394,29 +403,40 @@ function ScopeTabs({
   ];
 
   return (
-    <div className="flex items-center gap-2 overflow-x-auto [scrollbar-width:none]">
+    <nav className="flex items-center gap-2 overflow-x-auto [scrollbar-width:none]" aria-label="Leaderboard scope">
       {tabs.map((t) => {
         const active = scope === t.key;
         const href = leaderboardHref(period, t.key, t.key === "course" ? courseCode : null);
+        if (t.disabled) {
+          return (
+            <span
+              key={t.key}
+              aria-disabled="true"
+              className="shrink-0 rounded-full border border-white/15 bg-white/5 px-3 py-1.5 text-xs font-semibold text-white/35"
+            >
+              {t.label}
+            </span>
+          );
+        }
+
         return (
           <Link
             key={t.key}
-            href={t.disabled ? "#" : href}
-            aria-disabled={t.disabled}
+            href={href}
+            aria-current={active ? "page" : undefined}
             className={cn(
               "shrink-0 rounded-full border px-3 py-1.5 text-xs font-semibold transition",
-              "focus-visible:outline-none",
+              "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/70 focus-visible:ring-offset-2 focus-visible:ring-offset-primary",
               active
                 ? "border-white bg-white text-primary-text"
-                : "border-white/25 bg-white/10 text-white/70 hover:bg-white/20 hover:text-white",
-              t.disabled && "pointer-events-none opacity-40"
+                : "border-white/25 bg-white/10 text-white/70 hover:bg-white/20 hover:text-white"
             )}
           >
             {t.label}
           </Link>
         );
       })}
-    </div>
+    </nav>
   );
 }
 
@@ -432,7 +452,7 @@ function CourseTabs({
   if (courses.length === 0) return null;
 
   return (
-    <div className="flex items-center gap-2 overflow-x-auto [scrollbar-width:none]">
+    <nav className="flex items-center gap-2 overflow-x-auto [scrollbar-width:none]" aria-label="Course leaderboard">
       {courses.map((course) => {
         const active = normalizeCourseCode(activeCourseCode) === normalizeCourseCode(course.course_code);
         return (
@@ -440,16 +460,70 @@ function CourseTabs({
             key={course.id}
             href={leaderboardHref(period, "course", course.course_code)}
             title={course.course_title ?? course.course_code}
+            aria-current={active ? "page" : undefined}
             className={cn(
-              "shrink-0 rounded-full border px-3 py-1.5 text-xs font-semibold transition",
-              "focus-visible:outline-none",
+              "inline-flex shrink-0 items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-semibold transition",
+              "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/70 focus-visible:ring-offset-2 focus-visible:ring-offset-primary",
               active
                 ? "border-white bg-white text-primary-text"
                 : "border-white/25 bg-white/10 text-white/70 hover:bg-white/20 hover:text-white"
             )}
           >
+            <BookOpen className="h-3 w-3" aria-hidden="true" />
             {course.course_code}
           </Link>
+        );
+      })}
+    </nav>
+  );
+}
+
+function LeaderboardStats({
+  rankedCount,
+  topPoints,
+  activeUserRank,
+  activeUserPoints,
+}: {
+  rankedCount: number;
+  topPoints: number;
+  activeUserRank: number | null;
+  activeUserPoints: number | null;
+}) {
+  const stats = [
+    {
+      label: "Students ranked",
+      value: rankedCount > 0 ? formatNumber(rankedCount) : "0",
+      icon: Users,
+    },
+    {
+      label: "Top score",
+      value: `${formatNumber(topPoints)} pts`,
+      icon: Trophy,
+    },
+    {
+      label: "Your rank",
+      value: activeUserRank ? rankLabel(activeUserRank) : "Not ranked",
+      detail: activeUserPoints != null ? `${formatNumber(activeUserPoints)} pts` : null,
+      icon: Medal,
+    },
+  ];
+
+  return (
+    <div className="mt-4 grid grid-cols-3 gap-2" aria-label="Leaderboard summary">
+      {stats.map((stat) => {
+        const Icon = stat.icon;
+        return (
+          <div
+            key={stat.label}
+            className="min-w-0 rounded-2xl border border-white/15 bg-white/10 px-3 py-2.5 text-white"
+          >
+            <div className="mb-1 flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wide text-white/55">
+              <Icon className="h-3 w-3 shrink-0" aria-hidden="true" />
+              <span className="truncate">{stat.label}</span>
+            </div>
+            <p className="truncate text-sm font-extrabold leading-tight">{stat.value}</p>
+            {stat.detail && <p className="mt-0.5 truncate text-[10px] font-semibold text-white/55">{stat.detail}</p>}
+          </div>
         );
       })}
     </div>
@@ -471,19 +545,25 @@ function MyRankStrip({
 }) {
   const inits = initials(name);
   return (
-    <div className="flex items-center justify-between border-t border-white/15 px-5 py-3">
+    <div
+      className="flex items-center justify-between gap-3 border-t border-white/15 bg-black/10 px-5 py-3"
+      aria-label={`Your rank is ${rankLabel(rank)} with ${formatNumber(points)} points`}
+    >
       <div className="flex items-center gap-2.5">
-        <div className="grid h-7 w-7 shrink-0 place-items-center rounded-full bg-white/20 text-[11px] font-semibold text-white">
+        <div className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-white/20 text-[11px] font-semibold text-white">
           {inits}
         </div>
-        <span className="text-sm font-semibold text-white">{name}</span>
+        <div className="min-w-0">
+          <p className="truncate text-sm font-semibold text-white">{name}</p>
+          <p className="text-[10px] font-semibold uppercase tracking-wide text-white/50">Your position</p>
+        </div>
       </div>
       <div className="text-right">
-        <span className="font-[family-name:var(--font-bricolage)] text-sm font-extrabold text-white">#{rank}</span>
-        <span className="ml-2 text-xs text-white/60">{points.toLocaleString("en-NG")} pts</span>
+        <span className="font-[family-name:var(--font-bricolage)] text-base font-extrabold text-white">{rankLabel(rank)}</span>
+        <span className="ml-2 text-xs font-semibold text-white/60">{formatNumber(points)} pts</span>
         {pointsToNext != null && pointsToNext > 0 && (
           <p className="mt-0.5 text-[10px] font-semibold text-white/55">
-            {pointsToNext.toLocaleString("en-NG")} to next rank
+            {formatNumber(pointsToNext)} to next rank
           </p>
         )}
       </div>
@@ -508,12 +588,11 @@ function Podium({
   const order = [top3[1], top3[0], top3[2]].filter(Boolean);
   const ranks  = [2, 1, 3];
   const baseHeights = { 1: "h-14", 2: "h-10", 3: "h-7" };
-  const baseColors  = { 1: "bg-primary", 2: "bg-[#888780]", 3: "bg-[#D85A30]" };
+  const baseColors  = { 1: "bg-primary", 2: "bg-[#6F6E68]", 3: "bg-[#B95A32]" };
   const avatarSizes = { 1: "h-14 w-14 text-base", 2: "h-11 w-11 text-sm", 3: "h-10 w-10 text-xs" };
-  const medals      = { 1: "🥇", 2: "🥈", 3: "🥉" };
 
   return (
-    <div className="flex items-end justify-center gap-2 px-4 pt-5 pb-0 bg-primary-light">
+    <section className="flex items-end justify-center gap-2 rounded-3xl border border-border bg-card px-4 pt-5 pb-0 shadow-sm" aria-label="Top three students">
       {order.map((row, i) => {
         const rank = ranks[i] as 1 | 2 | 3;
         const isMe = row.user_id === currentUserId;
@@ -540,12 +619,13 @@ function Podium({
               </div>
               {/* Flame badge for practice streak */}
               {row.practice_days >= 3 && (
-                <span className="absolute -bottom-1 -right-1 rounded-full border-2 border-primary-light bg-[#EF9F27] px-1 py-px text-[8px] font-bold text-[#412402]">
-                  🔥{row.practice_days}d
+                <span className="absolute -bottom-1 -right-1 inline-flex items-center gap-0.5 rounded-full border-2 border-card bg-[#EF9F27] px-1 py-px text-[8px] font-bold text-[#412402]">
+                  <Flame className="h-2.5 w-2.5" aria-hidden="true" />
+                  {row.practice_days}d
                 </span>
               )}
               {isMe && (
-                <span className="absolute -top-1 -right-1 rounded-full border-2 border-primary-light bg-primary px-1 py-px text-[8px] font-bold text-white">
+                <span className="absolute -top-1 -right-1 rounded-full border-2 border-card bg-primary px-1 py-px text-[8px] font-bold text-white">
                   you
                 </span>
               )}
@@ -559,23 +639,24 @@ function Podium({
               "text-center text-[11px]",
               rank === 1 ? "font-extrabold text-primary-text" : "text-muted-brand"
             )}>
-              {row.points.toLocaleString("en-NG")} pts
+              {formatNumber(row.points)} pts
             </p>
 
             {/* Podium base */}
             <div
               className={cn(
-                "flex w-full items-center justify-center rounded-t-lg text-base",
+                "flex w-full items-center justify-center rounded-t-lg text-white",
                 baseHeights[rank],
                 baseColors[rank]
               )}
+              aria-label={`Rank ${rank}`}
             >
-              {medals[rank]}
+              {rank === 1 ? <Trophy className="h-5 w-5" aria-hidden="true" /> : <Medal className="h-4 w-4" aria-hidden="true" />}
             </div>
           </div>
         );
       })}
-    </div>
+    </section>
   );
 }
 
@@ -597,16 +678,17 @@ function RankRow({
   repRoleMap: Map<string, string>;
 }) {
   const inits = initials(name);
-  const streakLabel = row.practice_days >= 3 ? `🔥 ${row.practice_days}d` : null;
+  const hasPracticeStreak = row.practice_days >= 3;
 
   return (
-    <div
+    <article
       id={isCurrentUser ? "my-rank" : undefined}
+      aria-label={`${name}, rank ${rank}, ${formatNumber(row.points)} points`}
       className={cn(
         "overflow-hidden rounded-2xl border transition-colors",
         isCurrentUser
-          ? "border-primary/30 bg-primary-light"
-          : "border-border bg-background hover:bg-secondary/30"
+          ? "border-primary/35 bg-primary-light shadow-sm"
+          : "border-border bg-card hover:bg-secondary/30"
       )}
     >
       {/* Main row */}
@@ -615,7 +697,7 @@ function RankRow({
           "w-6 shrink-0 text-center text-xs font-semibold",
           isCurrentUser ? "text-primary" : "text-muted-brand"
         )}>
-          {rank}
+          #{rank}
         </span>
 
         <div
@@ -657,10 +739,15 @@ function RankRow({
               </span>
             )}
           </div>
-          <p className="mt-0.5 text-xs text-muted-brand">
-            {row.accepted > 0 ? `${row.accepted} accepted · ` : ""}
-            {row.answers} answers
-            {streakLabel ? ` · ${streakLabel}` : ""}
+          <p className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-brand">
+            {row.accepted > 0 && <span>{row.accepted} accepted</span>}
+            <span>{row.answers} answers</span>
+            {hasPracticeStreak && (
+              <span className="inline-flex items-center gap-1">
+                <Flame className="h-3 w-3 text-[#B45309]" aria-hidden="true" />
+                {row.practice_days}d practice
+              </span>
+            )}
           </p>
           <div className="mt-1.5">
             <PointsBreakdown row={row} />
@@ -671,10 +758,10 @@ function RankRow({
           "shrink-0 text-sm font-extrabold",
           isCurrentUser ? "text-primary-text" : "text-foreground"
         )}>
-          {row.points.toLocaleString("en-NG")} pts
+          {formatNumber(row.points)} pts
         </p>
       </div>
-    </div>
+    </article>
   );
 }
 
@@ -774,7 +861,7 @@ export default async function LeaderboardPage({
           <div className="mb-4 flex items-center justify-between">
             <Link
               href="/study"
-              className="inline-flex items-center gap-1.5 rounded-2xl border border-white/25 bg-white/15 px-3 py-1.5 text-xs font-semibold text-white no-underline hover:bg-white/25"
+              className="inline-flex items-center gap-1.5 rounded-2xl border border-white/25 bg-white/15 px-3 py-1.5 text-xs font-semibold text-white no-underline hover:bg-white/25 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/70 focus-visible:ring-offset-2 focus-visible:ring-offset-primary"
             >
               <ArrowLeft className="h-3.5 w-3.5" /> Back
             </Link>
@@ -786,6 +873,13 @@ export default async function LeaderboardPage({
           <p className="mt-1 text-xs text-white/60">
             Top contributors · {activePeriodLabel} · {scopeLabel}
           </p>
+
+          <LeaderboardStats
+            rankedCount={rows.length}
+            topPoints={rows[0]?.points ?? 0}
+            activeUserRank={activeUserRank}
+            activeUserPoints={activeUserRow?.points ?? null}
+          />
 
           {/* Filter chips */}
           <div className="mt-4 space-y-2">
@@ -865,7 +959,7 @@ export default async function LeaderboardPage({
       {/* Top 3 in top badge for current user */}
       {myRow && myRank && myRank <= 3 && (
         <div className="rounded-2xl border border-primary/20 bg-primary-light px-4 py-3 text-sm font-semibold text-primary-text">
-          You are in the top 3 — your entry is highlighted in the podium below.
+          You are currently top 3 in this leaderboard.
         </div>
       )}
 
@@ -883,14 +977,20 @@ export default async function LeaderboardPage({
           <div className="mt-4 flex flex-wrap gap-2">
             <Link
               href="/study/questions/ask"
-              className="inline-flex items-center justify-center rounded-2xl bg-primary px-4 py-2.5 text-sm font-semibold text-white no-underline hover:opacity-90"
+              className="inline-flex items-center justify-center rounded-2xl bg-primary px-4 py-2.5 text-sm font-semibold text-white no-underline hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
             >
               Ask a question
+            </Link>
+            <Link
+              href="/study/practice"
+              className="inline-flex items-center justify-center rounded-2xl border border-border bg-background px-4 py-2.5 text-sm font-semibold text-foreground no-underline hover:bg-secondary/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+            >
+              Practice
             </Link>
             {scopeEmpty && (
               <Link
                 href={leaderboardHref(period, "all")}
-                className="inline-flex items-center justify-center rounded-2xl border border-border bg-background px-4 py-2.5 text-sm font-semibold text-foreground no-underline hover:bg-secondary/50"
+                className="inline-flex items-center justify-center rounded-2xl border border-border bg-background px-4 py-2.5 text-sm font-semibold text-foreground no-underline hover:bg-secondary/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
               >
                 View all of JABU
               </Link>

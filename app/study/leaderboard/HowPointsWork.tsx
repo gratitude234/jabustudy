@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useId, useState } from "react";
 import { cn } from "@/lib/utils";
 
 const RULES = [
@@ -17,13 +17,16 @@ const RULES = [
 
 export function HowPointsWork() {
   const [open, setOpen] = useState(false);
+  const panelId = useId();
 
   return (
     <div className="relative">
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
-        className="inline-flex items-center gap-1.5 rounded-2xl border border-white/25 bg-white/15 px-3 py-1.5 text-xs font-semibold text-white hover:bg-white/25 focus-visible:outline-none"
+        aria-expanded={open}
+        aria-controls={panelId}
+        className="inline-flex items-center gap-1.5 rounded-2xl border border-white/25 bg-white/15 px-3 py-1.5 text-xs font-semibold text-white hover:bg-white/25 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/70 focus-visible:ring-offset-2 focus-visible:ring-offset-primary"
       >
         How points work
       </button>
@@ -36,7 +39,12 @@ export function HowPointsWork() {
             onClick={() => setOpen(false)}
           />
           {/* Dropdown */}
-          <div className="absolute right-0 top-9 z-50 w-64 overflow-hidden rounded-2xl border border-border bg-card shadow-lg">
+          <div
+            id={panelId}
+            role="dialog"
+            aria-label="Leaderboard point rules"
+            className="absolute right-0 top-9 z-50 w-64 overflow-hidden rounded-2xl border border-border bg-card shadow-lg"
+          >
             {RULES.map((r, i) => (
               <div
                 key={r.label}

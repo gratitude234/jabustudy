@@ -133,6 +133,13 @@ export async function POST(req: Request) {
       await Promise.allSettled(allowedUserIds.map(uid => sendUserPush(uid, pushPayload)));
     } catch { /* push failures must never crash the notification route */ }
 
+    // Email fan-out
+    try {
+      const { sendNewMaterialEmail } = await import('@/lib/email');
+      const allUserIds = (users ?? []).map((u: StudyPreferenceUser) => u.user_id);
+      void sendNewMaterialEmail({ userIds: allUserIds, title, courseCode: course_code, materialId: material_id });
+    } catch { /* email failures must never crash the notification route */ }
+
     return NextResponse.json({ ok: true, notified: totalInserted });
   } catch (e: unknown) {
     // Notification failures are non-fatal — always return ok

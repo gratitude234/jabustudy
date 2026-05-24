@@ -6,6 +6,7 @@
 
 import { createSupabaseAdminClient } from "../supabase/admin";
 import { sendUserPushIfAllowed } from "../webPush";
+import { sendMaterialApprovedEmail, sendMaterialRejectedEmail } from "../email";
 
 /**
  * Notify a single uploader that their material was approved.
@@ -31,6 +32,7 @@ export async function notifyMaterialApproved(
     });
 
     void sendUserPushIfAllowed(uploaderId, { title: notifTitle, body, href, tag: `mat-approved-${materialId}` }, 'materials');
+    void sendMaterialApprovedEmail({ uploaderId, title, courseCode: null, materialId });
   } catch {
     // Notification failure must never break the approval flow
   }
@@ -63,6 +65,7 @@ export async function notifyMaterialRejected(
     });
 
     void sendUserPushIfAllowed(uploaderId, { title: notifTitle, body, href, tag: `mat-rejected-${materialId}` }, 'materials');
+    void sendMaterialRejectedEmail({ uploaderId, title, note });
   } catch {
     // Notification failure must never break the rejection flow
   }
