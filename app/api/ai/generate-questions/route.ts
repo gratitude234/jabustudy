@@ -1018,6 +1018,7 @@ Return ONLY a valid JSON object with no markdown, no backticks, no preamble:
           receiptMessage: receipt.receiptMessage,
         });
       } catch (error) {
+        const errCause = error instanceof Error ? error.cause : undefined;
         console.error("[generate-questions] FAILED", {
           userId: user.id,
           materialId,
@@ -1026,7 +1027,11 @@ Return ONLY a valid JSON object with no markdown, no backticks, no preamble:
           error: error instanceof Error ? error.message : String(error),
           code: (error as { code?: unknown })?.code,
           status: (error as { status?: unknown })?.status,
-          cause: error instanceof Error && error.cause instanceof Error ? error.cause.message : undefined,
+          cause: errCause instanceof Error
+            ? errCause.message
+            : errCause && typeof errCause === "object"
+              ? { message: (errCause as { message?: unknown }).message, code: (errCause as { code?: unknown }).code, details: (errCause as { details?: unknown }).details }
+              : errCause,
         });
         await recordUsage("failure", null, error);
         try {

@@ -196,6 +196,14 @@ export async function spendStudyCredits(args: { userId: string; cost: number }) 
   });
 
   if (error) {
+    console.error("[spendStudyCredits] RPC spend_study_user_credits failed", {
+      userId: args.userId,
+      cost: args.cost,
+      pgCode: (error as { code?: unknown }).code,
+      pgMessage: (error as { message?: unknown }).message,
+      pgDetails: (error as { details?: unknown }).details,
+      pgHint: (error as { hint?: unknown }).hint,
+    });
     throw Object.assign(new Error("Credit charge could not be completed. No credits were charged."), {
       code: "CREDIT_SPEND_FAILED",
       cause: error,
