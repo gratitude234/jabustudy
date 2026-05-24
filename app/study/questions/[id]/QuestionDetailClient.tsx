@@ -315,7 +315,7 @@ export default function QuestionDetailClient({ id }: { id: string }) {
       const { data: u } = await supabase.auth.getUser();
       if (u?.user?.id) {
         const v = await supabase.from("study_question_votes")
-          .select("id").eq("question_id", id).eq("voter_id", u.user.id).maybeSingle();
+          .select("id").eq("question_id", id).eq("user_id", u.user.id).maybeSingle();
         if (loadSeq !== loadSeqRef.current) return;
         setMyUpvoted(!!v.data);
       }

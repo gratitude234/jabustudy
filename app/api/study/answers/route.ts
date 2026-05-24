@@ -15,6 +15,17 @@ import { NextRequest, NextResponse } from "next/server";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { notifyAnswerPosted } from "@/lib/studyNotify";
+import { awardCappedStudyPoints, STUDY_POINT_RULES } from "@/lib/studyPoints";
+
+type CreatedAnswer = {
+  id: string;
+  question_id: string;
+  body: string;
+  created_at: string | null;
+  author_email: string | null;
+  author_id: string | null;
+  is_accepted: boolean | null;
+};
 
 export async function POST(req: NextRequest) {
   // ── Auth ───────────────────────────────────────────────────────────────────
@@ -82,15 +93,29 @@ export async function POST(req: NextRequest) {
     .eq("id", questionId);
 
   // ── Fire notification (non-blocking) ──────────────────────────────────────
+  const createdAnswer = answer as CreatedAnswer;
+
   if (question.author_id) {
     void notifyAnswerPosted({
       questionId,
       questionTitle: question.title ?? "your question",
       questionAuthorId: question.author_id,
       answererEmail: user.email ?? null,
-      answerId: (answer as any).id,
+      answerId: createdAnswer.id,
     });
   }
 
-  return NextResponse.json({ ok: true, answer });
+  const pointsAwarded = question.author_id !== user.id
+    ? await awardCappedStudyPoints({
+        userId: user.id,
+        eventType: "answer_posted",
+        sourceTable: "study_answers",
+        sourceId: createdAnswer.id,
+        points: STUDY_POINT_RULES.answerPosted,
+        dailyCap: STUDY_POINT_RULES.answerDailyCap,
+        metadata: { questionId },
+      })
+    : 0;
+
+  return NextResponse.json({ ok: true, answer, pointsAwarded });
 }

@@ -51,7 +51,7 @@ type AnyOption = {
 type WrittenGradeState =
   | { status: "idle" }
   | { status: "loading" }
-  | { status: "done"; grade: WrittenAnswerGrade; cached: boolean }
+  | { status: "done"; grade: WrittenAnswerGrade; cached: boolean; pendingPoints?: number }
   | { status: "error"; message: string };
 
 type KeepDraftState =
@@ -70,6 +70,12 @@ function verdictLabel(verdict: WrittenAnswerGrade["verdict"]) {
   if (verdict === "partially_correct") return "Partially correct";
   if (verdict === "unanswered") return "Unanswered";
   return "Needs work";
+}
+
+function pendingWrittenAnswerPoints(score: number) {
+  if (score >= 9) return 2;
+  if (score >= 7) return 1;
+  return 0;
 }
 
 const EXPLAIN_OPTION_KEYS = ["A", "B", "C", "D"] as const;
@@ -357,6 +363,7 @@ export default function PracticeTakeClient() {
     stats,
     reviewItems,
     finalizing,
+    submitPoints,
     weakSummary,
     choose,
     writeAnswer,
@@ -514,7 +521,12 @@ export default function PracticeTakeClient() {
   const currentGradeState: WrittenGradeState = current
     ? writtenGradeStates[current.id] ??
       (writtenGrades[current.id]
-        ? { status: "done", grade: writtenGrades[current.id], cached: true }
+        ? {
+            status: "done",
+            grade: writtenGrades[current.id],
+            cached: true,
+            pendingPoints: pendingWrittenAnswerPoints(writtenGrades[current.id].score),
+          }
         : { status: "idle" })
     : { status: "idle" };
   const writtenCompareOpen = current
@@ -714,7 +726,7 @@ export default function PracticeTakeClient() {
         body: JSON.stringify({ attemptId, questionId, answer }),
       });
       const data = await res.json().catch(() => null) as
-        | { ok?: boolean; grade?: WrittenAnswerGrade; cached?: boolean; message?: string; error?: string }
+        | { ok?: boolean; grade?: WrittenAnswerGrade; cached?: boolean; pendingPoints?: number; message?: string; error?: string }
         | null;
 
       if (!res.ok || !data?.ok || !data.grade) {
@@ -725,7 +737,12 @@ export default function PracticeTakeClient() {
       setWrittenGrade(questionId, data.grade);
       setWrittenGradeStates((prev) => ({
         ...prev,
-        [questionId]: { status: "done", grade: data.grade!, cached: Boolean(data.cached) },
+        [questionId]: {
+          status: "done",
+          grade: data.grade!,
+          cached: Boolean(data.cached),
+          pendingPoints: Math.max(0, Number(data.pendingPoints ?? 0)),
+        },
       }));
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : "Could not grade this answer.";
@@ -1163,6 +1180,23 @@ if (err || !meta) {
               <span className="text-[11px] font-semibold text-muted-foreground">Written</span>
             </div>
           </div>
+
+          {submitPoints ? (
+            <div className="rounded-2xl border border-amber-300/50 bg-amber-50 px-4 py-3 text-amber-950 dark:border-amber-800/40 dark:bg-amber-950/30 dark:text-amber-100">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <p className="text-sm font-extrabold">Leaderboard points</p>
+                <span className="rounded-full bg-amber-500/15 px-2.5 py-1 text-xs font-extrabold">
+                  +{submitPoints.pointsAwarded} pt{submitPoints.pointsAwarded === 1 ? "" : "s"}
+                </span>
+              </div>
+              <p className="mt-1 text-xs font-semibold opacity-75">
+                Practice +{submitPoints.practicePointsAwarded}
+                {submitPoints.writtenPointsAwarded > 0
+                  ? ` · Written +${submitPoints.writtenPointsAwarded}`
+                  : " · Written +0"}
+              </p>
+            </div>
+          ) : null}
 
           {reviewItems.length > 0 ? (() => {
             const wrongCount = reviewItems.filter(i => i.isWrong || i.isUnanswered).length;
@@ -1659,6 +1693,11 @@ if (err || !meta) {
                           <span className="rounded-full border border-emerald-500/30 bg-background px-2.5 py-1 text-xs font-extrabold text-foreground">
                             {currentGradeState.grade.score}/{currentGradeState.grade.maxScore} - {verdictLabel(currentGradeState.grade.verdict)}
                           </span>
+                          {currentGradeState.pendingPoints ? (
+                            <span className="rounded-full border border-amber-500/30 bg-amber-500/10 px-2.5 py-1 text-xs font-extrabold text-amber-700 dark:text-amber-300">
+                              +{currentGradeState.pendingPoints} pt{currentGradeState.pendingPoints === 1 ? "" : "s"} pending
+                            </span>
+                          ) : null}
                         </div>
                         <p className="mt-2 text-sm leading-relaxed text-foreground">{currentGradeState.grade.feedback}</p>
                         {currentGradeState.grade.missingPoints.length > 0 ? (
@@ -1672,7 +1711,7 @@ if (err || !meta) {
                           </div>
                         ) : null}
                         <p className="mt-3 text-[11px] font-semibold text-muted-foreground">
-                          AI feedback only - official score stays MCQ-only.
+                          Eligible leaderboard points are awarded only when you submit.
                           {currentGradeState.cached ? " Loaded from saved feedback." : ""}
                         </p>
                       </div>

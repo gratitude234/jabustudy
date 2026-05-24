@@ -1,7 +1,7 @@
 // app/api/study/answers/[id]/upvote/route.ts
 // POST — Toggle an upvote on a study answer.
 //
-// Uses study_answer_votes (voter_id, answer_id) and increments/decrements
+// Uses study_answer_votes (user_id, answer_id) and increments/decrements
 // upvotes_count on study_answers.
 //
 // Response:
@@ -11,6 +11,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
+import { notifyAnswerUpvoteMilestone } from "@/lib/studyNotify";
+
+type ToggleVoteResult = {
+  upvoted: boolean;
+  count: number;
+};
 
 export async function POST(
   _req: NextRequest,
@@ -31,65 +37,41 @@ export async function POST(
 
   const admin = createSupabaseAdminClient();
 
-  // ── Fetch answer ───────────────────────────────────────────────────────────
+  // Fetch answer metadata for notification — needed before RPC since RPC doesn't return author
   const { data: answer } = await admin
     .from("study_answers")
-    .select("id,upvotes_count,author_id")
+    .select("id, author_id, question_id")
     .eq("id", answerId)
     .maybeSingle();
 
-  if (!answer) {
-    return NextResponse.json({ ok: false, error: "Answer not found." }, { status: 404 });
+  const { data: toggleRows, error: toggleError } = await admin.rpc("toggle_study_answer_upvote", {
+    p_answer_id: answerId,
+    p_user_id: user.id,
+  });
+
+  if (toggleError) {
+    const message = toggleError.message || "Failed to vote.";
+    const status = message.toLowerCase().includes("own answer")
+      ? 403
+      : message.toLowerCase().includes("not found")
+        ? 404
+        : 500;
+    return NextResponse.json({ ok: false, error: message }, { status });
   }
 
-  // Prevent authors from upvoting their own answers
-  if (answer.author_id && answer.author_id === user.id) {
-    return NextResponse.json({ ok: false, error: "You cannot upvote your own answer." }, { status: 403 });
+  const result = (Array.isArray(toggleRows) ? toggleRows[0] : toggleRows) as ToggleVoteResult | null;
+  const upvoted = Boolean(result?.upvoted);
+  const count = Number(result?.count ?? 0);
+
+  if (upvoted && answer?.author_id && answer?.question_id) {
+    void notifyAnswerUpvoteMilestone({
+      answerId,
+      questionId: answer.question_id,
+      answerAuthorId: answer.author_id,
+      newCount: count,
+      voterId: user.id,
+    });
   }
 
-  const currentCount = answer.upvotes_count ?? 0;
-
-  // ── Check current vote state ───────────────────────────────────────────────
-  const { data: existingVote } = await admin
-    .from("study_answer_votes")
-    .select("id")
-    .eq("answer_id", answerId)
-    .eq("voter_id", user.id)
-    .maybeSingle();
-
-  const wasUpvoted = !!existingVote;
-
-  if (wasUpvoted) {
-    // ── Remove vote ──────────────────────────────────────────────────────────
-    await admin
-      .from("study_answer_votes")
-      .delete()
-      .eq("answer_id", answerId)
-      .eq("voter_id", user.id);
-
-    const newCount = Math.max(0, currentCount - 1);
-    await admin
-      .from("study_answers")
-      .update({ upvotes_count: newCount })
-      .eq("id", answerId);
-
-    return NextResponse.json({ ok: true, upvoted: false, count: newCount });
-  } else {
-    // ── Add vote ─────────────────────────────────────────────────────────────
-    const { error: insErr } = await admin
-      .from("study_answer_votes")
-      .insert({ answer_id: answerId, voter_id: user.id });
-
-    if (insErr) {
-      return NextResponse.json({ ok: false, error: insErr.message }, { status: 500 });
-    }
-
-    const newCount = currentCount + 1;
-    await admin
-      .from("study_answers")
-      .update({ upvotes_count: newCount })
-      .eq("id", answerId);
-
-    return NextResponse.json({ ok: true, upvoted: true, count: newCount });
-  }
+  return NextResponse.json({ ok: true, upvoted, count });
 }

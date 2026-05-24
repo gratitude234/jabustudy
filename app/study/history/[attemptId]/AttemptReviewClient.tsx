@@ -1177,7 +1177,7 @@ export default function AttemptReviewClient() {
                           </ul>
                         </div>
                       ) : null}
-                      <p className="mt-3 text-[11px] font-medium text-muted-brand">AI feedback only - official score stays MCQ-only.</p>
+                      <p className="mt-3 text-[11px] font-medium text-muted-brand">AI feedback can add capped leaderboard practice points when the attempt is submitted; official score stays MCQ-only.</p>
                     </div>
                   ) : null}
                   <div className="rounded-2xl border border-primary/20 bg-primary-light p-4 dark:border-primary/30 dark:bg-primary/10">

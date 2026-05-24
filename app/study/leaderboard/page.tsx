@@ -1,19 +1,6 @@
 // app/study/leaderboard/page.tsx
 //
-// Migration: weekly leaderboard view
-// CREATE OR REPLACE VIEW public.study_leaderboard_weekly_v AS
-// SELECT
-//   user_id,
-//   SUM(correct_answers) AS total_points,
-//   COUNT(*) FILTER (WHERE attempts_count > 0) AS active_days
-// FROM public.study_daily_activity
-// WHERE activity_date >= date_trunc('week', now())
-// GROUP BY user_id;
-//
-// Scoped leaderboard: All / My Department / My Level
-// Scope is resolved server-side using the requesting user's study_preferences.
-// The page remains a Server Component; scope is passed via URL search param
-// so scope tabs work without JS-heavy client state.
+// Ledger-backed leaderboard with separate period and academic-scope filters.
 
 import { cn } from "@/lib/utils";
 import Link from "next/link";
@@ -37,15 +24,11 @@ type LeaderRow = {
   practice_points: number;
   practice_days: number;
   points: number;
+  rank?: number | null;
 };
 
-type WeeklyLeaderRow = {
-  user_id: string;
-  total_points: number | null;
-  active_days: number | null;
-};
-
-type Scope = "all" | "dept" | "level" | "week";
+type Scope = "all" | "dept" | "level";
+type Period = "week" | "month" | "semester" | "session" | "all";
 
 type UserPrefs = {
   department_id: string | null;
@@ -60,6 +43,16 @@ type StudyPreferenceScopeRow = {
   level: number | null;
   semester: string | null;
   session: string | null;
+};
+
+type RepMetaRow = {
+  user_id: string;
+  role: string | null;
+};
+
+type LeaderboardRpcRow = LeaderRow & {
+  active_days?: number | null;
+  last_activity_at?: string | null;
 };
 
 async function getLeaderboardEntryState() {
@@ -105,12 +98,21 @@ function initials(name: string): string {
 
 // ─── Data fetch ───────────────────────────────────────────────────────────────
 
-async function fetchLeaderboard(scope: Scope): Promise<{
+function periodLabel(period: Period) {
+  if (period === "week") return "This week";
+  if (period === "month") return "This month";
+  if (period === "semester") return "Current semester";
+  if (period === "session") return "Current session";
+  return "All-time";
+}
+
+async function fetchLeaderboard(scope: Scope, period: Period): Promise<{
   rows: LeaderRow[];
   viewMissing: boolean;
   currentUserId: string | null;
   userPrefs: UserPrefs | null;
   scopeLabel: string;
+  periodLabel: string;
   outsideTopNRow: { row: LeaderRow; rank: number } | null;
   profileMap: ProfileMap;
   repUserIds: Set<string>;
@@ -147,10 +149,10 @@ async function fetchLeaderboard(scope: Scope): Promise<{
 
     return {
       repUserIds: new Set<string>(
-        (repRows ?? []).map((r: any) => String(r.user_id))
+        ((repRows ?? []) as RepMetaRow[]).map((r) => String(r.user_id))
       ),
       repRoleMap: new Map<string, string>(
-        (repRows ?? []).map((r: any) => [
+        ((repRows ?? []) as RepMetaRow[]).map((r) => [
           String(r.user_id),
           r.role === "dept_librarian" ? "Dept Librarian" : "Course Rep",
         ])
@@ -158,163 +160,31 @@ async function fetchLeaderboard(scope: Scope): Promise<{
     };
   };
 
-  // Build the base leaderboard query
-  if (scope === "week") {
-    const weeklyResult = await supabase
-      .from("study_leaderboard_weekly_v")
-      .select("user_id,total_points,active_days")
-      .order("total_points", { ascending: false })
-      .limit(50);
-
-    if (weeklyResult.error) {
-      const viewMissing =
-        weeklyResult.error.code === "42P01" ||
-        weeklyResult.error.message.toLowerCase().includes("study_leaderboard_weekly_v");
-      if (viewMissing) {
-        return {
-          rows: [],
-          viewMissing: true,
-          currentUserId,
-          userPrefs,
-          scopeLabel: "This week",
-          outsideTopNRow: null,
-          profileMap: {},
-          repUserIds: new Set<string>(),
-          repRoleMap: new Map<string, string>(),
-        };
-      }
-      throw new Error(weeklyResult.error.message);
-    }
-
-    const rows: LeaderRow[] = ((weeklyResult.data ?? []) as WeeklyLeaderRow[]).map((row) => ({
-      user_id: row.user_id,
-      email: "",
-      questions: 0,
-      question_upvotes: 0,
-      answers: 0,
-      accepted: 0,
-      practice_points: row.total_points ?? 0,
-      practice_days: row.active_days ?? 0,
-      points: row.total_points ?? 0,
-    }));
-    let outsideTopNRow: { row: LeaderRow; rank: number } | null = null;
-    if (currentUserId) {
-      const { data: myWeeklyData, error: myWeeklyError } = await supabase
-        .from("study_leaderboard_weekly_v")
-        .select("user_id,total_points,active_days")
-        .eq("user_id", currentUserId)
-        .maybeSingle();
-
-      if (myWeeklyError) {
-        throw new Error(myWeeklyError.message);
-      }
-
-      if (myWeeklyData && !rows.some((row) => row.user_id === currentUserId)) {
-        const myRow: LeaderRow = {
-          user_id: myWeeklyData.user_id,
-          email: "",
-          questions: 0,
-          question_upvotes: 0,
-          answers: 0,
-          accepted: 0,
-          practice_points: myWeeklyData.total_points ?? 0,
-          practice_days: myWeeklyData.active_days ?? 0,
-          points: myWeeklyData.total_points ?? 0,
-        };
-
-        const { count, error: rankError } = await supabase
-          .from("study_leaderboard_weekly_v")
-          .select("*", { count: "exact", head: true })
-          .gt("total_points", myRow.points);
-
-        if (rankError) {
-          throw new Error(rankError.message);
-        }
-
-        outsideTopNRow = { row: myRow, rank: (count ?? 0) + 1 };
-      }
-    }
-
-    const allIds = [
-      ...rows.map((row) => row.user_id),
-      ...(outsideTopNRow ? [outsideTopNRow.row.user_id] : []),
-    ];
-    const profileMap: ProfileMap = {};
-    if (allIds.length > 0) {
-      const { data: profiles } = await supabase
-        .from("profiles")
-        .select("id,full_name,email")
-        .in("id", allIds);
-      for (const profile of (profiles ?? []) as Array<{
-        id: string;
-        full_name: string | null;
-        email: string | null;
-      }>) {
-        const label =
-          profile.full_name?.trim() ||
-          (profile.email?.trim() ? profile.email.split("@")[0] : "");
-        if (label) profileMap[profile.id] = label;
-      }
-    }
-
-    const { repUserIds, repRoleMap } = await loadRepMeta();
-
-    return {
-      rows,
-      viewMissing: false,
-      currentUserId,
-      userPrefs,
-      scopeLabel: "This week",
-      outsideTopNRow,
-      profileMap,
-      repUserIds,
-      repRoleMap,
-    };
-  }
-
-  let query = supabase
-    .from("study_leaderboard_v")
-    .select(
-      "user_id,email,questions,question_upvotes,answers,accepted,practice_points,practice_days,points"
-    )
-    .order("points", { ascending: false })
-    .limit(50);
-
   let scopeLabel = "All of JABU";
 
-  // Scope: filter to users who share the same department_id or level
   if (scope === "dept" && userPrefs?.department_id) {
-    const { data: deptUsers } = await supabase
-      .from("study_preferences")
-      .select("user_id")
-      .eq("department_id", userPrefs.department_id);
-
-    const userIds = (deptUsers ?? []).map((r: any) => r.user_id as string);
-    if (userIds.length > 0) {
-      query = query.in("user_id", userIds);
-    }
     scopeLabel = userPrefs.department
       ? `${userPrefs.department} Dept.`
       : "My Department";
   } else if (scope === "level" && userPrefs?.level) {
-    const { data: levelUsers } = await supabase
-      .from("study_preferences")
-      .select("user_id")
-      .eq("level", userPrefs.level);
-
-    const userIds = (levelUsers ?? []).map((r: any) => r.user_id as string);
-    if (userIds.length > 0) {
-      query = query.in("user_id", userIds);
-    }
     scopeLabel = `${userPrefs.level}L Students`;
   }
 
-  const leaderboardResult = await query;
+  const leaderboardResult = await supabase.rpc("get_study_leaderboard", {
+    p_scope: scope,
+    p_user_id: currentUserId,
+    p_period: period,
+    p_limit: 500,
+    p_offset: 0,
+  });
 
   if (leaderboardResult.error) {
     const viewMissing =
       leaderboardResult.error.code === "42P01" ||
-      leaderboardResult.error.message.toLowerCase().includes("study_leaderboard_v");
+      leaderboardResult.error.code === "PGRST202" ||
+      leaderboardResult.error.message.toLowerCase().includes("get_study_leaderboard") ||
+      leaderboardResult.error.message.toLowerCase().includes("study_point_events") ||
+      leaderboardResult.error.message.toLowerCase().includes("study_period_bounds");
     if (viewMissing) {
       return {
         rows: [],
@@ -322,6 +192,7 @@ async function fetchLeaderboard(scope: Scope): Promise<{
         currentUserId,
         userPrefs,
         scopeLabel,
+        periodLabel: periodLabel(period),
         outsideTopNRow: null,
         profileMap: {},
         repUserIds: new Set<string>(),
@@ -331,23 +202,25 @@ async function fetchLeaderboard(scope: Scope): Promise<{
     throw new Error(leaderboardResult.error.message);
   }
 
-  const rows = (leaderboardResult.data as LeaderRow[]) ?? [];
+  const allRows = ((leaderboardResult.data ?? []) as LeaderboardRpcRow[]).map((row) => ({
+    user_id: row.user_id,
+    email: row.email ?? "",
+    questions: Number(row.questions ?? 0),
+    question_upvotes: Number(row.question_upvotes ?? 0),
+    answers: Number(row.answers ?? 0),
+    accepted: Number(row.accepted ?? 0),
+    practice_points: Number(row.practice_points ?? 0),
+    practice_days: Number(row.practice_days ?? 0),
+    points: Number(row.points ?? 0),
+    rank: row.rank ?? null,
+  }));
+  const rows = allRows.slice(0, 50);
 
-  // If the current user is not in the top N, fetch their row and rank
   let outsideTopNRow: { row: LeaderRow; rank: number } | null = null;
   if (currentUserId && !rows.some((r) => r.user_id === currentUserId)) {
-    const { data: myData } = await supabase
-      .from("study_leaderboard_v")
-      .select("user_id,email,questions,question_upvotes,answers,accepted,practice_points,practice_days,points")
-      .eq("user_id", currentUserId)
-      .maybeSingle();
-    if (myData) {
-      const myRow = myData as LeaderRow;
-      const { count } = await supabase
-        .from("study_leaderboard_v")
-        .select("*", { count: "exact", head: true })
-        .gt("points", myRow.points);
-      outsideTopNRow = { row: myRow, rank: (count ?? 0) + 1 };
+    const myRow = allRows.find((row) => row.user_id === currentUserId);
+    if (myRow) {
+      outsideTopNRow = { row: myRow, rank: myRow.rank ?? allRows.findIndex((row) => row.user_id === currentUserId) + 1 };
     }
   }
 
@@ -378,6 +251,7 @@ async function fetchLeaderboard(scope: Scope): Promise<{
     currentUserId,
     userPrefs,
     scopeLabel,
+    periodLabel: periodLabel(period),
     outsideTopNRow,
     profileMap,
     repUserIds,
@@ -385,18 +259,62 @@ async function fetchLeaderboard(scope: Scope): Promise<{
   };
 }
 
-// ─── Scope Tab Bar ────────────────────────────────────────────────────────────
+// ─── Leaderboard Filters ──────────────────────────────────────────────────────
+
+function leaderboardHref(period: Period, scope: Scope) {
+  return `/study/leaderboard?period=${period}&scope=${scope}`;
+}
+
+function PeriodTabs({
+  period,
+  scope,
+}: {
+  period: Period;
+  scope: Scope;
+}) {
+  const tabs: Array<{ key: Period; label: string }> = [
+    { key: "week", label: "Week" },
+    { key: "month", label: "Month" },
+    { key: "semester", label: "Semester" },
+    { key: "session", label: "Session" },
+    { key: "all", label: "All-time" },
+  ];
+
+  return (
+    <div className="flex items-center gap-2 overflow-x-auto [scrollbar-width:none]">
+      {tabs.map((t) => {
+        const active = period === t.key;
+        return (
+          <Link
+            key={t.key}
+            href={leaderboardHref(t.key, scope)}
+            className={cn(
+              "shrink-0 rounded-full border px-3 py-1.5 text-xs font-semibold transition",
+              "focus-visible:outline-none",
+              active
+                ? "border-white bg-white text-primary-text"
+                : "border-white/25 bg-white/10 text-white/70 hover:bg-white/20 hover:text-white"
+            )}
+          >
+            {t.label}
+          </Link>
+        );
+      })}
+    </div>
+  );
+}
 
 function ScopeTabs({
   scope,
+  period,
   userPrefs,
 }: {
   scope: Scope;
+  period: Period;
   userPrefs: UserPrefs | null;
 }) {
   const tabs: Array<{ key: Scope; label: string; disabled?: boolean }> = [
-    { key: "week", label: "This week" },
-    { key: "all",   label: "All JABU" },
+    { key: "all", label: "All JABU" },
     {
       key: "dept",
       label: userPrefs?.department ?? "My dept",
@@ -413,7 +331,7 @@ function ScopeTabs({
     <div className="flex items-center gap-2 overflow-x-auto [scrollbar-width:none]">
       {tabs.map((t) => {
         const active = scope === t.key;
-        const href = t.key === "all" ? "/study/leaderboard" : `/study/leaderboard?scope=${t.key}`;
+        const href = leaderboardHref(period, t.key);
         return (
           <Link
             key={t.key}
@@ -442,10 +360,12 @@ function MyRankStrip({
   rank,
   points,
   name,
+  pointsToNext,
 }: {
   rank: number;
   points: number;
   name: string;
+  pointsToNext: number | null;
 }) {
   const inits = initials(name);
   return (
@@ -459,6 +379,11 @@ function MyRankStrip({
       <div className="text-right">
         <span className="font-[family-name:var(--font-bricolage)] text-sm font-extrabold text-white">#{rank}</span>
         <span className="ml-2 text-xs text-white/60">{points.toLocaleString("en-NG")} pts</span>
+        {pointsToNext != null && pointsToNext > 0 && (
+          <p className="mt-0.5 text-[10px] font-semibold text-white/55">
+            {pointsToNext.toLocaleString("en-NG")} to next rank
+          </p>
+        )}
       </div>
     </div>
   );
@@ -635,6 +560,9 @@ function RankRow({
             {row.answers} answers
             {streakLabel ? ` · ${streakLabel}` : ""}
           </p>
+          <div className="mt-1.5">
+            <PointsBreakdown row={row} />
+          </div>
         </div>
 
         <p className={cn(
@@ -653,54 +581,25 @@ function RankRow({
 export default async function LeaderboardPage({
   searchParams,
 }: {
-  searchParams?: { scope?: string };
+  searchParams?: { scope?: string; period?: string };
 }) {
-  // Validate scope param
   const entryState = await getLeaderboardEntryState();
-  const hasExplicitScope = Boolean(searchParams?.scope);
-  const rawScope = (searchParams?.scope ?? (entryState.profileComplete ? "dept" : "all")).toLowerCase();
+  const rawScope = (searchParams?.scope ?? "").toLowerCase();
+  const rawPeriod = (searchParams?.period ?? "").toLowerCase();
+  const period: Period =
+    rawScope === "week"
+      ? "week"
+      : rawPeriod === "month" || rawPeriod === "semester" || rawPeriod === "session" || rawPeriod === "all"
+        ? rawPeriod
+        : "week";
   const scope: Scope =
-    rawScope === "week" || rawScope === "dept" || rawScope === "level" ? rawScope : "all";
-
-  if (!entryState.profileComplete && !hasExplicitScope) {
-    return (
-      <div className="space-y-3 pb-28 md:pb-6">
-        <div className="overflow-hidden rounded-3xl border border-border bg-primary shadow-sm">
-          <div className="px-5 pt-5 pb-4">
-            <Link
-              href="/study"
-              className="mb-4 inline-flex items-center gap-1.5 rounded-2xl border border-white/25 bg-white/15 px-3 py-1.5 text-xs font-semibold text-white no-underline hover:bg-white/25"
-            >
-              <ArrowLeft className="h-3.5 w-3.5" /> Back
-            </Link>
-            <h1 className="font-[family-name:var(--font-bricolage)] text-2xl font-extrabold tracking-tight text-white">Leaderboard</h1>
-            <p className="mt-1 text-xs text-white/60">Top contributors in your academic scope</p>
-          </div>
-        </div>
-
-        <div className="rounded-3xl border border-primary/20 bg-card p-5 shadow-sm">
-          <p className="text-base font-extrabold text-foreground">Set up your academic profile</p>
-          <p className="mt-1 text-sm text-muted-brand">
-            Save your official department and level to compare progress with the right classmates.
-          </p>
-          <div className="mt-4 flex flex-wrap gap-2">
-            <Link
-              href="/study/onboarding?next=/study/leaderboard"
-              className="inline-flex items-center justify-center rounded-2xl bg-primary px-4 py-2.5 text-sm font-semibold text-white no-underline hover:opacity-90"
-            >
-              Complete setup
-            </Link>
-            <Link
-              href="/study/leaderboard?scope=all"
-              className="inline-flex items-center justify-center rounded-2xl border border-border bg-background px-4 py-2.5 text-sm font-semibold text-foreground no-underline hover:bg-secondary/50"
-            >
-              View all of JABU
-            </Link>
-          </div>
-        </div>
-      </div>
-    );
-  }
+    rawScope === "week"
+      ? "all"
+      : rawScope === "dept" || rawScope === "level" || rawScope === "all"
+        ? rawScope
+        : entryState.profileComplete
+          ? "dept"
+          : "all";
 
   let rows: LeaderRow[] = [];
   let fetchError: string | null = null;
@@ -708,24 +607,26 @@ export default async function LeaderboardPage({
   let currentUserId: string | null = null;
   let userPrefs: UserPrefs | null = null;
   let scopeLabel = "All of JABU";
+  let activePeriodLabel = periodLabel(period);
   let outsideTopNRow: { row: LeaderRow; rank: number } | null = null;
   let profileMap: ProfileMap = {};
   let repUserIds = new Set<string>();
   let repRoleMap = new Map<string, string>();
 
   try {
-    const result = await fetchLeaderboard(scope);
+    const result = await fetchLeaderboard(scope, period);
     rows = result.rows;
     viewMissing = result.viewMissing;
     currentUserId = result.currentUserId;
     userPrefs = result.userPrefs;
     scopeLabel = result.scopeLabel;
+    activePeriodLabel = result.periodLabel;
     outsideTopNRow = result.outsideTopNRow;
     profileMap = result.profileMap;
     repUserIds = result.repUserIds;
     repRoleMap = result.repRoleMap;
-  } catch (e: any) {
-    fetchError = e?.message ?? "Failed to load leaderboard";
+  } catch (e: unknown) {
+    fetchError = e instanceof Error ? e.message : "Failed to load leaderboard";
   }
 
   const top3 = rows.slice(0, 3) as Array<LeaderRow & { rank: 1 | 2 | 3 }>;
@@ -743,6 +644,10 @@ export default async function LeaderboardPage({
     ? displayName(activeUserRow.user_id, activeUserRow.email, profileMap)
     : null;
   const showStickyBar = !!currentUserId && !!activeUserRow && !!activeUserRank && !fetchError && !viewMissing;
+  const pointsToNext =
+    myRank && myRank > 1 && myRow && rows[myRank - 2]?.points > myRow.points
+      ? rows[myRank - 2].points - myRow.points + 1
+      : null;
 
   // Show a hint when dept/level scope finds no one (user is alone or prefs missing)
   const scopeEmpty = !fetchError && rows.length === 0 && scope !== "all";
@@ -770,12 +675,13 @@ export default async function LeaderboardPage({
           {/* Title */}
           <h1 className="font-[family-name:var(--font-bricolage)] text-2xl font-extrabold tracking-tight text-white">Leaderboard</h1>
           <p className="mt-1 text-xs text-white/60">
-            Top contributors · {scopeLabel}
+            Top contributors · {activePeriodLabel} · {scopeLabel}
           </p>
 
-          {/* Scope chips */}
-          <div className="mt-4">
-            <ScopeTabs scope={scope} userPrefs={userPrefs} />
+          {/* Filter chips */}
+          <div className="mt-4 space-y-2">
+            <PeriodTabs period={period} scope={scope} />
+            <ScopeTabs scope={scope} period={period} userPrefs={userPrefs} />
           </div>
         </div>
 
@@ -790,7 +696,7 @@ export default async function LeaderboardPage({
             <p className="font-semibold text-white">Leaderboard view not set up yet.</p>
             <p className="mt-0.5">
               Run migration{" "}
-              <code className="rounded bg-white/20 px-1">003_add_practice_points_to_leaderboard.sql</code>{" "}
+              <code className="rounded bg-white/20 px-1">20260528_leaderboard_periods_deferred_written_points.sql</code>{" "}
               in your Supabase SQL editor.
             </p>
           </div>
@@ -802,6 +708,7 @@ export default async function LeaderboardPage({
             rank={activeUserRank}
             points={activeUserRow.points}
             name={myName}
+            pointsToNext={pointsToNext}
           />
         )}
         {currentUserId && !fetchError && !viewMissing && !activeUserRow && (
@@ -854,7 +761,7 @@ export default async function LeaderboardPage({
             </Link>
             {scopeEmpty && (
               <Link
-                href="/study/leaderboard"
+                href={leaderboardHref(period, "all")}
                 className="inline-flex items-center justify-center rounded-2xl border border-border bg-background px-4 py-2.5 text-sm font-semibold text-foreground no-underline hover:bg-secondary/50"
               >
                 View all of JABU

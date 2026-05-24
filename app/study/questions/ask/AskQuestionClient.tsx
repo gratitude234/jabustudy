@@ -25,8 +25,7 @@ export default function AskQuestionClient() {
   const presetCourse = (sp.get("course") ?? "").trim().toUpperCase();
   const presetLevel  = (sp.get("level") ?? "").trim();
 
-  const [userId,    setUserId]    = useState<string | null>(null);
-  const [userEmail, setUserEmail] = useState<string | null>(null);
+  const [userId, setUserId] = useState<string | null>(null);
   const [courseOptions, setCourseOptions] = useState<Array<{ code: string; title: string | null }>>([]);
   const [profileComplete, setProfileComplete] = useState<boolean | null>(null);
 
@@ -54,7 +53,6 @@ export default function AskQuestionClient() {
     (async () => {
       const { data } = await supabase.auth.getUser();
       setUserId(data?.user?.id ?? null);
-      setUserEmail(data?.user?.email ?? null);
       if (!data?.user) return;
 
       try {
@@ -138,23 +136,24 @@ export default function AskQuestionClient() {
 
     setLoading(true);
     try {
-      const { data, error } = await supabase
-        .from("study_questions")
-        .insert({
-          title: t, body: b,
-          course_code:   course ? course.trim().toUpperCase() : null,
-          level:         level ? level.trim() : null,
-          author_id:     userId,
-          author_email:  userEmail,
-          solved:        false,
-          answers_count: 0,
-          upvotes_count: 0,
-        })
-        .select("id")
-        .single();
+      const res = await fetch("/api/study/questions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          title: t,
+          body: b,
+          courseCode: course ? course.trim().toUpperCase() : null,
+          level: level ? level.trim() : null,
+        }),
+      });
+      const json = await res.json().catch(() => null) as
+        | { ok?: boolean; question?: { id?: string }; message?: string; error?: string }
+        | null;
 
-      if (error) throw error;
-      router.push(`/study/questions/${data.id}`);
+      if (!res.ok || !json?.ok || !json.question?.id) {
+        throw new Error(json?.message || json?.error || "Failed to post question.");
+      }
+      router.push(`/study/questions/${json.question.id}`);
     } catch (e: any) {
       setError(e?.message ?? "Failed to post question.");
     } finally {

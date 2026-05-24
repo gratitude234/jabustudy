@@ -96,3 +96,61 @@ export async function sendUserPush(
     // Push is fire-and-forget.
   }
 }
+
+export type NotificationCategory =
+  | 'answers'
+  | 'upvotes'
+  | 'materials'
+  | 'quizzes'
+  | 'milestones'
+  | 'reminders'
+  | 'rep_alerts'
+
+/**
+ * Like sendUserPush but silently skips if the user has disabled this category.
+ * Fail-open: if the preference lookup fails, the push is sent anyway.
+ */
+export async function sendUserPushIfAllowed(
+  userId: string,
+  payload: PushPayload,
+  category: NotificationCategory,
+): Promise<void> {
+  try {
+    const admin = createSupabaseAdminClient()
+    const { data } = await admin
+      .from('user_notification_preferences')
+      .select('push_categories')
+      .eq('user_id', userId)
+      .maybeSingle()
+    const prefs = (data?.push_categories ?? {}) as Record<string, boolean>
+    if (prefs[category] === false) return
+  } catch { /* fail-open */ }
+  await sendUserPush(userId, payload)
+}
+
+/**
+ * Filter a list of userIds to those who have NOT disabled the given category.
+ * Users with no preference row are included (opt-out model, default = enabled).
+ * Fail-open: returns the full list if the DB query fails.
+ */
+export async function filterPushAllowed(
+  userIds: string[],
+  category: NotificationCategory,
+): Promise<string[]> {
+  if (!userIds.length) return []
+  try {
+    const admin = createSupabaseAdminClient()
+    const { data } = await admin
+      .from('user_notification_preferences')
+      .select('user_id, push_categories')
+      .in('user_id', userIds)
+    const optedOut = new Set<string>()
+    for (const row of data ?? []) {
+      if ((row.push_categories as Record<string, boolean>)[category] === false)
+        optedOut.add(row.user_id)
+    }
+    return userIds.filter(id => !optedOut.has(id))
+  } catch {
+    return userIds
+  }
+}

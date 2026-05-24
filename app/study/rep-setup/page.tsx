@@ -2,8 +2,9 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { BookOpen, CheckCircle2, Plus, Loader2, ChevronDown, GraduationCap } from "lucide-react";
+import { BookOpen, CheckCircle2, Plus, Loader2, GraduationCap, XCircle } from "lucide-react";
 import { StudyPrefsProvider, useStudyPrefs } from "@/app/study/_components/StudyPrefsContext";
+import { Drawer } from "@/components/ui/Drawer";
 import { cn } from "@/lib/utils";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -25,8 +26,8 @@ type AddState = {
 };
 
 const SEMESTERS: { value: "first" | "second" | "summer"; label: string }[] = [
-  { value: "first", label: "1st Semester" },
-  { value: "second", label: "2nd Semester" },
+  { value: "first", label: "1st Sem" },
+  { value: "second", label: "2nd Sem" },
   { value: "summer", label: "Summer" },
 ];
 
@@ -44,43 +45,38 @@ export default function RepSetupPage() {
 
 function RepSetupInner() {
   const router = useRouter();
-  const { rep, loading: ctxLoading } = useStudyPrefs();
+  const { rep, prefs, loading: ctxLoading } = useStudyPrefs();
 
   const [courses, setCourses] = useState<Course[]>([]);
   const [loadingCourses, setLoadingCourses] = useState(true);
   const [completing, setCompleting] = useState(false);
   const [completeError, setCompleteError] = useState<string | null>(null);
+  const [confirmOpen, setConfirmOpen] = useState(false);
 
-  // Per-level add-course form state
   const [addStates, setAddStates] = useState<Record<number, AddState>>({});
 
   const levels = rep.scope?.levels ?? [];
 
-  // Load existing courses for this rep's scope
   useEffect(() => {
     if (ctxLoading || rep.loading) return;
     fetch("/api/study/rep-setup/courses", { cache: "no-store" })
       .then((r) => r.json())
-      .then((json) => {
-        if (json.ok) setCourses(json.courses ?? []);
-      })
+      .then((json) => { if (json.ok) setCourses(json.courses ?? []); })
       .finally(() => setLoadingCourses(false));
   }, [ctxLoading, rep.loading]);
 
-  // Initialise add-form state for each level
+  const defaultSemester = (prefs?.semester as AddState["semester"] | undefined) ?? "first";
+
   useEffect(() => {
     const initial: Record<number, AddState> = {};
     for (const lvl of levels) {
-      initial[lvl] = { code: "", title: "", semester: "first", saving: false, error: null };
+      initial[lvl] = { code: "", title: "", semester: defaultSemester, saving: false, error: null };
     }
     setAddStates(initial);
-  }, [levels.join(",")]);
+  }, [levels.join(","), defaultSemester]);
 
   function updateField(level: number, field: keyof AddState, value: string) {
-    setAddStates((prev) => ({
-      ...prev,
-      [level]: { ...prev[level], [field]: value },
-    }));
+    setAddStates((prev) => ({ ...prev, [level]: { ...prev[level], [field]: value } }));
   }
 
   async function addCourse(level: number) {
@@ -107,11 +103,11 @@ function RepSetupInner() {
     setCourses((prev) => [...prev, json.course]);
     setAddStates((prev) => ({
       ...prev,
-      [level]: { code: "", title: "", semester: "first", saving: false, error: null },
+      [level]: { code: "", title: "", semester: defaultSemester, saving: false, error: null },
     }));
   }
 
-  async function handleComplete() {
+  async function handleConfirmedComplete() {
     setCompleting(true);
     setCompleteError(null);
 
@@ -121,6 +117,7 @@ function RepSetupInner() {
     if (!json.ok) {
       setCompleteError(json.error ?? "Something went wrong.");
       setCompleting(false);
+      setConfirmOpen(false);
       return;
     }
 
@@ -135,8 +132,10 @@ function RepSetupInner() {
     coursesByLevel[c.level].push(c);
   }
 
+  const completedLevels = levels.filter((l) => (coursesByLevel[l]?.length ?? 0) > 0).length;
   const missingLevels = levels.filter((l) => !(coursesByLevel[l]?.length > 0));
   const allDone = missingLevels.length === 0 && levels.length > 0;
+  const pct = levels.length > 0 ? (completedLevels / levels.length) * 100 : 0;
 
   if (ctxLoading || rep.loading) {
     return (
@@ -147,23 +146,46 @@ function RepSetupInner() {
   }
 
   return (
-    <div className="mx-auto w-full max-w-2xl px-4 py-8 pb-28 md:pb-10">
-      {/* Header */}
-      <div className="mb-6 flex items-start gap-3">
-        <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-purple-100 dark:bg-purple-950">
-          <GraduationCap className="h-5 w-5 text-purple-600 dark:text-purple-400" />
+    <div className="mx-auto w-full max-w-2xl px-4 py-6 pb-32 md:pb-12">
+
+      {/* ── Header ── */}
+      <div className="mb-6">
+        <div className="mb-4 flex items-center gap-3">
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-primary/10">
+            <GraduationCap className="h-5 w-5 text-primary" />
+          </div>
+          <div>
+            <h1 className="text-lg font-bold tracking-tight leading-tight">Course Setup</h1>
+            <p className="text-xs text-muted-foreground">
+              Add at least one course per level so your classmates can upload materials &amp; practise.
+            </p>
+          </div>
         </div>
-        <div>
-          <h1 className="text-xl font-bold tracking-tight">Set up your department's courses</h1>
-          <p className="mt-0.5 text-sm text-muted-foreground">
-            As a course rep, add all courses your department offers before your classmates can start uploading materials
-            or practicing. At least one course per level is required.
-          </p>
+
+        {/* Progress bar */}
+        <div className="space-y-1.5">
+          <div className="flex items-center justify-between text-xs text-muted-foreground">
+            <span>{completedLevels} of {levels.length} levels done</span>
+            {allDone && (
+              <span className="flex items-center gap-1 font-medium text-green-600 dark:text-green-400">
+                <CheckCircle2 className="h-3.5 w-3.5" /> All set!
+              </span>
+            )}
+          </div>
+          <div className="h-2 w-full overflow-hidden rounded-full bg-muted">
+            <div
+              className={cn(
+                "h-full rounded-full transition-all duration-500",
+                allDone ? "bg-green-500" : "bg-primary"
+              )}
+              style={{ width: `${pct}%` }}
+            />
+          </div>
         </div>
       </div>
 
-      {/* Progress pills */}
-      <div className="mb-6 flex flex-wrap gap-2">
+      {/* ── Level pills ── */}
+      <div className="mb-5 flex flex-wrap gap-2">
         {levels.map((lvl) => {
           const done = (coursesByLevel[lvl]?.length ?? 0) > 0;
           return (
@@ -176,16 +198,18 @@ function RepSetupInner() {
                   : "bg-muted text-muted-foreground"
               )}
             >
-              {done && <CheckCircle2 className="h-3.5 w-3.5" />}
+              {done
+                ? <CheckCircle2 className="h-3 w-3" />
+                : <span className="h-3 w-3 rounded-full border border-current opacity-50" />}
               {lvl} Level
             </span>
           );
         })}
       </div>
 
-      {/* Per-level sections */}
+      {/* ── Per-level sections ── */}
       {loadingCourses ? (
-        <div className="flex items-center justify-center py-12">
+        <div className="flex items-center justify-center py-16">
           <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
         </div>
       ) : (
@@ -195,7 +219,7 @@ function RepSetupInner() {
               key={lvl}
               level={lvl}
               courses={coursesByLevel[lvl] ?? []}
-              addState={addStates[lvl] ?? { code: "", title: "", semester: "first", saving: false, error: null }}
+              addState={addStates[lvl] ?? { code: "", title: "", semester: defaultSemester, saving: false, error: null }}
               onField={(field, val) => updateField(lvl, field as keyof AddState, val)}
               onAdd={() => addCourse(lvl)}
             />
@@ -203,38 +227,96 @@ function RepSetupInner() {
         </div>
       )}
 
-      {/* Finish button */}
-      <div className="mt-8 border-t border-border pt-6">
+      {/* ── Finish ── */}
+      <div className="mt-8 border-t border-border pt-6 space-y-3">
         {completeError && (
-          <p className="mb-3 rounded-xl border border-destructive/30 bg-destructive/10 px-4 py-2.5 text-sm text-destructive">
+          <p className="rounded-xl border border-destructive/30 bg-destructive/10 px-4 py-2.5 text-sm text-destructive">
             {completeError}
           </p>
         )}
+
+        {!allDone && (
+          <div className="rounded-2xl border border-destructive/20 bg-destructive/5 px-4 py-3 space-y-1.5">
+            <p className="text-xs font-semibold text-destructive">Still needed before you can finish:</p>
+            {missingLevels.map((lvl) => (
+              <div key={lvl} className="flex items-center gap-2 text-xs text-destructive/80">
+                <XCircle className="h-3.5 w-3.5 shrink-0" />
+                {lvl} Level — add at least 1 course
+              </div>
+            ))}
+          </div>
+        )}
+
         <button
-          onClick={handleComplete}
-          disabled={!allDone || completing}
+          onClick={() => allDone && setConfirmOpen(true)}
+          disabled={!allDone}
           className={cn(
-            "flex w-full items-center justify-center gap-2 rounded-2xl px-5 py-3 text-sm font-semibold transition-all",
+            "flex w-full items-center justify-center gap-2 rounded-2xl px-5 py-4 text-sm font-semibold transition-all",
             allDone
-              ? "bg-purple-600 text-white hover:bg-purple-700"
+              ? "bg-primary text-primary-foreground hover:opacity-90 active:scale-[0.98] shadow-sm"
               : "cursor-not-allowed bg-muted text-muted-foreground"
           )}
         >
-          {completing ? (
-            <>
-              <Loader2 className="h-4 w-4 animate-spin" />
-              Finishing…
-            </>
-          ) : allDone ? (
-            <>
-              <CheckCircle2 className="h-4 w-4" />
-              Finish Setup
-            </>
-          ) : (
-            `Add courses for ${missingLevels.map((l) => `${l} Level`).join(", ")} to continue`
-          )}
+          <CheckCircle2 className="h-4 w-4" />
+          {allDone ? "Finish Setup" : "Complete all levels to continue"}
         </button>
       </div>
+
+      {/* ── Confirmation drawer ── */}
+      <Drawer
+        open={confirmOpen}
+        onClose={() => !completing && setConfirmOpen(false)}
+        title="Ready to finish?"
+        footer={
+          <div className="flex gap-3">
+            <button
+              onClick={() => setConfirmOpen(false)}
+              disabled={completing}
+              className="flex-1 rounded-2xl border border-border bg-background py-3 text-sm font-medium text-foreground hover:bg-secondary transition-colors"
+            >
+              Go back
+            </button>
+            <button
+              onClick={handleConfirmedComplete}
+              disabled={completing}
+              className="flex-1 flex items-center justify-center gap-2 rounded-2xl bg-primary py-3 text-sm font-semibold text-primary-foreground hover:opacity-90 transition-opacity"
+            >
+              {completing ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
+              {completing ? "Finishing…" : "Yes, finish setup"}
+            </button>
+          </div>
+        }
+      >
+        <div className="space-y-4">
+          <p className="text-sm text-muted-foreground">
+            Once you finish, your classmates can start uploading materials and practising. Here's what you've set up:
+          </p>
+
+          {levels.map((lvl) => {
+            const lvlCourses = coursesByLevel[lvl] ?? [];
+            return (
+              <div key={lvl}>
+                <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                  {lvl} Level — {lvlCourses.length} course{lvlCourses.length === 1 ? "" : "s"}
+                </p>
+                <div className="space-y-1.5">
+                  {lvlCourses.map((c) => (
+                    <div key={c.id} className="flex items-center gap-3 rounded-xl bg-muted/60 px-3 py-2.5">
+                      <span className="rounded-lg bg-primary/10 px-2 py-0.5 font-mono text-xs font-semibold text-primary shrink-0">
+                        {c.course_code}
+                      </span>
+                      <span className="flex-1 truncate text-xs text-foreground">{c.course_title ?? "—"}</span>
+                      <span className="shrink-0 rounded-full bg-muted px-2 py-0.5 text-[10px] capitalize text-muted-foreground">
+                        {c.semester}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </Drawer>
     </div>
   );
 }
@@ -251,102 +333,132 @@ type LevelSectionProps = {
 
 function LevelSection({ level, courses, addState, onField, onAdd }: LevelSectionProps) {
   const codeRef = useRef<HTMLInputElement>(null);
+  const done = courses.length > 0;
 
   function handleKeyDown(e: React.KeyboardEvent) {
     if (e.key === "Enter") onAdd();
   }
 
   return (
-    <div className="rounded-2xl border border-border bg-card p-4 shadow-sm">
-      <div className="mb-3 flex items-center justify-between">
+    <div className={cn(
+      "rounded-2xl border bg-card shadow-sm overflow-hidden transition-colors",
+      done ? "border-green-200 dark:border-green-900" : "border-border"
+    )}>
+      {/* Card header */}
+      <div className={cn(
+        "flex items-center justify-between px-4 py-3 border-b",
+        done
+          ? "bg-green-50 border-green-100 dark:bg-green-950/40 dark:border-green-900"
+          : "border-border"
+      )}>
         <h2 className="flex items-center gap-2 text-sm font-semibold">
-          <BookOpen className="h-4 w-4 text-purple-500" />
+          <BookOpen className={cn("h-4 w-4", done ? "text-green-600 dark:text-green-400" : "text-primary")} />
           {level} Level
         </h2>
-        <span className="text-xs text-muted-foreground">
-          {courses.length} {courses.length === 1 ? "course" : "courses"} added
+        <span className={cn(
+          "text-xs font-medium",
+          done ? "text-green-600 dark:text-green-400" : "text-muted-foreground"
+        )}>
+          {done
+            ? `${courses.length} course${courses.length === 1 ? "" : "s"} added ✓`
+            : "No courses yet"}
         </span>
       </div>
 
-      {/* Course list */}
-      {courses.length > 0 && (
-        <div className="mb-3 space-y-1.5">
-          {courses.map((c) => (
-            <div
-              key={c.id}
-              className="flex items-center justify-between rounded-xl bg-muted/60 px-3 py-1.5 text-xs"
-            >
-              <span className="font-mono font-medium text-foreground">{c.course_code}</span>
-              <span className="ml-2 truncate text-muted-foreground">{c.course_title ?? ""}</span>
-              <span className="ml-auto shrink-0 pl-2 capitalize text-muted-foreground">{c.semester}</span>
-            </div>
-          ))}
-        </div>
-      )}
-
-      {/* Add form */}
-      <div className="grid grid-cols-[1fr_1fr_auto] items-end gap-2 sm:grid-cols-[120px_1fr_auto_auto]">
-        <div>
-          <label className="mb-1 block text-xs text-muted-foreground">Course Code</label>
-          <input
-            ref={codeRef}
-            type="text"
-            value={addState.code}
-            onChange={(e) => onField("code", e.target.value)}
-            onKeyDown={handleKeyDown}
-            placeholder="e.g. CSC 201"
-            className="w-full rounded-xl border border-input bg-background px-3 py-2 text-xs outline-none focus:border-purple-500 focus:ring-1 focus:ring-purple-500"
-          />
-        </div>
-        <div className="hidden sm:block">
-          <label className="mb-1 block text-xs text-muted-foreground">Title (optional)</label>
-          <input
-            type="text"
-            value={addState.title}
-            onChange={(e) => onField("title", e.target.value)}
-            onKeyDown={handleKeyDown}
-            placeholder="Course title"
-            className="w-full rounded-xl border border-input bg-background px-3 py-2 text-xs outline-none focus:border-purple-500 focus:ring-1 focus:ring-purple-500"
-          />
-        </div>
-        <div>
-          <label className="mb-1 block text-xs text-muted-foreground">Semester</label>
-          <div className="relative">
-            <select
-              value={addState.semester}
-              onChange={(e) => onField("semester", e.target.value)}
-              className="w-full appearance-none rounded-xl border border-input bg-background px-3 py-2 pr-7 text-xs outline-none focus:border-purple-500 focus:ring-1 focus:ring-purple-500"
-            >
-              {SEMESTERS.map((s) => (
-                <option key={s.value} value={s.value}>
-                  {s.label}
-                </option>
-              ))}
-            </select>
-            <ChevronDown className="pointer-events-none absolute right-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+      <div className="p-4 space-y-3">
+        {/* Course list */}
+        {courses.length > 0 && (
+          <div className="space-y-2">
+            {courses.map((c) => (
+              <div key={c.id} className="flex items-center gap-2.5 rounded-xl bg-muted/60 px-3 py-2.5">
+                <span className="rounded-lg bg-primary/10 px-2 py-0.5 font-mono text-xs font-semibold text-primary shrink-0">
+                  {c.course_code}
+                </span>
+                <span className="flex-1 truncate text-xs text-foreground">{c.course_title ?? ""}</span>
+                <span className="shrink-0 rounded-full bg-background border border-border px-2 py-0.5 text-[10px] capitalize text-muted-foreground">
+                  {c.semester === "first" ? "1st" : c.semester === "second" ? "2nd" : "Sum"}
+                </span>
+              </div>
+            ))}
           </div>
-        </div>
-        <button
-          onClick={onAdd}
-          disabled={!addState.code.trim() || addState.saving}
-          className={cn(
-            "flex h-8 w-8 shrink-0 items-center justify-center self-end rounded-xl transition-colors",
-            addState.code.trim()
-              ? "bg-purple-600 text-white hover:bg-purple-700"
-              : "bg-muted text-muted-foreground"
-          )}
-        >
-          {addState.saving ? (
-            <Loader2 className="h-3.5 w-3.5 animate-spin" />
-          ) : (
-            <Plus className="h-3.5 w-3.5" />
-          )}
-        </button>
-      </div>
+        )}
 
-      {addState.error && (
-        <p className="mt-2 text-xs text-destructive">{addState.error}</p>
-      )}
+        {/* ── Add form ── */}
+        <div className="space-y-2.5">
+          {/* Course Code */}
+          <div>
+            <label className="mb-1.5 block text-xs font-medium text-muted-foreground">Course Code</label>
+            <input
+              ref={codeRef}
+              type="text"
+              value={addState.code}
+              onChange={(e) => onField("code", e.target.value)}
+              onKeyDown={handleKeyDown}
+              placeholder="e.g. CSC 201"
+              className="w-full rounded-xl border border-input bg-background px-3.5 py-3 text-sm outline-none focus:border-primary focus:ring-1 focus:ring-primary"
+            />
+          </div>
+
+          {/* Course Title */}
+          <div>
+            <label className="mb-1.5 block text-xs font-medium text-muted-foreground">
+              Course Title <span className="font-normal opacity-60">(optional)</span>
+            </label>
+            <input
+              type="text"
+              value={addState.title}
+              onChange={(e) => onField("title", e.target.value)}
+              onKeyDown={handleKeyDown}
+              placeholder="e.g. Anatomy of Thorax, Abdomen and Pelvis"
+              className="w-full rounded-xl border border-input bg-background px-3.5 py-3 text-sm outline-none focus:border-primary focus:ring-1 focus:ring-primary"
+            />
+          </div>
+
+          {/* Semester pill selector */}
+          <div>
+            <label className="mb-1.5 block text-xs font-medium text-muted-foreground">Semester</label>
+            <div className="flex gap-2">
+              {SEMESTERS.map((s) => (
+                <button
+                  key={s.value}
+                  type="button"
+                  onClick={() => onField("semester", s.value)}
+                  className={cn(
+                    "flex-1 rounded-xl py-2.5 text-xs font-medium transition-all",
+                    addState.semester === s.value
+                      ? "bg-primary text-primary-foreground shadow-sm"
+                      : "bg-muted text-muted-foreground hover:bg-muted/70"
+                  )}
+                >
+                  {s.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Add button */}
+          <button
+            onClick={onAdd}
+            disabled={!addState.code.trim() || addState.saving}
+            className={cn(
+              "flex w-full items-center justify-center gap-2 rounded-xl py-3 text-sm font-semibold transition-all",
+              addState.code.trim()
+                ? "bg-primary text-primary-foreground hover:opacity-90 active:scale-[0.98]"
+                : "cursor-not-allowed bg-muted text-muted-foreground"
+            )}
+          >
+            {addState.saving
+              ? <><Loader2 className="h-4 w-4 animate-spin" /> Adding…</>
+              : <><Plus className="h-4 w-4" /> Add Course</>}
+          </button>
+        </div>
+
+        {addState.error && (
+          <p className="rounded-xl border border-destructive/30 bg-destructive/10 px-3 py-2 text-xs text-destructive">
+            {addState.error}
+          </p>
+        )}
+      </div>
     </div>
   );
 }

@@ -11,6 +11,7 @@ import { NextResponse } from "next/server";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { triggerMaterialIndex } from "@/lib/studyMaterialIndexTrigger";
+import { sendUserPushIfAllowed } from "@/lib/webPush";
 
 export const dynamic = "force-dynamic";
 
@@ -136,6 +137,38 @@ export async function POST(req: Request) {
 
     if (exists && autoApprove) {
       triggerMaterialIndex(material_id);
+
+      // Fan-out new-material notification to students in dept/level/semester
+      const baseUrl = process.env.NEXT_PUBLIC_SITE_URL
+        || (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : "http://localhost:3000");
+      fetch(`${baseUrl}/api/study/notify-new-material`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "Authorization": `Bearer ${process.env.CRON_SECRET}` },
+        body: JSON.stringify({ material_id }),
+      }).catch(() => {});
+
+      // Confirm to the uploader that their material is live
+      try {
+        const { data: matRow } = await admin
+          .from("study_materials")
+          .select("title, course_code")
+          .eq("id", material_id)
+          .maybeSingle();
+        if ((matRow as any)?.title && uid) {
+          const notifTitle = "Your material is now live ✅";
+          const body = `"${(matRow as any).title}"${(matRow as any).course_code ? ` (${(matRow as any).course_code})` : ""} is available in the Study Hub.`;
+          const href = `/study/materials/${material_id}`;
+          await admin.from("notifications").insert({
+            user_id: uid,
+            type: "material_approved",
+            title: notifTitle,
+            body,
+            href,
+            is_read: false,
+          });
+          void sendUserPushIfAllowed(uid, { title: notifTitle, body, href, tag: `mat-live-${material_id}` }, 'materials');
+        }
+      } catch { /* non-critical */ }
     }
 
     return NextResponse.json({ ok: true, verified_in_storage: exists });

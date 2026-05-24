@@ -23,6 +23,22 @@ type RawGrade = {
   improvedAnswer?: unknown;
 };
 
+type AttemptAnswerGradeRow = {
+  id?: string | null;
+  question_id?: string | null;
+  ai_grade_score?: unknown;
+  ai_grade_max_score?: unknown;
+  ai_grade_verdict?: unknown;
+  ai_grade_feedback?: unknown;
+  ai_grade_matched_points?: unknown;
+  ai_grade_missing_points?: unknown;
+  ai_grade_improved_answer?: unknown;
+  ai_grade_provider?: unknown;
+  ai_grade_model?: unknown;
+  ai_grade_answer_hash?: unknown;
+  ai_graded_at?: unknown;
+};
+
 const MAX_SCORE = 10;
 const VERDICTS = new Set<WrittenAnswerGradeVerdict>([
   "correct",
@@ -79,7 +95,7 @@ function normalizeVerdict(value: unknown, score: number): WrittenAnswerGradeVerd
   return "incorrect";
 }
 
-function gradeFromRow(row: Record<string, any>): WrittenAnswerGrade | null {
+function gradeFromRow(row: AttemptAnswerGradeRow): WrittenAnswerGrade | null {
   const score = normalizeScore(row.ai_grade_score);
   const gradedAt = cleanString(row.ai_graded_at, 80);
   const feedback = compactText(row.ai_grade_feedback);
@@ -166,6 +182,12 @@ Return ONLY valid JSON with this exact shape:
 The score must be between 0 and 10.`;
 }
 
+function pendingWrittenAnswerPoints(score: number) {
+  if (score >= 9) return 2;
+  if (score >= 7) return 1;
+  return 0;
+}
+
 export async function POST(req: NextRequest) {
   const supabase = await createSupabaseServerClient();
   const { data: { user } } = await supabase.auth.getUser();
@@ -207,6 +229,7 @@ export async function POST(req: NextRequest) {
     admin
       .from("study_attempt_answers")
       .select([
+        "id",
         "question_id",
         "ai_grade_score",
         "ai_grade_max_score",
@@ -237,10 +260,17 @@ export async function POST(req: NextRequest) {
   if (questionType === "mcq") return jsonError("AI grading is only available for written questions.", 400, "NOT_WRITTEN");
 
   if (answerError) return jsonError(answerError.message || "Could not load answer.", 500, "DB_ERROR");
-  const existingAnswerRow = existingAnswer as Record<string, any> | null;
+  const existingAnswerRow = existingAnswer as AttemptAnswerGradeRow | null;
   if (existingAnswerRow?.ai_grade_answer_hash === hash) {
     const cachedGrade = gradeFromRow(existingAnswerRow);
-    if (cachedGrade) return NextResponse.json({ ok: true, grade: cachedGrade, cached: true });
+    if (cachedGrade) {
+      return NextResponse.json({
+        ok: true,
+        grade: cachedGrade,
+        cached: true,
+        pendingPoints: pendingWrittenAnswerPoints(cachedGrade.score),
+      });
+    }
   }
 
   const usageContext = {
@@ -296,13 +326,18 @@ export async function POST(req: NextRequest) {
       ai_grade_model: grade.model,
       ai_grade_answer_hash: hash,
       ai_graded_at: grade.gradedAt,
-    } as any, { onConflict: "attempt_id,question_id" })
-    .select("ai_graded_at")
+    } as never, { onConflict: "attempt_id,question_id" })
+    .select("id,ai_graded_at")
     .maybeSingle();
 
   if (saveError) return jsonError(saveError.message || "Could not save AI grade.", 500, "SAVE_FAILED");
-  const savedRow = saved as Record<string, any> | null;
+  const savedRow = saved as AttemptAnswerGradeRow | null;
   if (savedRow?.ai_graded_at) grade.gradedAt = String(savedRow.ai_graded_at);
 
-  return NextResponse.json({ ok: true, grade, cached: false });
+  return NextResponse.json({
+    ok: true,
+    grade,
+    cached: false,
+    pendingPoints: pendingWrittenAnswerPoints(grade.score),
+  });
 }

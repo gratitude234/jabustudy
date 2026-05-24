@@ -1,10 +1,9 @@
 "use client";
-// app/study-admin/page.tsx
-import { cn } from "@/lib/utils";
 
+import { cn } from "@/lib/utils";
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
-import { ArrowRight, BookOpen, FileText, Inbox, Loader2, ShieldCheck, Users } from "lucide-react";
+import { ArrowRight, BookOpen, FileText, Inbox, Loader2, ShieldCheck, Users, Upload, History } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 
@@ -19,7 +18,6 @@ type Summary = {
   };
   pendingMaterials: number;
   pendingRequests: number;
-  // (optional) if your summary route later adds this
   pendingRepApplications?: number;
   courseSetup?: Array<{
     facultyId: string | null;
@@ -38,38 +36,64 @@ function normalizeRole(role: ScopeRole): "super" | "course_rep" | "dept_libraria
   return "dept_librarian";
 }
 
+// ─── Stat card ────────────────────────────────────────────────────────────────
+
 function StatCard({
-  title,
-  value,
-  href,
-  icon,
-  hint,
+  title, value, href, icon, hint, accent = "primary",
 }: {
   title: string;
-  value: string;
+  value: string | number;
   href: string;
   icon: React.ReactNode;
   hint: string;
+  accent?: "primary" | "accent" | "orange";
 }) {
+  const accentCls = {
+    primary: "bg-primary/10 text-primary",
+    accent:  "bg-accent/10 text-accent",
+    orange:  "bg-orange-100 text-orange-600 dark:bg-orange-950 dark:text-orange-400",
+  }[accent];
+
+  const valueCls = Number(value) > 0 ? "text-foreground" : "text-muted-foreground";
+
   return (
     <Link
       href={href}
-      className="group rounded-3xl border bg-white p-4 shadow-sm transition hover:-translate-y-0.5 hover:shadow"
+      className="group flex flex-col justify-between gap-4 rounded-2xl border border-border bg-card p-5 shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-md"
     >
       <div className="flex items-start justify-between gap-3">
-        <div>
-          <p className="text-sm font-medium text-zinc-600">{title}</p>
-          <p className="mt-1 text-3xl font-semibold tracking-tight">{value}</p>
-          <p className="mt-2 text-sm text-zinc-500">{hint}</p>
-        </div>
-        <div className="grid h-10 w-10 place-items-center rounded-2xl bg-black text-white">
+        <p className="text-sm font-medium text-muted-foreground">{title}</p>
+        <div className={cn("grid h-9 w-9 shrink-0 place-items-center rounded-xl", accentCls)}>
           {icon}
         </div>
       </div>
-      <div className="mt-4 text-sm font-medium text-zinc-700 group-hover:text-black">Open →</div>
+      <div>
+        <p className={cn("text-3xl font-bold tracking-tight tabular-nums", valueCls)}>{value}</p>
+        <p className="mt-1 text-xs text-muted-foreground">{hint}</p>
+      </div>
+      <div className="flex items-center gap-1 text-xs font-medium text-primary opacity-0 transition-opacity group-hover:opacity-100">
+        View all <ArrowRight className="h-3.5 w-3.5" />
+      </div>
     </Link>
   );
 }
+
+// ─── Quick action link ────────────────────────────────────────────────────────
+
+function QuickAction({ href, label, icon }: { href: string; label: string; icon: React.ReactNode }) {
+  return (
+    <Link
+      href={href}
+      className="flex items-center gap-3 rounded-xl border border-border bg-card px-4 py-3 text-sm font-medium text-foreground transition-colors hover:bg-secondary"
+    >
+      <span className="text-muted-foreground">{icon}</span>
+      {label}
+      <ArrowRight className="ml-auto h-4 w-4 text-muted-foreground" />
+    </Link>
+  );
+}
+
+// ─── Page ─────────────────────────────────────────────────────────────────────
 
 export default function StudyAdminDashboardPage() {
   const router = useRouter();
@@ -83,160 +107,178 @@ export default function StudyAdminDashboardPage() {
       try {
         setLoading(true);
         setErr(null);
-
         const { data: sess } = await supabase.auth.getSession();
         const token = sess.session?.access_token;
-        if (!token) {
-          router.replace(`/login?next=${encodeURIComponent("/study-admin")}`);
-          return;
-        }
+        if (!token) { router.replace(`/login?next=${encodeURIComponent("/study-admin")}`); return; }
 
         const res = await fetch("/api/study-admin/summary", {
           cache: "no-store",
           headers: { Authorization: `Bearer ${token}` },
         });
 
-        if (res.status === 401) {
-          router.replace(`/login?next=${encodeURIComponent("/study-admin")}`);
-          return;
-        }
-        if (res.status === 403) {
-          router.replace("/study");
-          return;
-        }
-
+        if (res.status === 401) { router.replace(`/login?next=${encodeURIComponent("/study-admin")}`); return; }
+        if (res.status === 403) { router.replace("/study"); return; }
         if (!res.ok) throw new Error((await res.json())?.error || "Failed to load summary");
+
         const json = (await res.json()) as Summary;
         if (mounted) setData(json);
-      } catch (e: any) {
-        if (mounted) setErr(e?.message || "Something went wrong");
+      } catch (e: unknown) {
+        if (mounted) setErr((e as Error)?.message || "Something went wrong");
       } finally {
         if (mounted) setLoading(false);
       }
     })();
-    return () => {
-      mounted = false;
-    };
+    return () => { mounted = false; };
   }, [router]);
 
-  const scopeLabel = useMemo(() => {
-    if (!data) return "";
-    const role = normalizeRole(data.scope.role);
+  const role = data ? normalizeRole(data.scope.role) : null;
 
-    if (role === "super") return "Super admin access";
-    if (role === "dept_librarian") return "Departmental Librarian access (all levels)";
-    return "Course Rep access (selected level(s))";
-  }, [data]);
+  const roleLabel = useMemo(() => {
+    if (!role) return "";
+    if (role === "super") return "Super Admin";
+    if (role === "dept_librarian") return "Dept. Librarian";
+    return "Course Rep";
+  }, [role]);
 
   const scopeHint = useMemo(() => {
-    if (!data) return "";
-    const role = normalizeRole(data.scope.role);
+    if (!data || !role) return "";
+    if (role === "super") return "Full access to all departments";
+    const dept = data.scope.departmentId ?? "—";
+    if (role === "dept_librarian") return `${dept} · All levels`;
+    const lv = Array.isArray(data.scope.levels) && data.scope.levels.length
+      ? data.scope.levels.map((l) => `${l}L`).join(", ")
+      : "—";
+    return `${dept} · ${lv}`;
+  }, [data, role]);
 
-    const dept = data.scope.departmentId ? `Dept: ${data.scope.departmentId}` : "Dept: —";
-    if (role === "super") return "Full access";
-    if (role === "dept_librarian") return `${dept} • All levels`;
-    const lv = Array.isArray(data.scope.levels) && data.scope.levels.length ? data.scope.levels.join(", ") : "—";
-    return `${dept} • Levels: ${lv}`;
-  }, [data]);
-
-  const incompleteSetup = (data?.courseSetup ?? []).filter((item) => item.status !== "complete");
+  const incompleteSetup = (data?.courseSetup ?? []).filter((i) => i.status !== "complete");
   const nextSetup = incompleteSetup[0] ?? null;
+
+  // ── Loading / error ──────────────────────────────────────────────────────────
+
+  if (loading) {
+    return (
+      <div className="flex min-h-[40vh] items-center justify-center">
+        <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
+
+  if (err) {
+    return (
+      <div className="rounded-2xl border border-destructive/30 bg-destructive/10 p-4 text-sm text-destructive">
+        {err}
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
-      <div className="rounded-3xl border bg-white p-4 shadow-sm">
+
+      {/* ── Welcome banner ── */}
+      <div className="rounded-2xl border border-border bg-card p-5 shadow-sm">
         <div className="flex items-start justify-between gap-4">
           <div className="min-w-0">
-            <h1 className="text-xl font-semibold tracking-tight">Study Dashboard</h1>
-            <p className="mt-1 text-sm text-zinc-600">
+            <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+              Study Admin
+            </p>
+            <h1 className="mt-0.5 text-xl font-bold tracking-tight">Welcome back</h1>
+            <p className="mt-1 text-sm text-muted-foreground">
               Review uploads, handle course requests, and keep the library clean.
             </p>
-            {data ? (
-              <div className="mt-3 flex flex-wrap items-center gap-2">
-                <span className="rounded-full border bg-white px-3 py-1 text-xs font-semibold text-zinc-700">
-                  {scopeLabel}
-                </span>
-                <span className="rounded-full border bg-white px-3 py-1 text-xs text-zinc-500">
-                  {scopeHint}
-                </span>
-              </div>
-            ) : null}
           </div>
-
-          <div className="grid h-10 w-10 place-items-center rounded-2xl bg-black text-white">
-            <ShieldCheck className="h-4 w-4" />
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary text-primary-foreground">
+            <ShieldCheck className="h-5 w-5" />
           </div>
         </div>
+
+        {/* Role badge */}
+        {data && (
+          <div className="mt-4 flex flex-wrap items-center gap-2">
+            <span className="inline-flex items-center gap-1.5 rounded-full bg-primary/10 px-3 py-1 text-xs font-semibold text-primary">
+              {roleLabel}
+            </span>
+            <span className="rounded-full bg-secondary px-3 py-1 text-xs text-muted-foreground">
+              {scopeHint}
+            </span>
+          </div>
+        )}
       </div>
 
-      {err ? (
-        <div className={cn("rounded-3xl border p-4 text-sm", "border-red-200 bg-red-50 text-red-700")}>
-          {err}
-        </div>
-      ) : null}
-
-      {loading ? (
-        <div className="flex items-center gap-2 text-sm text-zinc-600">
-          <Loader2 className="h-4 w-4 animate-spin" /> Loading…
-        </div>
-      ) : null}
-
-      {data && nextSetup ? (
+      {/* ── Setup banner ── */}
+      {nextSetup && (
         <Link
           href={`/study-admin/courses?level=${nextSetup.level}&semester=${nextSetup.semester}`}
-          className="group block rounded-3xl border border-violet-200 bg-violet-50 p-4 text-violet-950 shadow-sm transition hover:border-violet-300 hover:bg-violet-100"
+          className="group block rounded-2xl border border-primary/30 bg-primary/5 p-5 transition-all hover:border-primary/50 hover:bg-primary/10"
         >
           <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
             <div className="min-w-0">
-              <div className="inline-flex items-center gap-2 rounded-full bg-white/80 px-3 py-1 text-xs font-semibold text-violet-800">
-                <BookOpen className="h-3.5 w-3.5" />
-                First job
-              </div>
-              <h2 className="mt-3 text-lg font-semibold tracking-tight">Set up your class course list</h2>
-              <p className="mt-1 text-sm text-violet-800">
-                Add or confirm courses for {nextSetup.level}L {nextSetup.semester} semester so classmates can upload to the right course.
+              <span className="inline-flex items-center gap-1.5 rounded-full bg-primary/10 px-2.5 py-1 text-xs font-semibold text-primary">
+                <BookOpen className="h-3 w-3" /> Action needed
+              </span>
+              <h2 className="mt-2 text-base font-semibold tracking-tight text-foreground">
+                Set up your class course list
+              </h2>
+              <p className="mt-0.5 text-sm text-muted-foreground">
+                Add courses for {nextSetup.level}L {nextSetup.semester} semester before classmates can upload.
               </p>
-              <p className="mt-2 text-xs font-medium text-violet-700">
-                {nextSetup.courseCount} course{nextSetup.courseCount === 1 ? "" : "s"} added - {incompleteSetup.length} setup group{incompleteSetup.length === 1 ? "" : "s"} still incomplete
+              <p className="mt-1.5 text-xs font-medium text-primary">
+                {incompleteSetup.length} setup group{incompleteSetup.length > 1 ? "s" : ""} still incomplete
               </p>
             </div>
-            <div className="inline-flex shrink-0 items-center gap-2 rounded-2xl bg-violet-700 px-4 py-3 text-sm font-semibold text-white group-hover:bg-violet-800">
+            <div className="inline-flex shrink-0 items-center gap-2 rounded-xl bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground transition-opacity group-hover:opacity-90">
               Open setup <ArrowRight className="h-4 w-4" />
             </div>
           </div>
         </Link>
-      ) : null}
+      )}
 
-      {data ? (
-        <div className="grid gap-4 md:grid-cols-2">
+      {/* ── Stat cards ── */}
+      {data && (
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           <StatCard
-            title="Pending materials"
-            value={String(data.pendingMaterials)}
+            title="Pending Materials"
+            value={data.pendingMaterials}
             href="/study-admin/materials"
             icon={<FileText className="h-4 w-4" />}
-            hint="Review uploads waiting for approval"
+            hint="Uploads waiting for approval"
+            accent="primary"
           />
-
           <StatCard
-            title="Course requests"
-            value={String(data.pendingRequests)}
+            title="Course Requests"
+            value={data.pendingRequests}
             href="/study-admin/requests"
             icon={<Inbox className="h-4 w-4" />}
-            hint="Approve/reject requested courses"
+            hint="Student course requests"
+            accent="accent"
           />
-
-          {/* Optional: show Rep Applications only if super admin (safe link even if not shown) */}
-          {normalizeRole(data.scope.role) === "super" ? (
+          {role === "super" && (
             <StatCard
-              title="Rep applications"
-              value={String(data.pendingRepApplications ?? "—")}
+              title="Rep Applications"
+              value={data.pendingRepApplications ?? "—"}
               href="/study-admin/rep-applications"
               icon={<Users className="h-4 w-4" />}
-              hint="Approve Course Reps and Departmental Librarians"
+              hint="Pending rep & librarian approvals"
+              accent="orange"
             />
-          ) : null}
+          )}
         </div>
-      ) : null}
+      )}
+
+      {/* ── Quick actions ── */}
+      {data && (
+        <div>
+          <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+            Quick actions
+          </p>
+          <div className="grid gap-2 sm:grid-cols-2">
+            <QuickAction href="/study-admin/upload" label="Upload materials" icon={<Upload className="h-4 w-4" />} />
+            <QuickAction href="/study-admin/courses" label="Manage courses" icon={<BookOpen className="h-4 w-4" />} />
+            <QuickAction href="/study-admin/history" label="Upload history" icon={<History className="h-4 w-4" />} />
+            <QuickAction href="/study-admin/question-quality" label="Question quality" icon={<FileText className="h-4 w-4" />} />
+          </div>
+        </div>
+      )}
     </div>
   );
 }

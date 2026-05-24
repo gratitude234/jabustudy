@@ -19,7 +19,7 @@ import { NextResponse } from "next/server";
 import pLimit from "p-limit";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { publicUrl } from "@/lib/publicUrl";
-import { sendUserPush } from "@/lib/webPush";
+import { sendUserPush, filterPushAllowed } from "@/lib/webPush";
 
 const WHATSAPP_API_VERSION = "v19.0";
 const WHATSAPP_API_BASE = `https://graph.facebook.com/${WHATSAPP_API_VERSION}`;
@@ -114,20 +114,18 @@ async function sendReminderToUser({
   };
 
   try {
+    // Always write in-app notification regardless of push subscription
+    const { error: notifError } = await admin.from("notifications").insert({
+      user_id: userId,
+      type: "srs_due_reminder",
+      title,
+      body,
+      href,
+      is_read: false,
+    });
+    if (notifError) result.errors.push(`notif:${userId}: ${notifError.message}`);
+
     if (pushEnabled) {
-      const { error: notifError } = await admin.from("notifications").insert({
-        user_id: userId,
-        type: "srs_due_reminder",
-        title,
-        body,
-        href,
-        is_read: false,
-      });
-
-      if (notifError) {
-        result.errors.push(`push:${userId}: ${notifError.message}`);
-      }
-
       await sendUserPush(userId, {
         title,
         body,
@@ -283,22 +281,15 @@ export async function POST(req: Request) {
   const pushUserIds = new Set(
     (pushSubsRes.data ?? []).map((row: PushSubscriptionRow) => row.user_id)
   );
+  const allowedPushUserIds = new Set(
+    await filterPushAllowed(Array.from(pushUserIds), 'reminders')
+  );
   const waPrefsByUser = new Map(
     ((waPrefsRes.data ?? []) as WhatsAppPrefRow[]).map((row) => [row.user_id, row])
   );
 
-  const targetUserIds = dueUserIds.filter(
-    (userId) => pushUserIds.has(userId) || waPrefsByUser.has(userId)
-  );
-  if (!targetUserIds.length) {
-    return NextResponse.json({
-      ok: true,
-      targeted: 0,
-      pushSent: 0,
-      whatsappSent: 0,
-      errors: [],
-    });
-  }
+  // All users with due cards get the in-app notification; push/WA are opt-in extras
+  const targetUserIds = dueUserIds;
 
   console.log(`[srs-reminder] Processing ${targetUserIds.length} users`);
 
@@ -320,7 +311,7 @@ export async function POST(req: Request) {
           userId,
           count: dueCounts.get(userId) ?? 0,
           todayWAT,
-          pushEnabled: pushUserIds.has(userId),
+          pushEnabled: allowedPushUserIds.has(userId),
           waEnabled,
           waToken,
           waPhoneId,

@@ -2,6 +2,7 @@
 import { NextResponse } from "next/server";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { requireStudyModeratorFromRequest } from "@/lib/studyAdmin/requireStudyModeratorFromRequest";
+import { sendUserPushIfAllowed } from "@/lib/webPush";
 
 function jsonError(message: string, status: number, code: string, extra?: Record<string, unknown>) {
   return NextResponse.json({ ok: false, code, message, ...(extra ?? {}) }, { status });
@@ -146,6 +147,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   // C-6: Notify applicant
   try {
     const roleLabel = role === 'dept_librarian' ? 'Dept Librarian' : 'Course Rep';
+    const notifTitle = `You're now a ${roleLabel}!`;
     const href = role === 'course_rep' ? '/study/rep-setup' : '/study/materials/upload';
     const body = role === 'course_rep'
       ? 'Your application was approved. Start by adding all courses your department offers.'
@@ -153,10 +155,11 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     await adminDb.from('notifications').insert({
       user_id: appRow.user_id,
       type:    'rep_approved',
-      title:   `You're now a ${roleLabel}!`,
+      title:   notifTitle,
       body,
       href,
     });
+    void sendUserPushIfAllowed(appRow.user_id, { title: notifTitle, body, href, tag: `rep-approved-${id}` }, 'materials');
   } catch { /* non-critical */ }
 
   return NextResponse.json({

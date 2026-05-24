@@ -151,7 +151,7 @@ export default function StatsStrip({ userId }: StatsStripProps) {
           <p className="font-[family-name:var(--font-bricolage)] text-lg font-extrabold text-foreground">
             {stats.rank != null ? `#${stats.rank}` : "--"}
           </p>
-          <p className="mt-0.5 text-[10px] text-muted-brand">dept rank</p>
+          <p className="mt-0.5 text-[10px] text-muted-brand">rank</p>
         </div>
         <div className="px-3 text-center">
           <p className="font-[family-name:var(--font-bricolage)] text-lg font-extrabold text-foreground">

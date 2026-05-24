@@ -11,6 +11,11 @@ import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { notifyUpvoteMilestone } from "@/lib/studyNotify";
 
+type ToggleVoteResult = {
+  upvoted: boolean;
+  count: number;
+};
+
 export async function POST(
   _req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -30,10 +35,10 @@ export async function POST(
 
   const admin = createSupabaseAdminClient();
 
-  // ── Fetch question ─────────────────────────────────────────────────────────
+  // ── Fetch question metadata for notification ───────────────────────────────
   const { data: question } = await admin
     .from("study_questions")
-    .select("id,title,author_id,upvotes_count")
+    .select("id,title,author_id")
     .eq("id", questionId)
     .maybeSingle();
 
@@ -41,68 +46,30 @@ export async function POST(
     return NextResponse.json({ ok: false, error: "Question not found." }, { status: 404 });
   }
 
-  // C-4: Block self-vote
-  if (question.author_id && question.author_id === user.id) {
-    return NextResponse.json(
-      { ok: false, error: 'You cannot upvote your own question.' },
-      { status: 403 }
-    );
+  const { data: toggleRows, error: toggleError } = await admin.rpc("toggle_study_question_upvote", {
+    p_question_id: questionId,
+    p_user_id: user.id,
+  });
+
+  if (toggleError) {
+    const status = toggleError.message.toLowerCase().includes("own question") ? 403 : 500;
+    return NextResponse.json({ ok: false, error: toggleError.message }, { status });
   }
 
-  const currentCount = question.upvotes_count ?? 0;
+  const result = (Array.isArray(toggleRows) ? toggleRows[0] : toggleRows) as ToggleVoteResult | null;
+  const upvoted = Boolean(result?.upvoted);
+  const count = Number(result?.count ?? 0);
 
-  // ── Check current vote state ───────────────────────────────────────────────
-  const { data: existingVote } = await admin
-    .from("study_question_votes")
-    .select("id")
-    .eq("question_id", questionId)
-    .eq("voter_id", user.id)
-    .maybeSingle();
-
-  const wasUpvoted = !!existingVote;
-
-  if (wasUpvoted) {
-    // ── Remove vote ──────────────────────────────────────────────────────────
-    await admin
-      .from("study_question_votes")
-      .delete()
-      .eq("question_id", questionId)
-      .eq("voter_id", user.id);
-
-    const newCount = Math.max(0, currentCount - 1);
-    await admin
-      .from("study_questions")
-      .update({ upvotes_count: newCount })
-      .eq("id", questionId);
-
-    return NextResponse.json({ ok: true, upvoted: false, count: newCount });
-  } else {
-    // ── Add vote ─────────────────────────────────────────────────────────────
-    const { error: insErr } = await admin
-      .from("study_question_votes")
-      .insert({ question_id: questionId, voter_id: user.id });
-
-    if (insErr) {
-      return NextResponse.json({ ok: false, error: insErr.message }, { status: 500 });
-    }
-
-    const newCount = currentCount + 1;
-    await admin
-      .from("study_questions")
-      .update({ upvotes_count: newCount })
-      .eq("id", questionId);
-
-    // ── Fire milestone notification (non-blocking) ───────────────────────────
-    if (question.author_id) {
-      void notifyUpvoteMilestone({
-        questionId,
-        questionTitle: question.title ?? "your question",
-        questionAuthorId: question.author_id,
-        newCount,
-        voterId: user.id,
-      });
-    }
-
-    return NextResponse.json({ ok: true, upvoted: true, count: newCount });
+  // ── Fire milestone notification (non-blocking) ───────────────────────────
+  if (upvoted && question.author_id) {
+    void notifyUpvoteMilestone({
+      questionId,
+      questionTitle: question.title ?? "your question",
+      questionAuthorId: question.author_id,
+      newCount: count,
+      voterId: user.id,
+    });
   }
+
+  return NextResponse.json({ ok: true, upvoted, count });
 }

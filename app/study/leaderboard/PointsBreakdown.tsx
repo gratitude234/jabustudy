@@ -17,11 +17,11 @@ type LeaderRow = {
 };
 
 const POINT_RULES: Array<{ key: keyof LeaderRow; label: string; multiplier: number }> = [
-  { key: "accepted",         label: "Accepted answers", multiplier: 5 },
+  { key: "accepted",         label: "Accepted answers", multiplier: 10 },
   { key: "answers",          label: "Answers posted",   multiplier: 2 },
   { key: "questions",        label: "Questions asked",  multiplier: 1 },
   { key: "question_upvotes", label: "Upvotes received", multiplier: 1 },
-  { key: "practice_points",  label: "Practice pts",     multiplier: 1 },
+  { key: "practice_points",  label: "Practice points",  multiplier: 1 },
 ];
 
 export function PointsBreakdown({ row }: { row: LeaderRow }) {

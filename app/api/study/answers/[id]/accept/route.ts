@@ -15,6 +15,12 @@ import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { notifyAnswerAccepted } from "@/lib/studyNotify";
 
+type AcceptStudyAnswerResult = {
+  previous_answer_id: string | null;
+  previous_author_id: string | null;
+  accepted_author_id: string | null;
+};
+
 export async function POST(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -64,44 +70,34 @@ export async function POST(
     );
   }
 
-  // ── Fetch the answer to get its author ────────────────────────────────────
-  const { data: answer } = await admin
-    .from("study_answers")
-    .select("id,author_id,question_id")
-    .eq("id", answerId)
-    .eq("question_id", questionId)
-    .maybeSingle();
-
-  if (!answer) {
-    return NextResponse.json({ ok: false, error: "Answer not found." }, { status: 404 });
-  }
-
-  // ── Update: unaccept all, accept selected, mark question solved ───────────
-  await admin
-    .from("study_answers")
-    .update({ is_accepted: false })
-    .eq("question_id", questionId);
-
-  const { error: acceptErr } = await admin
-    .from("study_answers")
-    .update({ is_accepted: true })
-    .eq("id", answerId);
+  const { data: acceptedRows, error: acceptErr } = await admin.rpc("accept_study_answer", {
+    p_question_id: questionId,
+    p_answer_id: answerId,
+    p_actor_id: user.id,
+  });
 
   if (acceptErr) {
-    return NextResponse.json({ ok: false, error: acceptErr.message }, { status: 500 });
+    const message = acceptErr.message || "Could not accept answer.";
+    const lower = message.toLowerCase();
+    const status = lower.includes("not found")
+      ? 404
+      : lower.includes("only the question owner")
+        ? 403
+        : 500;
+    return NextResponse.json({ ok: false, error: message }, { status });
   }
 
-  await admin
-    .from("study_questions")
-    .update({ solved: true })
-    .eq("id", questionId);
+  const acceptedResult = (Array.isArray(acceptedRows) ? acceptedRows[0] : acceptedRows) as
+    | AcceptStudyAnswerResult
+    | null;
+  const acceptedAuthorId = acceptedResult?.accepted_author_id;
 
   // ── Fire notification (non-blocking) ──────────────────────────────────────
-  if (answer.author_id) {
+  if (acceptedAuthorId) {
     void notifyAnswerAccepted({
       questionId,
       questionTitle: question.title ?? "a question",
-      answerAuthorId: answer.author_id,
+      answerAuthorId: acceptedAuthorId,
       acceptorId: user.id,
       answerId,
     });

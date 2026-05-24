@@ -5,6 +5,7 @@
 // actual approval/rejection action or surface a 500 to the admin.
 
 import { createSupabaseAdminClient } from "../supabase/admin";
+import { sendUserPushIfAllowed } from "../webPush";
 
 /**
  * Notify a single uploader that their material was approved.
@@ -16,14 +17,20 @@ export async function notifyMaterialApproved(
 ): Promise<void> {
   try {
     const admin = createSupabaseAdminClient();
+    const notifTitle = "Your material was approved ✅";
+    const body = `"${title}" is now live in the Study Hub and available for download.`;
+    const href = `/study/materials?highlight=${encodeURIComponent(materialId)}`;
+
     await admin.from("notifications").insert({
       user_id: uploaderId,
       type: "material_approved",
-      title: "Your material was approved ✅",
-      body: `"${title}" is now live in the Study Hub and available for download.`,
-      href: `/study/materials?highlight=${encodeURIComponent(materialId)}`,
+      title: notifTitle,
+      body,
+      href,
       is_read: false,
     });
+
+    void sendUserPushIfAllowed(uploaderId, { title: notifTitle, body, href, tag: `mat-approved-${materialId}` }, 'materials');
   } catch {
     // Notification failure must never break the approval flow
   }
@@ -43,15 +50,19 @@ export async function notifyMaterialRejected(
     const body = note
       ? `Reason: ${note}`
       : `"${title}" was reviewed and not approved. You can re-upload with corrections.`;
+    const notifTitle = "Material not approved";
+    const href = `/study/materials/upload`;
 
     await admin.from("notifications").insert({
       user_id: uploaderId,
       type: "material_rejected",
-      title: "Material not approved",
+      title: notifTitle,
       body,
-      href: `/study/materials/upload`,
+      href,
       is_read: false,
     });
+
+    void sendUserPushIfAllowed(uploaderId, { title: notifTitle, body, href, tag: `mat-rejected-${materialId}` }, 'materials');
   } catch {
     // Notification failure must never break the rejection flow
   }
@@ -101,6 +112,12 @@ export async function notifyBulkMaterialsApproved(
     });
 
     await admin.from("notifications").insert(rows);
+
+    void Promise.allSettled(
+      rows.map((r) =>
+        sendUserPushIfAllowed(r.user_id, { title: r.title, body: r.body, href: r.href, tag: `mat-bulk-approved-${r.user_id}` }, 'materials')
+      )
+    );
   } catch {
     // Notification failure must never break the bulk approval flow
   }

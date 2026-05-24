@@ -20,6 +20,7 @@ import PWAInstallProvider from "@/components/PWAInstallProvider";
 import { ThemeProvider } from "@/components/ThemeProvider";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { metadataBaseUrl } from "@/lib/publicUrl";
+import SplashScreen from "@/components/SplashScreen";
 
 export const viewport: Viewport = {
   themeColor: [
@@ -82,7 +83,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         {/* Flash-prevention: apply dark class before React hydrates */}
         <script
           dangerouslySetInnerHTML={{
-            __html: `(function(){var t=localStorage.getItem('jabustudy-theme');if(t==='dark'||(t!=='light'&&window.matchMedia('(prefers-color-scheme:dark)').matches))document.documentElement.classList.add('dark');})();`,
+            __html: `(function(){var t=localStorage.getItem('jabustudy-theme');if(t==='dark')document.documentElement.classList.add('dark');})();`,
           }}
         />
         <script
@@ -105,6 +106,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         </div>
 
         <ThemeProvider>
+          <SplashScreen />
           <PWAInstallProvider>
             <AuthProvider>
               <AppChrome>{children}</AppChrome>

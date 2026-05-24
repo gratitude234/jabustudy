@@ -4,11 +4,15 @@ import { useState } from "react";
 import { cn } from "@/lib/utils";
 
 const RULES = [
-  { label: "Accepted answer", pts: "+5 pts" },
+  { label: "Accepted answer", pts: "+10 pts" },
   { label: "Answer posted",   pts: "+2 pts" },
   { label: "Question asked",  pts: "+1 pt"  },
-  { label: "Upvote received", pts: "+1 pt"  },
-  { label: "Practice day",    pts: "+1 pt"  },
+  { label: "Question upvote", pts: "+1 pt"  },
+  { label: "Answer upvote",   pts: "+2 pts" },
+  { label: "Practice correct", pts: "+1 pt" },
+  { label: "Written grade 7/10+", pts: "+1 pt" },
+  { label: "Written grade 9/10+", pts: "+2 pts" },
+  { label: "Practice complete", pts: "+3 pts" },
 ];
 
 export function HowPointsWork() {
@@ -32,7 +36,7 @@ export function HowPointsWork() {
             onClick={() => setOpen(false)}
           />
           {/* Dropdown */}
-          <div className="absolute right-0 top-9 z-50 w-48 overflow-hidden rounded-2xl border border-border bg-card shadow-lg">
+          <div className="absolute right-0 top-9 z-50 w-64 overflow-hidden rounded-2xl border border-border bg-card shadow-lg">
             {RULES.map((r, i) => (
               <div
                 key={r.label}
@@ -45,6 +49,9 @@ export function HowPointsWork() {
                 <span className="font-semibold text-foreground">{r.pts}</span>
               </div>
             ))}
+            <div className="border-t border-border/60 px-3 py-2 text-[10px] leading-snug text-muted-brand">
+              Written grades are awarded on submit and share the daily practice cap.
+            </div>
           </div>
         </>
       )}

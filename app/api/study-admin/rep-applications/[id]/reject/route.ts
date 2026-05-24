@@ -2,6 +2,7 @@
 import { NextResponse } from "next/server";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { requireStudyModeratorFromRequest } from "@/lib/studyAdmin/requireStudyModeratorFromRequest";
+import { sendUserPushIfAllowed } from "@/lib/webPush";
 
 function jsonError(message: string, status: number, code: string, extra?: Record<string, unknown>) {
   return NextResponse.json({ ok: false, code, message, ...(extra ?? {}) }, { status });
@@ -67,15 +68,19 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
 
   // C-6: Notify applicant
   try {
+    const notifTitle = 'Application not approved';
+    const notifBody = decision_reason
+      ? `Reason: ${decision_reason}`
+      : 'Your rep application was not approved. Contact the study admin for details.';
+    const href = '/study/apply-rep';
     await adminDb.from('notifications').insert({
       user_id: appRow.user_id,
       type:    'rep_rejected',
-      title:   'Application not approved',
-      body:    decision_reason
-        ? `Reason: ${decision_reason}`
-        : 'Your rep application was not approved. Contact the study admin for details.',
-      href:    '/study/apply-rep',
+      title:   notifTitle,
+      body:    notifBody,
+      href,
     });
+    void sendUserPushIfAllowed(appRow.user_id, { title: notifTitle, body: notifBody, href, tag: `rep-rejected-${id}` }, 'materials');
   } catch { /* non-critical */ }
 
   return NextResponse.json({ ok: true, rejected: true });

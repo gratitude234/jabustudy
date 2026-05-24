@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { createSupabaseAdminClient } from "../../../../../lib/supabase/admin";
 import { requireStudyModeratorFromRequest } from "../../../../../lib/studyAdmin/requireStudyModeratorFromRequest";
 import { triggerMaterialIndex } from "../../../../../lib/studyMaterialIndexTrigger";
+import { sendUserPushIfAllowed } from "../../../../../lib/webPush";
 
 export const dynamic = "force-dynamic";
 
@@ -19,7 +20,7 @@ export async function POST(req: Request) {
 
     const { data: matRow, error: fetchErr } = await admin
       .from("study_materials")
-      .select("file_path")
+      .select("file_path, title, course_code, uploader_id")
       .eq("id", material_id)
       .maybeSingle();
 
@@ -44,6 +45,36 @@ export async function POST(req: Request) {
     if (updateErr) throw updateErr;
 
     triggerMaterialIndex(material_id);
+
+    // Fan-out new-material notification to students in dept/level/semester
+    const baseUrl = process.env.NEXT_PUBLIC_SITE_URL
+      || (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : "http://localhost:3000");
+    fetch(`${baseUrl}/api/study/notify-new-material`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "Authorization": `Bearer ${process.env.CRON_SECRET}` },
+      body: JSON.stringify({ material_id }),
+    }).catch(() => {});
+
+    // Confirm to the rep that their upload is live
+    try {
+      const uploaderId = (matRow as any)?.uploader_id;
+      const matTitle = (matRow as any)?.title;
+      const courseCode = (matRow as any)?.course_code;
+      if (matTitle && uploaderId) {
+        const notifTitle = "Your material is now live ✅";
+        const body = `"${matTitle}"${courseCode ? ` (${courseCode})` : ""} is available in the Study Hub.`;
+        const href = `/study/materials/${material_id}`;
+        await admin.from("notifications").insert({
+          user_id: uploaderId,
+          type: "material_approved",
+          title: notifTitle,
+          body,
+          href,
+          is_read: false,
+        });
+        void sendUserPushIfAllowed(uploaderId, { title: notifTitle, body, href, tag: `mat-live-${material_id}` }, 'materials');
+      }
+    } catch { /* non-critical */ }
 
     return NextResponse.json({ ok: true });
   } catch (e: unknown) {

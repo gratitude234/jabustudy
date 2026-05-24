@@ -8,14 +8,22 @@ import {
   Bell,
   BellOff,
   BookCheck,
+  BookPlus,
   BookX,
+  Brain,
   CheckCheck,
   CheckCircle2,
+  Clock,
+  Flame,
+  HelpCircle,
   MessageCircle,
   MessageSquarePlus,
   Star,
   ThumbsUp,
+  Trophy,
   Megaphone,
+  UserCheck,
+  UserX,
 } from "lucide-react";
 
 type NotificationRow = {
@@ -112,6 +120,69 @@ function getTypeConfig(type: string): TypeConfig {
         bg: "bg-rose-50 dark:bg-rose-950/30",
         iconColor: "text-rose-600 dark:text-rose-400",
         accent: "border-l-rose-400",
+      };
+    case "study_answer_upvote":
+      return {
+        icon: <ThumbsUp className="h-4 w-4" />,
+        bg: "bg-blue-50 dark:bg-blue-950/30",
+        iconColor: "text-blue-600 dark:text-blue-400",
+        accent: "border-l-blue-400",
+      };
+    case "study_new_material":
+      return {
+        icon: <BookPlus className="h-4 w-4" />,
+        bg: "bg-violet-50 dark:bg-violet-950/30",
+        iconColor: "text-violet-600 dark:text-violet-400",
+        accent: "border-l-violet-400",
+      };
+    case "study_new_quiz_set":
+      return {
+        icon: <Brain className="h-4 w-4" />,
+        bg: "bg-amber-50 dark:bg-amber-950/30",
+        iconColor: "text-amber-600 dark:text-amber-400",
+        accent: "border-l-amber-400",
+      };
+    case "rep_approved":
+      return {
+        icon: <UserCheck className="h-4 w-4" />,
+        bg: "bg-emerald-50 dark:bg-emerald-950/30",
+        iconColor: "text-emerald-600 dark:text-emerald-400",
+        accent: "border-l-emerald-400",
+      };
+    case "rep_rejected":
+      return {
+        icon: <UserX className="h-4 w-4" />,
+        bg: "bg-rose-50 dark:bg-rose-950/30",
+        iconColor: "text-rose-600 dark:text-rose-400",
+        accent: "border-l-rose-400",
+      };
+    case "srs_due_reminder":
+      return {
+        icon: <Clock className="h-4 w-4" />,
+        bg: "bg-sky-50 dark:bg-sky-950/30",
+        iconColor: "text-sky-600 dark:text-sky-400",
+        accent: "border-l-sky-400",
+      };
+    case "streak_milestone":
+      return {
+        icon: <Flame className="h-4 w-4" />,
+        bg: "bg-orange-50 dark:bg-orange-950/30",
+        iconColor: "text-orange-500 dark:text-orange-400",
+        accent: "border-l-orange-400",
+      };
+    case "practice_perfect_score":
+      return {
+        icon: <Trophy className="h-4 w-4" />,
+        bg: "bg-amber-50 dark:bg-amber-950/30",
+        iconColor: "text-amber-500 dark:text-amber-400",
+        accent: "border-l-amber-400",
+      };
+    case "study_question_for_rep":
+      return {
+        icon: <HelpCircle className="h-4 w-4" />,
+        bg: "bg-violet-50 dark:bg-violet-950/30",
+        iconColor: "text-violet-600 dark:text-violet-400",
+        accent: "border-l-violet-400",
       };
     case "review_prompt":
       return {

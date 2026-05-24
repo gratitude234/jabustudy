@@ -93,6 +93,64 @@ export async function POST(
     if (setErr) throw setErr;
     if (runUpdateErr) throw runUpdateErr;
 
+    // Fan-out study_new_quiz_set notifications to matching students — fire-and-forget
+    void (async () => {
+      try {
+        const { data: course } = await adminSupabase
+          .from("study_courses")
+          .select("course_code, department_id, level, semester")
+          .eq("id", bankRun.course_id)
+          .maybeSingle();
+
+        if (!course?.department_id) return;
+
+        const level = (course as any).level;
+        const semester = String((course as any).semester ?? "").trim().toLowerCase();
+
+        let usersQuery = adminSupabase
+          .from("study_preferences")
+          .select("user_id")
+          .eq("department_id", (course as any).department_id)
+          .limit(200);
+        if (level) usersQuery = (usersQuery as any).or(`level.eq.${level},level.is.null`);
+        if (semester) usersQuery = (usersQuery as any).or(`semester.eq.${semester},semester.is.null`);
+
+        const { data: users } = await usersQuery;
+        if (!users?.length) return;
+
+        const href = `/study/practice/${bankRun.quiz_set_id}`;
+        const notifBody = `${(course as any).course_code} — ${count} question${count === 1 ? "" : "s"} ready to practice`;
+
+        const rows = (users as { user_id: string }[]).map((u) => ({
+          user_id: u.user_id,
+          type: "study_new_quiz_set",
+          title: "New practice set available",
+          body: notifBody,
+          href,
+          is_read: false,
+        }));
+
+        for (let i = 0; i < rows.length; i += 50) {
+          await adminSupabase.from("notifications").insert(rows.slice(i, i + 50));
+        }
+
+        // Web push fan-out
+        const { sendUserPush, filterPushAllowed } = await import("@/lib/webPush");
+        const allUserIds = (users as { user_id: string }[]).map(u => u.user_id);
+        const allowedUserIds = await filterPushAllowed(allUserIds, 'quizzes');
+        await Promise.allSettled(
+          allowedUserIds.map(uid =>
+            sendUserPush(uid, {
+              title: "New practice set available",
+              body: notifBody,
+              href,
+              tag: `new-quiz-${bankRun.quiz_set_id}`,
+            })
+          )
+        );
+      } catch { /* never break publish */ }
+    })();
+
     return NextResponse.json({ ok: true, bank: await getBankState(runId) });
   } catch (e: unknown) {
     const error = e as RouteError;

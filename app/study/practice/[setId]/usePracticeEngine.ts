@@ -10,6 +10,12 @@ type LatestRestore = {
   flagged?: Record<string, boolean>;
 };
 
+type SubmitPointSummary = {
+  pointsAwarded: number;
+  practicePointsAwarded: number;
+  writtenPointsAwarded: number;
+};
+
 type QuestionType = "mcq" | "short_answer" | "theory";
 
 function questionTypeOf(q: Pick<QuizQuestion, "question_type"> | null | undefined): QuestionType {
@@ -155,6 +161,7 @@ export function usePracticeEngine({
   // Finalize
   const [finalizing, setFinalizing] = useState(false);
   const finalizedRef = useRef(false);
+  const [submitPoints, setSubmitPoints] = useState<SubmitPointSummary | null>(null);
 
   // Review
   const [reviewTab, setReviewTab] = useState<ReviewTab>("all");
@@ -258,6 +265,7 @@ export function usePracticeEngine({
       setErr(null);
       setSubmitted(false);
       setFinalizing(false);
+      setSubmitPoints(null);
       finalizedRef.current = false;
       setIdx(0);
       setAnswers({});
@@ -685,6 +693,7 @@ export function usePracticeEngine({
     setIdx(0);
     setSubmitted(false);
     setReviewTab("all");
+    setSubmitPoints(null);
     finalizedRef.current = false;
     setAttemptId(retryAttemptId);
     initialAttemptRef.current = retryAttemptId;
@@ -707,18 +716,6 @@ export function usePracticeEngine({
         return;
       }
 
-      const total = activeQuestions.length;
-      const scoredQuestions = activeQuestions.filter((q) => !isWrittenQuestion(q));
-      const writtenQuestions = activeQuestions.filter((q) => isWrittenQuestion(q));
-      const writtenAnswered = writtenQuestions.filter((q) => Boolean(writtenAnswers[q.id]?.trim())).length;
-      let correct = 0;
-      for (const q of scoredQuestions) {
-        const chosen = answers[q.id];
-        if (!chosen) continue;
-        const o = (optionsByQ[q.id] ?? []).find((x) => x.id === chosen);
-        if (o?.is_correct) correct += 1;
-      }
-
       const submittedIso = new Date().toISOString();
       let timeSpent: number | null = null;
 
@@ -731,166 +728,45 @@ export function usePracticeEngine({
         timeSpent = Math.max(0, Math.round((Date.now() - startedAtMsRef.current) / 1000));
       }
 
-      // Avoid breaking if optional columns don't exist.
-      const attemptUpdate: any = {
-        status: "submitted",
-        submitted_at: submittedIso,
-        score: correct,
-        total_questions: total,
-        scored_questions_count: scoredQuestions.length,
-        written_questions_count: writtenQuestions.length,
-        written_answered_count: writtenAnswered,
-        time_spent_seconds: timeSpent,
-      };
+      const res = await fetch(`/api/study/practice/${encodeURIComponent(attemptId)}/submit`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          answers,
+          writtenAnswers,
+          questionIds: activeQuestions.map((q) => q.id),
+          reason,
+          timeSpentSeconds: timeSpent,
+        }),
+      });
+      const json = await res.json().catch(() => null) as
+        | {
+            ok?: boolean;
+            message?: string;
+            pointsAwarded?: number;
+            practicePointsAwarded?: number;
+            writtenPointsAwarded?: number;
+            weakSummary?: Array<{
+              questionId: string;
+              prompt: string;
+              missCount: number;
+              nextDueAt: string;
+              wasCorrect: boolean;
+              reviewReason?: "missed";
+            }>;
+          }
+        | null;
 
-      if (writtenQuestions.length > 0) {
-        await supabase.from("study_attempt_answers").upsert(
-          writtenQuestions.map((q) => ({
-            attempt_id: attemptId,
-            question_id: q.id,
-            text_answer: writtenAnswers[q.id] ?? "",
-            answered_at: submittedIso,
-          })) as any[],
-          { onConflict: "attempt_id,question_id" }
-        );
+      if (!res.ok || !json?.ok) {
+        throw new Error(json?.message || "Could not submit this attempt.");
       }
 
-      await supabase
-        .from("study_practice_attempts")
-        .update(attemptUpdate)
-        .eq("id", attemptId)
-        .eq("user_id", userId);
-
-      // Update set-level due_at for spaced repetition
-      const pct = scoredQuestions.length > 0 ? (correct / scoredQuestions.length) * 100 : 0;
-      const daysAhead = pct >= 80 ? 3 : pct >= 60 ? 2 : 1;
-      const dueAt = new Date(Date.now() + daysAhead * 24 * 60 * 60 * 1000).toISOString();
-      supabase
-        .from("study_quiz_sets")
-        .update({ due_at: dueAt } as any)
-        .eq("id", setId)
-        .then(() => {}); // fire-and-forget
-
-      // Update daily activity/streak (ignore if missing)
-      // WAT = UTC+1. Use Nigerian local date, not UTC.
-      const watOffsetMs = 60 * 60 * 1000;
-      const watDate = new Date(new Date(submittedIso).getTime() + watOffsetMs);
-      const activityDate = watDate.toISOString().slice(0, 10);
-
-      // Fetch existing row to accumulate points and increment attempts
-      const { data: existingActivity } = await supabase
-        .from("study_daily_activity")
-        .select("attempts_count, questions_answered, correct_answers")
-        .eq("user_id", userId)
-        .eq("activity_date", activityDate)
-        .maybeSingle();
-
-      const prevAttempts = (existingActivity as any)?.attempts_count ?? 0;
-      const prevAnswered = (existingActivity as any)?.questions_answered ?? 0;
-      const prevCorrect = (existingActivity as any)?.correct_answers ?? 0;
-
-      await supabase
-        .from("study_daily_activity")
-        .upsert(
-          {
-            user_id: userId,
-            activity_date: activityDate,
-            attempts_count: prevAttempts + 1,
-            questions_answered: prevAnswered + scoredQuestions.length,
-            correct_answers: prevCorrect + correct,
-            updated_at: submittedIso,
-          } as any,
-          { onConflict: "user_id,activity_date" }
-        );
-
-      // ── SRS: persist weak/correct signals ──────────────────────────────
-      // Fetch existing rows for the questions in this attempt so we can
-      // compute the new interval without a round-trip per question.
-      const questionIds = scoredQuestions.map((q) => q.id);
-      const { data: existingRows } = questionIds.length
-        ? await supabase
-            .from("study_weak_questions")
-            .select("question_id, miss_count, correct_streak, last_missed_at")
-            .eq("user_id", userId)
-            .in("question_id", questionIds)
-        : { data: [] as any[] };
-
-      const existingMap: Record<string, { miss_count: number; correct_streak: number; last_missed_at: string | null }> = {};
-      for (const row of (existingRows ?? []) as any[]) {
-        existingMap[row.question_id] = {
-          miss_count: row.miss_count ?? 0,
-          correct_streak: row.correct_streak ?? 0,
-          last_missed_at: row.last_missed_at ?? null,
-        };
-      }
-
-      function computeNextDue(missCount: number, fromIso: string): string {
-        // SM-2 lite: interval doubles from miss 3 onwards, capped at 30 days.
-        // miss 1 & 2 → 1 day, miss 3 → 2 days, miss 4 → 4 days, miss N → 2^(N-2) days.
-        const daysMap: Record<number, number> = { 1: 1, 2: 1 };
-        const days = daysMap[missCount] ?? Math.min(Math.pow(2, missCount - 2), 30);
-        const base = new Date(fromIso).getTime();
-        return new Date(base + days * 86_400_000).toISOString();
-      }
-
-      const srsUpserts: any[] = [];
-      const summaryRows: typeof weakSummary = [];
-
-      for (const q of scoredQuestions) {
-        const chosen = answers[q.id];
-        const opts = optionsByQ[q.id] ?? [];
-        const isCorrect = chosen ? (opts.find((o) => o.id === chosen)?.is_correct ?? false) : false;
-        const existing = existingMap[q.id];
-
-        if (isCorrect && !existing) {
-          // Never seen as wrong — no row needed.
-          summaryRows.push({ questionId: q.id, prompt: q.prompt, missCount: 0, nextDueAt: "", wasCorrect: true });
-          continue;
-        }
-
-        if (isCorrect && existing) {
-          const newStreak = existing.correct_streak + 1;
-          const graduated = newStreak >= 3;
-          srsUpserts.push({
-            user_id: userId,
-            question_id: q.id,
-            miss_count: existing.miss_count,
-            last_missed_at: existingMap[q.id]?.last_missed_at ?? null,
-            next_due_at: computeNextDue(existing.miss_count, submittedIso),
-            correct_streak: newStreak,
-            graduated_at: graduated ? submittedIso : null,
-            updated_at: submittedIso,
-          });
-          summaryRows.push({ questionId: q.id, prompt: q.prompt, missCount: existing.miss_count, nextDueAt: "", wasCorrect: true });
-          continue;
-        }
-
-        // Wrong or unanswered
-        const prevMiss = existing?.miss_count ?? 0;
-        const newMiss = prevMiss + 1;
-        const nextDue = computeNextDue(newMiss, submittedIso);
-        srsUpserts.push({
-          user_id: userId,
-          question_id: q.id,
-          miss_count: newMiss,
-          last_missed_at: submittedIso,
-          next_due_at: nextDue,
-          correct_streak: 0, // reset streak on any miss
-          graduated_at: null,
-          updated_at: submittedIso,
-        });
-        summaryRows.push({ questionId: q.id, prompt: q.prompt, missCount: newMiss, nextDueAt: nextDue, wasCorrect: false, reviewReason: "missed" });
-      }
-
-      if (srsUpserts.length > 0) {
-        await supabase
-          .from("study_weak_questions")
-          .upsert(srsUpserts, { onConflict: "user_id,question_id" });
-      }
-
-      // Surface wrong/unanswered answers in the summary.
-      setWeakSummary(summaryRows.filter((r) => r.reviewReason || r.missCount > 0));
-      // ── end SRS ────────────────────────────────────────────────────────
+      setWeakSummary(json.weakSummary ?? []);
+      setSubmitPoints({
+        pointsAwarded: Math.max(0, Number(json.pointsAwarded ?? 0)),
+        practicePointsAwarded: Math.max(0, Number(json.practicePointsAwarded ?? 0)),
+        writtenPointsAwarded: Math.max(0, Number(json.writtenPointsAwarded ?? 0)),
+      });
 
       safePushRecent({
         id: `practice:${attemptId}`,
@@ -906,8 +782,10 @@ export function usePracticeEngine({
       } catch {
         // ignore
       }
-    } catch {
-      // ignore
+    } catch (error) {
+      setErr(error instanceof Error ? error.message : "Could not submit this attempt.");
+      setSubmitted(false);
+      finalizedRef.current = false;
     } finally {
       setFinalizing(false);
     }
@@ -980,6 +858,7 @@ export function usePracticeEngine({
     reviewItems,
     stats,
     finalizing,
+    submitPoints,
     weakSummary,
 
     // actions

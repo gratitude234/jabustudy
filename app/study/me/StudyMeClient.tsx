@@ -7,6 +7,8 @@ import { useEffect, useMemo, useState } from "react";
 import {
   ArrowRight,
   BadgeCheck,
+  Bell,
+  BellOff,
   BookOpen,
   Calculator,
   ClipboardList,
@@ -25,6 +27,7 @@ import {
 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { cn } from "@/lib/utils";
+import { subscribeToPush } from "@/components/ServiceWorkerRegister";
 import StudyTabs from "../_components/StudyTabs";
 import { Badge, Card, PageHeader } from "../_components/StudyUI";
 import { StudyPrefsProvider, useStudyPrefs, type RepStatus } from "../_components/StudyPrefsContext";
@@ -153,6 +156,206 @@ function ToolRow({
       ) : null}
       <ArrowRight className="h-4 w-4 shrink-0 text-muted-brand" />
     </Link>
+  );
+}
+
+type PushState = "loading" | "unsupported" | "denied" | "enabled" | "disabled";
+type NotificationCategory = "answers" | "upvotes" | "materials" | "quizzes" | "milestones" | "reminders" | "rep_alerts";
+type NotificationPreferences = Partial<Record<NotificationCategory, boolean>>;
+
+const PUSH_CATEGORIES: { key: NotificationCategory; label: string; desc: string; repOnly: boolean }[] = [
+  { key: "answers",    label: "Answers",    desc: "Questions answered or accepted",           repOnly: false },
+  { key: "upvotes",    label: "Upvotes",    desc: "Milestone upvotes on your questions & answers", repOnly: false },
+  { key: "materials",  label: "Materials",  desc: "New materials, approvals and rejections",  repOnly: false },
+  { key: "quizzes",    label: "Quizzes",    desc: "New practice sets for your department",    repOnly: false },
+  { key: "milestones", label: "Milestones", desc: "Study streaks and perfect scores",         repOnly: false },
+  { key: "reminders",  label: "Reminders",  desc: "Daily spaced-repetition alerts",           repOnly: false },
+  { key: "rep_alerts", label: "Rep alerts", desc: "New questions and pending materials",      repOnly: true  },
+];
+
+function PushToggleRow({ isRep }: { isRep: boolean }) {
+  const [state, setState] = useState<PushState>("loading");
+  const [busy, setBusy] = useState(false);
+  const [notifPrefs, setNotifPrefs] = useState<NotificationPreferences | null>(null);
+  const [prefsLoading, setPrefsLoading] = useState(false);
+  const [prefsSaving, setPrefsSaving] = useState<NotificationCategory | null>(null);
+
+  useEffect(() => {
+    if (
+      !("Notification" in window) ||
+      !("serviceWorker" in navigator) ||
+      !("PushManager" in window) ||
+      !process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY
+    ) {
+      setState("unsupported");
+      return;
+    }
+    if (Notification.permission === "denied") { setState("denied"); return; }
+
+    navigator.serviceWorker.ready.then((reg) =>
+      reg.pushManager.getSubscription().then((sub) =>
+        setState(sub ? "enabled" : "disabled")
+      )
+    ).catch(() => setState("unsupported"));
+  }, []);
+
+  useEffect(() => {
+    if (state !== "enabled") return;
+    setPrefsLoading(true);
+    fetch("/api/user/notification-preferences")
+      .then(r => r.json())
+      .then(data => { if (data.ok) setNotifPrefs(data.preferences); })
+      .catch(() => { setNotifPrefs({}); })
+      .finally(() => setPrefsLoading(false));
+  }, [state]);
+
+  async function handleEnable() {
+    setBusy(true);
+    try {
+      const permission = Notification.permission === "granted"
+        ? "granted"
+        : await Notification.requestPermission();
+      if (permission !== "granted") { setState("denied"); return; }
+      const reg = await navigator.serviceWorker.ready;
+      await subscribeToPush(reg);
+      localStorage.removeItem("js_push_prompt_dismissed");
+      setState("enabled");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function handleDisable() {
+    setBusy(true);
+    try {
+      const reg = await navigator.serviceWorker.ready;
+      const sub = await reg.pushManager.getSubscription();
+      if (sub) {
+        const endpoint = sub.endpoint;
+        await sub.unsubscribe();
+        await fetch("/api/user/push", {
+          method: "DELETE",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ endpoint }),
+        });
+      }
+      localStorage.removeItem("js_push_prompt_dismissed");
+      setState("disabled");
+      setNotifPrefs(null);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function handleCategoryToggle(category: NotificationCategory, enabled: boolean) {
+    setPrefsSaving(category);
+    try {
+      const res = await fetch("/api/user/notification-preferences", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ [category]: enabled }),
+      });
+      const data = await res.json();
+      if (data.ok) setNotifPrefs(data.preferences);
+    } catch { /* non-critical */ }
+    setPrefsSaving(null);
+  }
+
+  if (state === "unsupported") return null;
+
+  const enabled = state === "enabled";
+  const denied = state === "denied";
+  const loading = state === "loading";
+  const showCategories = enabled && notifPrefs !== null;
+
+  return (
+    <div className={cn("overflow-hidden rounded-2xl border border-border bg-card shadow-sm", showCategories && "pb-1")}>
+      {/* Master toggle row */}
+      <div className="flex items-center gap-3 p-3.5">
+        <span className={cn(
+          "grid h-10 w-10 shrink-0 place-items-center rounded-xl border",
+          enabled ? "border-emerald-200 bg-emerald-50 text-emerald-700" : "border-border bg-background text-muted-foreground"
+        )}>
+          {enabled ? <Bell className="h-4 w-4" /> : <BellOff className="h-4 w-4" />}
+        </span>
+        <span className="min-w-0 flex-1">
+          <span className="block truncate text-sm font-bold text-foreground">Push Notifications</span>
+          <span className="mt-0.5 block truncate text-xs text-muted-brand">
+            {loading ? "Checking…" : denied
+              ? "Blocked in browser — enable in site settings"
+              : enabled ? "On — tap categories below to customise"
+              : "Off — tap to get study reminders"}
+          </span>
+        </span>
+        {!denied && !loading && (
+          <button
+            type="button"
+            disabled={busy}
+            onClick={enabled ? handleDisable : handleEnable}
+            className={cn(
+              "shrink-0 rounded-xl px-3 py-1.5 text-xs font-bold transition disabled:opacity-50",
+              enabled
+                ? "border border-border bg-background text-foreground hover:bg-secondary"
+                : "bg-zinc-900 text-white hover:bg-zinc-700"
+            )}
+          >
+            {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : enabled ? "Turn off" : "Enable"}
+          </button>
+        )}
+      </div>
+
+      {/* Category toggles */}
+      {enabled && (
+        <div className="border-t border-border px-3.5 pt-1">
+          {prefsLoading ? (
+            <div className="space-y-2 py-2">
+              {[1, 2, 3].map(i => (
+                <div key={i} className="flex items-center justify-between py-1">
+                  <div className="space-y-1">
+                    <div className="h-3 w-20 animate-pulse rounded bg-muted" />
+                    <div className="h-2.5 w-36 animate-pulse rounded bg-muted" />
+                  </div>
+                  <div className="h-6 w-10 animate-pulse rounded-full bg-muted" />
+                </div>
+              ))}
+            </div>
+          ) : notifPrefs !== null ? (
+            <div>
+              {PUSH_CATEGORIES.filter(c => isRep || !c.repOnly).map(cat => {
+                const isCatEnabled = notifPrefs[cat.key] !== false;
+                const saving = prefsSaving === cat.key;
+                return (
+                  <div
+                    key={cat.key}
+                    className="flex items-center justify-between gap-3 py-2.5 border-b border-border last:border-0"
+                  >
+                    <div className="min-w-0">
+                      <p className="text-xs font-semibold text-foreground">{cat.label}</p>
+                      <p className="text-[11px] text-muted-brand">{cat.desc}</p>
+                    </div>
+                    <button
+                      type="button"
+                      disabled={saving}
+                      onClick={() => handleCategoryToggle(cat.key, !isCatEnabled)}
+                      className={cn(
+                        "shrink-0 rounded-full px-3 py-1 text-[11px] font-bold transition disabled:opacity-50",
+                        isCatEnabled
+                          ? "border border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100"
+                          : "border border-border bg-background text-muted-brand hover:bg-secondary"
+                      )}
+                    >
+                      {saving
+                        ? <Loader2 className="h-3 w-3 animate-spin" />
+                        : isCatEnabled ? "On" : "Off"}
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+          ) : null}
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -443,6 +646,11 @@ function StudyMeInner() {
             />
           )}
         </div>
+      </section>
+
+      <section className="space-y-3">
+        <h2 className="text-sm font-bold text-foreground">Notifications</h2>
+        <PushToggleRow isRep={rep.status === "approved"} />
       </section>
 
       <section className="grid gap-3 md:grid-cols-2">

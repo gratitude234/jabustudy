@@ -119,7 +119,7 @@ export async function POST(req: Request) {
 
     // H-5: Push notification fan-out
     try {
-      const { sendUserPush } = await import('@/lib/webPush');
+      const { sendUserPush, filterPushAllowed } = await import('@/lib/webPush');
       const pushPayload = {
         title: `New material: ${title}`,
         body:  course_code
@@ -128,9 +128,9 @@ export async function POST(req: Request) {
         href:  '/study/materials',
         tag:   `new-material-${material_id}`,
       };
-      await Promise.allSettled(
-        (users ?? []).map((u: StudyPreferenceUser) => sendUserPush(u.user_id, pushPayload))
-      );
+      const allUserIds = (users ?? []).map((u: StudyPreferenceUser) => u.user_id);
+      const allowedUserIds = await filterPushAllowed(allUserIds, 'materials');
+      await Promise.allSettled(allowedUserIds.map(uid => sendUserPush(uid, pushPayload)));
     } catch { /* push failures must never crash the notification route */ }
 
     return NextResponse.json({ ok: true, notified: totalInserted });
