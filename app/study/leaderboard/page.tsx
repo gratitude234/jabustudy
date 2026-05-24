@@ -27,7 +27,7 @@ type LeaderRow = {
   rank?: number | null;
 };
 
-type Scope = "all" | "dept" | "level";
+type Scope = "all" | "faculty" | "dept" | "level" | "course";
 type Period = "week" | "month" | "semester" | "session" | "all";
 
 type UserPrefs = {
@@ -35,6 +35,8 @@ type UserPrefs = {
   faculty_id: string | null;
   level: number | null;
   department: string | null;
+  faculty: string | null;
+  semester: string | null;
 };
 
 type StudyPreferenceScopeRow = {
@@ -53,6 +55,12 @@ type RepMetaRow = {
 type LeaderboardRpcRow = LeaderRow & {
   active_days?: number | null;
   last_activity_at?: string | null;
+};
+
+type CourseOption = {
+  id: string;
+  course_code: string;
+  course_title: string | null;
 };
 
 async function getLeaderboardEntryState() {
@@ -106,11 +114,17 @@ function periodLabel(period: Period) {
   return "All-time";
 }
 
-async function fetchLeaderboard(scope: Scope, period: Period): Promise<{
+function normalizeCourseCode(code: string | null | undefined) {
+  return (code ?? "").replace(/\s+/g, "").toUpperCase();
+}
+
+async function fetchLeaderboard(scope: Scope, period: Period, requestedCourseCode: string | null): Promise<{
   rows: LeaderRow[];
   viewMissing: boolean;
   currentUserId: string | null;
   userPrefs: UserPrefs | null;
+  courseOptions: CourseOption[];
+  selectedCourseCode: string | null;
   scopeLabel: string;
   periodLabel: string;
   outsideTopNRow: { row: LeaderRow; rank: number } | null;
@@ -123,15 +137,34 @@ async function fetchLeaderboard(scope: Scope, period: Period): Promise<{
   const { data: authData } = await supabase.auth.getUser();
   const currentUserId = authData?.user?.id ?? null;
 
-  // Fetch user prefs (needed for dept/level scope labels and filtering)
+  // Fetch user prefs (needed for academic scope labels and filtering)
   let userPrefs: UserPrefs | null = null;
   if (currentUserId) {
     const { data } = await supabase
       .from("study_preferences")
-      .select("department_id, faculty_id, level, department")
+      .select("department_id, faculty_id, level, semester, department, faculty")
       .eq("user_id", currentUserId)
       .maybeSingle();
     if (data) userPrefs = data as UserPrefs;
+  }
+
+  let courseOptions: CourseOption[] = [];
+  if (userPrefs?.department_id && userPrefs.level && userPrefs.semester) {
+    const { data } = await supabase
+      .from("study_courses")
+      .select("id,course_code,course_title")
+      .eq("department_id", userPrefs.department_id)
+      .eq("level", userPrefs.level)
+      .eq("semester", userPrefs.semester)
+      .order("course_code", { ascending: true });
+
+    courseOptions = ((data ?? []) as CourseOption[])
+      .filter((course) => course.course_code?.trim())
+      .map((course) => ({
+        id: String(course.id),
+        course_code: course.course_code.trim().toUpperCase(),
+        course_title: course.course_title ?? null,
+      }));
   }
 
   const loadRepMeta = async () => {
@@ -161,13 +194,23 @@ async function fetchLeaderboard(scope: Scope, period: Period): Promise<{
   };
 
   let scopeLabel = "All of JABU";
+  let selectedCourseCode: string | null = null;
 
-  if (scope === "dept" && userPrefs?.department_id) {
+  if (scope === "faculty" && userPrefs?.faculty_id) {
+    scopeLabel = userPrefs.faculty ? `${userPrefs.faculty} Faculty` : "My Faculty";
+  } else if (scope === "dept" && userPrefs?.department_id) {
     scopeLabel = userPrefs.department
       ? `${userPrefs.department} Dept.`
       : "My Department";
   } else if (scope === "level" && userPrefs?.level) {
     scopeLabel = `${userPrefs.level}L Students`;
+  } else if (scope === "course") {
+    const requestedNorm = normalizeCourseCode(requestedCourseCode);
+    const matchedCourse = requestedNorm
+      ? courseOptions.find((course) => normalizeCourseCode(course.course_code) === requestedNorm)
+      : null;
+    selectedCourseCode = matchedCourse?.course_code ?? courseOptions[0]?.course_code ?? requestedCourseCode?.trim().toUpperCase() ?? null;
+    scopeLabel = selectedCourseCode ? `${selectedCourseCode} Course` : "Course";
   }
 
   const leaderboardResult = await supabase.rpc("get_study_leaderboard", {
@@ -176,6 +219,7 @@ async function fetchLeaderboard(scope: Scope, period: Period): Promise<{
     p_period: period,
     p_limit: 500,
     p_offset: 0,
+    p_course_code: selectedCourseCode,
   });
 
   if (leaderboardResult.error) {
@@ -191,6 +235,8 @@ async function fetchLeaderboard(scope: Scope, period: Period): Promise<{
         viewMissing: true,
         currentUserId,
         userPrefs,
+        courseOptions,
+        selectedCourseCode,
         scopeLabel,
         periodLabel: periodLabel(period),
         outsideTopNRow: null,
@@ -250,6 +296,8 @@ async function fetchLeaderboard(scope: Scope, period: Period): Promise<{
     viewMissing: false,
     currentUserId,
     userPrefs,
+    courseOptions,
+    selectedCourseCode,
     scopeLabel,
     periodLabel: periodLabel(period),
     outsideTopNRow,
@@ -261,16 +309,20 @@ async function fetchLeaderboard(scope: Scope, period: Period): Promise<{
 
 // ─── Leaderboard Filters ──────────────────────────────────────────────────────
 
-function leaderboardHref(period: Period, scope: Scope) {
-  return `/study/leaderboard?period=${period}&scope=${scope}`;
+function leaderboardHref(period: Period, scope: Scope, courseCode?: string | null) {
+  const params = new URLSearchParams({ period, scope });
+  if (scope === "course" && courseCode) params.set("course", courseCode);
+  return `/study/leaderboard?${params.toString()}`;
 }
 
 function PeriodTabs({
   period,
   scope,
+  courseCode,
 }: {
   period: Period;
   scope: Scope;
+  courseCode: string | null;
 }) {
   const tabs: Array<{ key: Period; label: string }> = [
     { key: "week", label: "Week" },
@@ -287,7 +339,7 @@ function PeriodTabs({
         return (
           <Link
             key={t.key}
-            href={leaderboardHref(t.key, scope)}
+            href={leaderboardHref(t.key, scope, courseCode)}
             className={cn(
               "shrink-0 rounded-full border px-3 py-1.5 text-xs font-semibold transition",
               "focus-visible:outline-none",
@@ -308,13 +360,22 @@ function ScopeTabs({
   scope,
   period,
   userPrefs,
+  courseCode,
+  hasCourses,
 }: {
   scope: Scope;
   period: Period;
   userPrefs: UserPrefs | null;
+  courseCode: string | null;
+  hasCourses: boolean;
 }) {
   const tabs: Array<{ key: Scope; label: string; disabled?: boolean }> = [
     { key: "all", label: "All JABU" },
+    {
+      key: "faculty",
+      label: userPrefs?.faculty ?? "My faculty",
+      disabled: !userPrefs?.faculty_id,
+    },
     {
       key: "dept",
       label: userPrefs?.department ?? "My dept",
@@ -325,13 +386,18 @@ function ScopeTabs({
       label: userPrefs?.level ? `${userPrefs.level}L` : "My level",
       disabled: !userPrefs?.level,
     },
+    {
+      key: "course",
+      label: courseCode ?? "Course",
+      disabled: !hasCourses && !courseCode,
+    },
   ];
 
   return (
     <div className="flex items-center gap-2 overflow-x-auto [scrollbar-width:none]">
       {tabs.map((t) => {
         const active = scope === t.key;
-        const href = leaderboardHref(period, t.key);
+        const href = leaderboardHref(period, t.key, t.key === "course" ? courseCode : null);
         return (
           <Link
             key={t.key}
@@ -347,6 +413,42 @@ function ScopeTabs({
             )}
           >
             {t.label}
+          </Link>
+        );
+      })}
+    </div>
+  );
+}
+
+function CourseTabs({
+  period,
+  activeCourseCode,
+  courses,
+}: {
+  period: Period;
+  activeCourseCode: string | null;
+  courses: CourseOption[];
+}) {
+  if (courses.length === 0) return null;
+
+  return (
+    <div className="flex items-center gap-2 overflow-x-auto [scrollbar-width:none]">
+      {courses.map((course) => {
+        const active = normalizeCourseCode(activeCourseCode) === normalizeCourseCode(course.course_code);
+        return (
+          <Link
+            key={course.id}
+            href={leaderboardHref(period, "course", course.course_code)}
+            title={course.course_title ?? course.course_code}
+            className={cn(
+              "shrink-0 rounded-full border px-3 py-1.5 text-xs font-semibold transition",
+              "focus-visible:outline-none",
+              active
+                ? "border-white bg-white text-primary-text"
+                : "border-white/25 bg-white/10 text-white/70 hover:bg-white/20 hover:text-white"
+            )}
+          >
+            {course.course_code}
           </Link>
         );
       })}
@@ -581,11 +683,12 @@ function RankRow({
 export default async function LeaderboardPage({
   searchParams,
 }: {
-  searchParams?: { scope?: string; period?: string };
+  searchParams?: { scope?: string; period?: string; course?: string };
 }) {
   const entryState = await getLeaderboardEntryState();
   const rawScope = (searchParams?.scope ?? "").toLowerCase();
   const rawPeriod = (searchParams?.period ?? "").toLowerCase();
+  const rawCourse = (searchParams?.course ?? "").trim();
   const period: Period =
     rawScope === "week"
       ? "week"
@@ -595,7 +698,7 @@ export default async function LeaderboardPage({
   const scope: Scope =
     rawScope === "week"
       ? "all"
-      : rawScope === "dept" || rawScope === "level" || rawScope === "all"
+      : rawScope === "faculty" || rawScope === "dept" || rawScope === "level" || rawScope === "course" || rawScope === "all"
         ? rawScope
         : entryState.profileComplete
           ? "dept"
@@ -606,6 +709,8 @@ export default async function LeaderboardPage({
   let viewMissing = false;
   let currentUserId: string | null = null;
   let userPrefs: UserPrefs | null = null;
+  let courseOptions: CourseOption[] = [];
+  let selectedCourseCode: string | null = null;
   let scopeLabel = "All of JABU";
   let activePeriodLabel = periodLabel(period);
   let outsideTopNRow: { row: LeaderRow; rank: number } | null = null;
@@ -614,11 +719,13 @@ export default async function LeaderboardPage({
   let repRoleMap = new Map<string, string>();
 
   try {
-    const result = await fetchLeaderboard(scope, period);
+    const result = await fetchLeaderboard(scope, period, rawCourse || null);
     rows = result.rows;
     viewMissing = result.viewMissing;
     currentUserId = result.currentUserId;
     userPrefs = result.userPrefs;
+    courseOptions = result.courseOptions;
+    selectedCourseCode = result.selectedCourseCode;
     scopeLabel = result.scopeLabel;
     activePeriodLabel = result.periodLabel;
     outsideTopNRow = result.outsideTopNRow;
@@ -652,8 +759,10 @@ export default async function LeaderboardPage({
   // Show a hint when dept/level scope finds no one (user is alone or prefs missing)
   const scopeEmpty = !fetchError && rows.length === 0 && scope !== "all";
   const noPrefsForScope =
+    (scope === "faculty" && !userPrefs?.faculty_id) ||
     (scope === "dept" && !userPrefs?.department_id) ||
-    (scope === "level" && !userPrefs?.level);
+    (scope === "level" && !userPrefs?.level) ||
+    (scope === "course" && courseOptions.length === 0 && !selectedCourseCode);
 
   return (
     <div className="space-y-3 pb-28 md:pb-6">
@@ -680,8 +789,21 @@ export default async function LeaderboardPage({
 
           {/* Filter chips */}
           <div className="mt-4 space-y-2">
-            <PeriodTabs period={period} scope={scope} />
-            <ScopeTabs scope={scope} period={period} userPrefs={userPrefs} />
+            <PeriodTabs period={period} scope={scope} courseCode={selectedCourseCode} />
+            <ScopeTabs
+              scope={scope}
+              period={period}
+              userPrefs={userPrefs}
+              courseCode={selectedCourseCode}
+              hasCourses={courseOptions.length > 0}
+            />
+            {scope === "course" && (
+              <CourseTabs
+                period={period}
+                activeCourseCode={selectedCourseCode}
+                courses={courseOptions}
+              />
+            )}
           </div>
         </div>
 
@@ -696,7 +818,7 @@ export default async function LeaderboardPage({
             <p className="font-semibold text-white">Leaderboard view not set up yet.</p>
             <p className="mt-0.5">
               Run migration{" "}
-              <code className="rounded bg-white/20 px-1">20260528_leaderboard_periods_deferred_written_points.sql</code>{" "}
+              <code className="rounded bg-white/20 px-1">20260529_leaderboard_faculty_course_scopes.sql</code>{" "}
               in your Supabase SQL editor.
             </p>
           </div>
@@ -722,10 +844,16 @@ export default async function LeaderboardPage({
       {noPrefsForScope && (
         <div className="rounded-2xl border border-amber-200/60 bg-amber-50/60 px-4 py-3 text-sm dark:border-amber-800/40 dark:bg-amber-950/30">
           <p className="font-semibold text-amber-900 dark:text-amber-200">
-            {scope === "dept" ? "Department not set" : "Level not set"}
+            {scope === "faculty"
+              ? "Faculty not set"
+              : scope === "dept"
+                ? "Department not set"
+                : scope === "course"
+                  ? "Courses unavailable"
+                  : "Level not set"}
           </p>
           <p className="mt-0.5 text-xs text-amber-700 dark:text-amber-400">
-            Set your {scope === "dept" ? "department" : "level"} in{" "}
+            Set your {scope === "faculty" ? "faculty" : scope === "dept" ? "department" : scope === "course" ? "department, level, and semester" : "level"} in{" "}
             <Link href="/study/onboarding" className="underline underline-offset-2">
               Study Preferences
             </Link>{" "}
