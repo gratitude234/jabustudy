@@ -14,8 +14,12 @@ import {
   extractMaterialContent,
   truncateText,
 } from "@/lib/extractMaterialContent";
-import { saveGeneratedPracticeSet } from "@/lib/aiGeneratedPractice";
+import { saveGeneratedPracticeSet, type GeneratedPracticeQuestion } from "@/lib/aiGeneratedPractice";
 import { generateCoverageAwareQuestions, type StudyGenerationIntent } from "@/lib/studyQuestionGeneration";
+import {
+  markPoolQuestionsSeen,
+  selectReusablePoolQuestions,
+} from "@/lib/studyQuestionPool";
 import {
   aiRateLimitMessage,
   recordAiUsageEvent,
@@ -85,6 +89,10 @@ type GeneratedQuestion = {
   difficultyLevel?: string;
   cognitiveLevel?: string;
   sourceTopic?: string;
+  poolQuestionId?: string | null;
+  sourceChunkId?: string;
+  questionFingerprint?: string;
+  generationMeta?: Record<string, unknown> | null;
   studyRef?: StudyRef;
 } | {
   question_type: "short_answer" | "theory";
@@ -97,6 +105,10 @@ type GeneratedQuestion = {
   difficultyLevel?: string;
   cognitiveLevel?: string;
   sourceTopic?: string;
+  poolQuestionId?: string | null;
+  sourceChunkId?: string;
+  questionFingerprint?: string;
+  generationMeta?: Record<string, unknown> | null;
   studyRef?: StudyRef;
 };
 
@@ -662,14 +674,34 @@ async function handleGenerateQuestionsRequest(req: NextRequest) {
     }
   }
 
+  const pooledQuestions = persistDraft
+    ? await selectReusablePoolQuestions({
+      userId: user.id,
+      materialId,
+      count: questionCount,
+      questionFormat,
+      difficulty: effectiveDifficulty,
+      focus: requestConfig.focus,
+      coveredQuestions,
+    })
+    : [];
+  const pooledCount = pooledQuestions.length;
+  const aiQuestionCount = Math.max(0, questionCount - pooledCount);
+  const estimatedAiCreditCost = aiQuestionCount > 0 ? Math.max(1, Math.ceil(aiQuestionCount / 5)) : 0;
+  const aiCoveredQuestions = [
+    ...coveredQuestions,
+    ...pooledQuestions.map((question) => question.question),
+  ];
+
   const usageContext: AiUsageContext = {
     userId: user.id,
     endpoint: "generate-questions",
     route: "/api/ai/generate-questions",
     materialId,
-    requestedCount: questionCount,
+    requestedCount: aiQuestionCount,
     metadata: {
       requestedQuestionCount: requestConfig.requestedQuestionCount,
+      requestedSavedQuestionCount: questionCount,
       questionFormat,
       difficulty: effectiveDifficulty,
       focus: requestConfig.focus,
@@ -677,21 +709,27 @@ async function handleGenerateQuestionsRequest(req: NextRequest) {
       topicId,
       subtopicId,
       requestSignature: requestConfig.signature,
-      estimatedCreditCost,
+      estimatedCreditCost: estimatedAiCreditCost,
+      originalEstimatedCreditCost: estimatedCreditCost,
+      pooledCount,
+      generatedCount: aiQuestionCount,
+      reusedPool: pooledCount > 0,
     },
   };
-  const limit = await getQuestionGenerationLimit(user.id);
-  if (!limit.allowed) {
-    await recordBlockedAiUsage(usageContext, "Daily question generation limit reached.");
-    return NextResponse.json(
-      { error: aiRateLimitMessage(limit), code: "AI_RATE_LIMITED", chargeStatus: "not_charged" },
-      { status: 429, headers: { "Retry-After": String(limit.retryAfterSeconds) } }
-    );
+  if (aiQuestionCount > 0) {
+    const limit = await getQuestionGenerationLimit(user.id);
+    if (!limit.allowed) {
+      await recordBlockedAiUsage(usageContext, "Daily question generation limit reached.");
+      return NextResponse.json(
+        { error: aiRateLimitMessage(limit), code: "AI_RATE_LIMITED", chargeStatus: "not_charged" },
+        { status: 429, headers: { "Retry-After": String(limit.retryAfterSeconds) } }
+      );
+    }
   }
 
   // ── Credits check ─────────────────────────────────────────────────────────
   const currentBalance = await ensureStudyCreditBalance(user.id);
-  if (currentBalance < estimatedCreditCost) {
+  if (currentBalance < estimatedAiCreditCost) {
     return NextResponse.json(
       {
         ok: false,
@@ -719,7 +757,7 @@ async function handleGenerateQuestionsRequest(req: NextRequest) {
 
   const buildPrompt = (batchCount: number, priorBatchQuestions: string[]) => {
     const fmt = questionFormatInstruction(questionFormat, batchCount);
-    const allCovered = [...coveredQuestions.slice(-20), ...priorBatchQuestions].slice(-20);
+    const allCovered = [...aiCoveredQuestions.slice(-20), ...priorBatchQuestions].slice(-20);
     const coveredInstruction = allCovered.length > 0
       ? `\n\nThe following questions have ALREADY been generated from this document. Do NOT repeat these topics or ask similar questions. Identify sections or concepts in the document that are NOT covered by these questions and generate new questions from those parts:\n${allCovered.map((q, i) => `${i + 1}. ${q}`).join("\n")}`
       : "";
@@ -810,11 +848,17 @@ Return ONLY a valid JSON object with no markdown, no backticks, no preamble:
           signature: requestConfig.signature,
         },
         credit: credit ?? {
-          estimatedCost: estimatedCreditCost,
+          estimatedCost: estimatedAiCreditCost,
           charged: false,
         },
+        pool: {
+          requestedCount: questionCount,
+          pooledCount,
+          generatedCount: aiQuestionCount,
+          reusedPool: pooledCount > 0,
+        },
       });
-      const persistDraftIfNeeded = async (questions: GeneratedQuestion[], ai: Record<string, unknown>) => {
+      const persistDraftIfNeeded = async (questions: GeneratedPracticeQuestion[], ai: Record<string, unknown>) => {
         if (!persistDraft) return null;
         emitStatus("Saving your AI practice draft.", "persist-draft");
         return saveGeneratedPracticeSet({
@@ -826,32 +870,44 @@ Return ONLY a valid JSON object with no markdown, no backticks, no preamble:
         });
       };
       const finalizeSuccessfulGeneration = async (
-        questions: GeneratedQuestion[],
+        questions: GeneratedPracticeQuestion[],
         ai: Record<string, unknown>,
-        draft: Awaited<ReturnType<typeof persistDraftIfNeeded>>
+        draft: Awaited<ReturnType<typeof persistDraftIfNeeded>>,
+        chargeableCount: number
       ) => {
         const savedCount = draft?.savedCount ?? questions.length;
         if (persistDraft && (!draft?.setId || savedCount <= 0)) {
           throw new Error("Questions generated, but the draft could not be saved. No credits charged.");
         }
 
-        const finalCreditCost = Math.max(1, Math.ceil(savedCount / 5));
-        emitStatus("Confirming credits.", "charge-credits");
-        const spend = await spendStudyCredits({ userId: user.id, cost: finalCreditCost });
-        if (!spend.ok) {
-          if (draft?.setId) await discardDraftSet(draft.setId);
-          const message = spend.code === "INSUFFICIENT_CREDITS"
-            ? "Not enough credits to generate questions. No credits charged."
-            : "Credit charge could not be completed. No credits charged.";
-          throw Object.assign(new Error(message), { code: spend.code });
-        }
+        const savedGeneratedCount = Math.max(0, draft?.generatedCount ?? chargeableCount);
+        const finalCreditCost = savedGeneratedCount > 0 ? Math.max(1, Math.ceil(savedGeneratedCount / 5)) : 0;
+        if (finalCreditCost > 0) {
+          emitStatus("Confirming credits.", "charge-credits");
+          const spend = await spendStudyCredits({ userId: user.id, cost: finalCreditCost });
+          if (!spend.ok) {
+            if (draft?.setId) await discardDraftSet(draft.setId);
+            const message = spend.code === "INSUFFICIENT_CREDITS"
+              ? "Not enough credits to generate questions. No credits charged."
+              : "Credit charge could not be completed. No credits charged.";
+            throw Object.assign(new Error(message), { code: spend.code });
+          }
 
-        creditsRemaining = spend.balance;
+          creditsRemaining = spend.balance;
+        }
         const receiptMessage = generationReceipt({
           savedCount,
           creditCost: finalCreditCost,
           creditsRemaining,
         });
+
+        if (draft?.poolQuestionIds?.length) {
+          await markPoolQuestionsSeen({
+            userId: user.id,
+            materialId,
+            poolQuestionIds: draft.poolQuestionIds,
+          });
+        }
 
         if (draft?.setId) {
           try {
@@ -859,9 +915,9 @@ Return ONLY a valid JSON object with no markdown, no backticks, no preamble:
               .from("study_quiz_sets")
               .update({
                 generation_config: buildGenerationConfig(ai, {
-                  estimatedCost: estimatedCreditCost,
+                  estimatedCost: estimatedAiCreditCost,
                   cost: finalCreditCost,
-                  charged: true,
+                  charged: finalCreditCost > 0,
                   chargedAt: new Date().toISOString(),
                   balanceAfter: creditsRemaining,
                   receiptMessage,
@@ -897,7 +953,44 @@ Return ONLY a valid JSON object with no markdown, no backticks, no preamble:
           coverageAwarePath: questionFormat === "mcq" && ENABLE_COVERAGE_AWARE_MCQ,
           hasCachedFileUri: Boolean(material.gemini_file_uri?.trim()),
           inputMode: material.gemini_file_uri?.trim() ? "file-uri" : "text-or-inline",
+          pooledCount,
+          aiQuestionCount,
         });
+        if (pooledCount > 0) {
+          emitStatus("Preparing your questions.", "prepare-pool");
+          for (const question of pooledQuestions) {
+            emit({ type: "question", question });
+          }
+        }
+        if (aiQuestionCount === 0) {
+          const ai = {
+            provider: "question_pool",
+            model: "stored-material-questions",
+            inputMode: "question-pool",
+            reason: "Prepared questions from stored material question pool.",
+          };
+          const draft = await persistDraftIfNeeded(pooledQuestions, ai);
+          const receipt = await finalizeSuccessfulGeneration(pooledQuestions, ai, draft, 0);
+          emit({
+            type: "done",
+            ai,
+            draftSetId: draft?.setId,
+            savedCount: receipt.savedCount,
+            requestedCount: draft?.requestedCount,
+            repaired: draft?.repaired,
+            replacedCount: draft?.replacedCount,
+            skippedCount: draft?.skippedCount,
+            reusedDraft: false,
+            reusedPool: true,
+            pooledCount: draft?.poolBackedCount ?? pooledCount,
+            generatedCount: draft?.generatedCount ?? 0,
+            charged: false,
+            creditCost: receipt.creditCost,
+            creditsRemaining: receipt.creditsRemaining,
+            receiptMessage: receipt.receiptMessage,
+          });
+          return;
+        }
         // Coverage-aware MCQ path
         if (questionFormat === "mcq" && ENABLE_COVERAGE_AWARE_MCQ) {
           let emittedAny = false;
@@ -907,10 +1000,10 @@ Return ONLY a valid JSON object with no markdown, no backticks, no preamble:
             const coverageResult = await generateCoverageAwareQuestions({
               materialId,
               materialTitle: material.title ?? "Untitled material",
-              count: questionCount,
+              count: aiQuestionCount,
               difficulty: effectiveDifficulty,
               focus,
-              coveredQuestions,
+              coveredQuestions: aiCoveredQuestions,
               ownerUserId: user.id,
               generationIntent,
               topicId,
@@ -955,8 +1048,17 @@ Return ONLY a valid JSON object with no markdown, no backticks, no preamble:
                   reason: coverageResult.coverage?.reason,
                 },
               };
-              const draft = await persistDraftIfNeeded(coverageResult.questions as GeneratedQuestion[], ai);
-              const receipt = await finalizeSuccessfulGeneration(coverageResult.questions as GeneratedQuestion[], ai, draft);
+              const combinedQuestions = [
+                ...pooledQuestions,
+                ...(coverageResult.questions as GeneratedPracticeQuestion[]),
+              ];
+              const draft = await persistDraftIfNeeded(combinedQuestions, ai);
+              const receipt = await finalizeSuccessfulGeneration(
+                combinedQuestions,
+                ai,
+                draft,
+                coverageResult.questions.length
+              );
               await recordUsage("success", ai);
               emit({
                 type: "done",
@@ -968,7 +1070,10 @@ Return ONLY a valid JSON object with no markdown, no backticks, no preamble:
                 replacedCount: draft?.replacedCount,
                 skippedCount: draft?.skippedCount,
                 reusedDraft: false,
-                charged: true,
+                reusedPool: pooledCount > 0,
+                pooledCount: draft?.poolBackedCount ?? pooledCount,
+                generatedCount: draft?.generatedCount ?? coverageResult.questions.length,
+                charged: receipt.creditCost > 0,
                 creditCost: receipt.creditCost,
                 creditsRemaining: receipt.creditsRemaining,
                 receiptMessage: receipt.receiptMessage,
@@ -994,13 +1099,22 @@ Return ONLY a valid JSON object with no markdown, no backticks, no preamble:
         const directResult = await runDirectGeneration({
           material,
           filePath,
-          totalCount: questionCount,
+          totalCount: aiQuestionCount,
           buildPrompt,
           onStatus: emitStatus,
           onQuestion: (q) => emit({ type: "question", question: q }),
         });
-        const draft = await persistDraftIfNeeded(directResult.questions, directResult.ai);
-        const receipt = await finalizeSuccessfulGeneration(directResult.questions, directResult.ai, draft);
+        const combinedQuestions = [
+          ...pooledQuestions,
+          ...(directResult.questions as GeneratedPracticeQuestion[]),
+        ];
+        const draft = await persistDraftIfNeeded(combinedQuestions, directResult.ai);
+        const receipt = await finalizeSuccessfulGeneration(
+          combinedQuestions,
+          directResult.ai,
+          draft,
+          directResult.questions.length
+        );
         await recordUsage("success", directResult.ai);
         emit({
           type: "done",
@@ -1012,7 +1126,10 @@ Return ONLY a valid JSON object with no markdown, no backticks, no preamble:
           replacedCount: draft?.replacedCount,
           skippedCount: draft?.skippedCount,
           reusedDraft: false,
-          charged: true,
+          reusedPool: pooledCount > 0,
+          pooledCount: draft?.poolBackedCount ?? pooledCount,
+          generatedCount: draft?.generatedCount ?? directResult.questions.length,
+          charged: receipt.creditCost > 0,
           creditCost: receipt.creditCost,
           creditsRemaining: receipt.creditsRemaining,
           receiptMessage: receipt.receiptMessage,
@@ -1033,7 +1150,9 @@ Return ONLY a valid JSON object with no markdown, no backticks, no preamble:
               ? { message: (errCause as { message?: unknown }).message, code: (errCause as { code?: unknown }).code, details: (errCause as { details?: unknown }).details }
               : errCause,
         });
-        await recordUsage("failure", null, error);
+        if (aiQuestionCount > 0) {
+          await recordUsage("failure", null, error);
+        }
         try {
           emit({ type: "error", message: routeErrorMessage(error), chargeStatus: "not_charged" });
         } catch { /* controller already closed */ }

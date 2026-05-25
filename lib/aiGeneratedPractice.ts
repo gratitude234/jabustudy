@@ -10,6 +10,7 @@ import {
   assertQuestionsNotDuplicateForCourse,
   type DuplicateGateError,
 } from "@/lib/studyDuplicateGate";
+import { upsertGeneratedQuestionsIntoPool } from "@/lib/studyQuestionPool";
 import { generateCoverageAwareQuestions } from "@/lib/studyQuestionGeneration";
 import {
   type GroundedQuestionMeta,
@@ -35,6 +36,8 @@ export type GeneratedPracticeQuestion = {
   difficultyLevel?: string;
   cognitiveLevel?: string;
   sourceTopic?: string;
+  poolQuestionId?: string | null;
+  sourceChunkId?: string;
   questionFingerprint?: string;
   generationMeta?: Record<string, unknown> | null;
   studyRef?: {
@@ -80,6 +83,9 @@ export type SaveGeneratedPracticeResult = {
   repaired: boolean;
   replacedCount: number;
   skippedCount: number;
+  poolBackedCount: number;
+  generatedCount: number;
+  poolQuestionIds: string[];
 };
 
 export type SaveGeneratedPracticeArgs = {
@@ -565,10 +571,12 @@ export async function saveGeneratedPracticeSet(args: SaveGeneratedPracticeArgs):
   const material = mat as MaterialRow;
   const requestedCount = normalizedQuestions.length;
   let questionsToSave: SavableQuestion[] = normalizedQuestions.map(withQuestionFingerprint);
-  const allMcq = questionsToSave.every((question) => question.question_type === "mcq");
-  if (allMcq) {
+  const poolBackedQuestions = questionsToSave.filter((question) => Boolean(question.poolQuestionId));
+  let generatedQuestions = questionsToSave.filter((question) => !question.poolQuestionId);
+  const allGeneratedMcq = generatedQuestions.length > 0 && generatedQuestions.every((question) => question.question_type === "mcq");
+  if (allGeneratedMcq) {
     try {
-      questionsToSave = await validateSourceBackedQuestions(args.materialId, questionsToSave);
+      generatedQuestions = await validateSourceBackedQuestions(args.materialId, generatedQuestions);
     } catch (error: unknown) {
       const groundingError = error as { message?: string; code?: string; invalidCount?: number; status?: number };
       throw Object.assign(new Error(groundingError.message || SOURCE_GROUNDING_ERROR_MESSAGE), {
@@ -579,24 +587,41 @@ export async function saveGeneratedPracticeSet(args: SaveGeneratedPracticeArgs):
     }
   }
 
-  const repaired = await repairPersonalQuestions({
-    material,
-    materialId: args.materialId,
-    ownerUserId: args.userId,
-    questions: questionsToSave,
-    allMcqSourceBacked: allMcq,
-  });
-  questionsToSave = repaired.questions;
+  const repaired = generatedQuestions.length > 0
+    ? await repairPersonalQuestions({
+      material,
+      materialId: args.materialId,
+      ownerUserId: args.userId,
+      questions: generatedQuestions,
+      allMcqSourceBacked: allGeneratedMcq,
+    })
+    : {
+      questions: [] as SavableQuestion[],
+      replacedCount: 0,
+      skippedCount: 0,
+      repaired: false,
+    };
+  generatedQuestions = repaired.questions;
 
-  if (allMcq) {
-    questionsToSave = await validateSourceBackedQuestions(args.materialId, questionsToSave);
+  if (allGeneratedMcq) {
+    generatedQuestions = await validateSourceBackedQuestions(args.materialId, generatedQuestions);
   }
 
-  await assertQuestionsNotDuplicateForCourse({
-    materialId: args.materialId,
-    ownerUserId: args.userId,
-    questions: questionsToSave,
-  });
+  if (generatedQuestions.length > 0) {
+    await assertQuestionsNotDuplicateForCourse({
+      materialId: args.materialId,
+      ownerUserId: args.userId,
+      questions: generatedQuestions,
+    });
+  }
+
+  questionsToSave = [...poolBackedQuestions, ...generatedQuestions];
+  if (questionsToSave.length === 0) {
+    throw Object.assign(new Error("No valid questions could be saved."), {
+      status: 422,
+      code: "NO_VALID_QUESTIONS",
+    });
+  }
 
   const isDraft = Boolean(args.asDraft);
   const title = `AI Generated - ${material.title ?? "Practice Set"}`;
@@ -627,25 +652,39 @@ export async function saveGeneratedPracticeSet(args: SaveGeneratedPracticeArgs):
   }
 
   const quizSetId = String(set.id);
-  const questionPayload = questionsToSave.map((question, index) => ({
-    set_id: quizSetId,
-    prompt: question.question,
-    position: index,
-    explanation: question.explanation || (question.question_type === "mcq" ? null : question.model_answer ?? null),
-    question_type: question.question_type,
-    model_answer: question.question_type === "mcq" ? null : question.model_answer ?? null,
-    marking_points: question.question_type === "mcq" ? [] : question.marking_points,
-    ai_generated: true,
-    source_material_id: args.materialId,
-    study_ref: question.studyRef,
-    source_chunk_id: question.sourceChunkId,
-    question_kind: cleanLabel(question.questionKind),
-    difficulty_level: cleanLabel(question.difficultyLevel, 40),
-    cognitive_level: cleanLabel(question.cognitiveLevel, 40),
-    source_topic: cleanLabel(question.sourceTopic ?? question.studyRef?.topic, 120),
-    question_fingerprint: cleanLabel(question.questionFingerprint, 240),
-    generation_meta: cleanJsonObject(question.generationMeta),
-  }));
+  const generatedPoolIds = await upsertGeneratedQuestionsIntoPool({
+    userId: args.userId,
+    materialId: args.materialId,
+    questions: generatedQuestions,
+  });
+  const poolQuestionIds: Array<string | null> = [];
+  let generatedPoolIndex = 0;
+  const questionPayload = questionsToSave.map((question, index) => {
+    const poolQuestionId = question.poolQuestionId
+      ? question.poolQuestionId
+      : generatedPoolIds[generatedPoolIndex++] ?? null;
+    poolQuestionIds.push(poolQuestionId);
+    return {
+      set_id: quizSetId,
+      prompt: question.question,
+      position: index,
+      explanation: question.explanation || (question.question_type === "mcq" ? null : question.model_answer ?? null),
+      question_type: question.question_type,
+      model_answer: question.question_type === "mcq" ? null : question.model_answer ?? null,
+      marking_points: question.question_type === "mcq" ? [] : question.marking_points,
+      ai_generated: true,
+      source_material_id: args.materialId,
+      study_ref: question.studyRef,
+      source_chunk_id: question.sourceChunkId,
+      question_kind: cleanLabel(question.questionKind),
+      difficulty_level: cleanLabel(question.difficultyLevel, 40),
+      cognitive_level: cleanLabel(question.cognitiveLevel, 40),
+      source_topic: cleanLabel(question.sourceTopic ?? question.studyRef?.topic, 120),
+      question_fingerprint: cleanLabel(question.questionFingerprint, 240),
+      generation_meta: cleanJsonObject(question.generationMeta),
+      pool_question_id: poolQuestionId,
+    };
+  });
 
   const { data: insertedQuestions, error: questionsError } = await adminSupabase
     .from("study_quiz_questions")
@@ -699,6 +738,9 @@ export async function saveGeneratedPracticeSet(args: SaveGeneratedPracticeArgs):
     repaired: repaired.repaired,
     replacedCount: repaired.replacedCount,
     skippedCount: repaired.skippedCount,
+    poolBackedCount: poolBackedQuestions.length,
+    generatedCount: generatedQuestions.length,
+    poolQuestionIds: poolQuestionIds.filter((id): id is string => Boolean(id)),
   };
 }
 
