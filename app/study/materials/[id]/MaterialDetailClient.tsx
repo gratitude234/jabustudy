@@ -135,19 +135,6 @@ type GenerationStreamStatus = {
   phase?: string;
 };
 
-type PreviousGeneratedSet = {
-  id: string;
-  title: string | null;
-  created_at: string | null;
-  questions_count: number | null;
-  attempt: {
-    set_id: string;
-    status: string | null;
-    completed_at: string | null;
-    updated_at: string | null;
-  } | null;
-};
-
 type ActiveAiDraft = {
   setId: string;
   title: string | null;
@@ -873,7 +860,6 @@ export default function MaterialDetailClient({
   const [activeDraftSetId, setActiveDraftSetId] = useState<string | null>(null);
   const [activeAttemptId, setActiveAttemptId] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<"practice" | "read" | "info">("practice");
-  const [prevSets, setPrevSets] = useState<PreviousGeneratedSet[]>([]);
 
   // Quiz state machine
   const [quizState, setQuizState] = useState<"idle" | "loading" | "quiz" | "results">("idle");
@@ -913,55 +899,6 @@ export default function MaterialDetailClient({
       } catch {}
     })();
   }, [m.uploader_id]);
-
-  async function loadPreviousGeneratedSets(cancelled?: () => boolean) {
-    if (!userId) {
-      setPrevSets([]);
-      return;
-    }
-
-    const { data: sets } = await supabase
-      .from("study_quiz_sets")
-      .select("id, title, created_at, questions_count")
-      .eq("source_material_id", m.id)
-      .order("created_at", { ascending: false })
-      .limit(5);
-
-    const materialSets = (sets ?? []) as Array<{
-      id: string;
-      title: string | null;
-      created_at: string | null;
-      questions_count: number | null;
-    }>;
-
-    if (!materialSets.length) {
-      if (!cancelled?.()) setPrevSets([]);
-      return;
-    }
-
-    const { data: attempts } = await supabase
-      .from("study_practice_attempts")
-      .select("set_id, status, completed_at, updated_at")
-      .eq("user_id", userId)
-      .in("set_id", materialSets.map((set) => set.id))
-      .order("updated_at", { ascending: false });
-
-    const attemptMap = new Map<string, PreviousGeneratedSet["attempt"]>();
-    for (const attempt of (attempts ?? []) as NonNullable<PreviousGeneratedSet["attempt"]>[]) {
-      if (!attemptMap.has(attempt.set_id)) attemptMap.set(attempt.set_id, attempt);
-    }
-
-    if (!cancelled?.()) {
-      setPrevSets(materialSets.map((set) => ({ ...set, attempt: attemptMap.get(set.id) ?? null })));
-    }
-  }
-
-  useEffect(() => {
-    let cancelled = false;
-    void loadPreviousGeneratedSets(() => cancelled);
-    return () => { cancelled = true; };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [m.id, userId]);
 
   // Hide bottom nav while quiz sheet is open
   useEffect(() => {
@@ -1811,33 +1748,8 @@ export default function MaterialDetailClient({
               <p className="flex items-center gap-2 text-sm font-bold text-foreground">
                 <PenLine className="h-4 w-4 text-primary" /> Your sets from this material
               </p>
-              <Link href="/study/library" className="text-xs font-semibold text-primary">See all</Link>
             </div>
-            {prevSets.length === 0 ? (
-              <p className="px-4 py-5 text-center text-xs text-muted-brand">No sets generated yet</p>
-            ) : (
-              prevSets.map((set) => (
-                <Link
-                  key={set.id}
-                  href={`/study/practice/${set.id}`}
-                  className="flex items-center gap-3 border-b border-border px-4 py-3 transition last:border-0 hover:bg-background"
-                >
-                  <div className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-primary-light">
-                    <PenLine className="h-4 w-4 text-primary" />
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <p className="truncate text-sm font-bold text-foreground">
-                      {set.title ?? `${course?.course_code ?? "Set"} - ${set.questions_count ?? 0}Q`}
-                    </p>
-                    <p className="mt-0.5 text-[11px] text-muted-brand">{timeAgo(set.created_at ?? "")}</p>
-                  </div>
-                  {set.attempt?.status === "in_progress" ? (
-                    <span className="rounded-full bg-primary-light px-2 py-0.5 text-[10px] font-bold text-primary">Continue</span>
-                  ) : null}
-                  <ChevronRight className="h-4 w-4 shrink-0 text-muted-brand" />
-                </Link>
-              ))
-            )}
+            <p className="px-4 py-5 text-center text-xs text-muted-brand">No sets generated yet</p>
           </div>
         </aside>
       </div>
