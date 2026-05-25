@@ -1104,9 +1104,12 @@ export default function MaterialsClient() {
 
   // Initial fetch for current filters
   useEffect(() => {
-    // If the user didn't explicitly set mine=0/1 yet, wait for prefs to load so we don't
-    // briefly show "All materials" and then snap to "My materials".
+    // Wait for prefs before the first unscoped fetch.
     if (!mineParam && !prefsLoaded) return;
+    // Prefs loaded and we have a dept scope, but the redirect hasn't updated the URL yet.
+    // Fetching now would return unfiltered results for a split-second before the redirect
+    // adds dept_id to the URL and triggers the correct scoped fetch. Skip and wait.
+    if (prefsLoaded && !mineParam && !personalizedOff && scopeDeptId && !deptIdParam) return;
     fetchPage(1);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [filtersKey]);

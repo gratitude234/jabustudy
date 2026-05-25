@@ -110,7 +110,20 @@ export async function PATCH(req: NextRequest, { params }: Params) {
 
     const batchCount = typeof body.batch.count === "number" ? body.batch.count : 0;
     const batchCorrect = typeof body.batch.correct === "number" ? body.batch.correct : 0;
-    const updatedBatches = [...(Array.isArray(session.batches) ? session.batches : []), body.batch];
+    const existingBatches = Array.isArray(session.batches) ? session.batches : [];
+    const nextAttemptId = typeof body.batch.attemptId === "string" ? body.batch.attemptId : null;
+    const alreadyAppended = nextAttemptId
+      ? existingBatches.some((batch) => {
+          if (!batch || typeof batch !== "object") return false;
+          return (batch as { attemptId?: unknown }).attemptId === nextAttemptId;
+        })
+      : false;
+
+    if (alreadyAppended) {
+      return NextResponse.json({ ok: true, duplicate: true });
+    }
+
+    const updatedBatches = [...existingBatches, body.batch];
 
     const { error: updateError } = await admin
       .from("study_material_sessions")

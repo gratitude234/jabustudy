@@ -340,6 +340,18 @@ export default function PracticeMaterialClient({
 
   // All covered question prompts across batches (for coveredQuestions param)
   const coveredQuestionsRef = useRef<string[]>([]);
+  const generationInFlightRef = useRef(false);
+  const finishInFlightRef = useRef(false);
+
+  function beginGenerationRequest() {
+    if (generationInFlightRef.current) return false;
+    generationInFlightRef.current = true;
+    return true;
+  }
+
+  function endGenerationRequest() {
+    generationInFlightRef.current = false;
+  }
 
   // Hide bottom nav during active session
   useEffect(() => {
@@ -485,6 +497,7 @@ export default function PracticeMaterialClient({
   // ── Generation flow ──────────────────────────────────────────────────────────
 
   async function handleGenerate() {
+    if (!beginGenerationRequest()) return;
     setError(null);
     setStreamingQuestions([]);
     setGenerationStatus("Preparing question generation...");
@@ -580,6 +593,8 @@ export default function PracticeMaterialClient({
       const detail = e instanceof Error ? e.message : "Something went wrong.";
       setError(detail.includes("no credits charged") ? detail : `Generation failed - no credits charged. ${detail}`);
       setMode("configure");
+    } finally {
+      endGenerationRequest();
     }
   }
 
@@ -695,6 +710,7 @@ export default function PracticeMaterialClient({
 
   async function handleSaveBatchAndGenerateMore(moreCfg: SessionConfig) {
     if (!completedBatch) return;
+    if (!beginGenerationRequest()) return;
     setError(null);
 
     const batchRecord: BatchRecord = {
@@ -729,10 +745,11 @@ export default function PracticeMaterialClient({
     }
 
     setConfig(moreCfg);
-    await handleGenerateMore(moreCfg);
+    await handleGenerateMore(moreCfg, true);
   }
 
-  async function handleGenerateMore(moreCfg: SessionConfig) {
+  async function handleGenerateMore(moreCfg: SessionConfig, lockHeld = false) {
+    if (!lockHeld && !beginGenerationRequest()) return;
     setError(null);
     setStreamingQuestions([]);
     setGenerationStatus("Preparing the next set...");
@@ -781,10 +798,15 @@ export default function PracticeMaterialClient({
       const detail = e instanceof Error ? e.message : "Something went wrong.";
       setError(detail.includes("no credits charged") ? detail : `Generation failed - no credits charged. ${detail}`);
       setMode("batch-complete");
+    } finally {
+      endGenerationRequest();
     }
   }
 
   async function handleFinishSession() {
+    if (finishInFlightRef.current) return;
+    finishInFlightRef.current = true;
+
     if (completedBatch && !batchSaved) {
       const batchRecord: BatchRecord = {
         setId: completedBatch.setId,

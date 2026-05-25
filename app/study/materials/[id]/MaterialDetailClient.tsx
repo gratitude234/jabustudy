@@ -134,7 +134,7 @@ type PreviousGeneratedSet = {
   id: string;
   title: string | null;
   created_at: string | null;
-  total_questions: number | null;
+  questions_count: number | null;
   attempt: {
     set_id: string;
     status: string | null;
@@ -894,7 +894,7 @@ export default function MaterialDetailClient({
     void (async () => {
       const { data: sets } = await supabase
         .from("study_quiz_sets")
-        .select("id, title, created_at, total_questions")
+        .select("id, title, created_at, questions_count")
         .eq("source_material_id", m.id)
         .order("created_at", { ascending: false })
         .limit(5);
@@ -903,7 +903,7 @@ export default function MaterialDetailClient({
         id: string;
         title: string | null;
         created_at: string | null;
-        total_questions: number | null;
+        questions_count: number | null;
       }>;
 
       if (!materialSets.length) {
@@ -1594,7 +1594,7 @@ export default function MaterialDetailClient({
                   </div>
                   <div className="min-w-0 flex-1">
                     <p className="truncate text-sm font-bold text-foreground">
-                      {set.title ?? `${course?.course_code ?? "Set"} - ${set.total_questions ?? 0}Q`}
+                      {set.title ?? `${course?.course_code ?? "Set"} - ${set.questions_count ?? 0}Q`}
                     </p>
                     <p className="mt-0.5 text-[11px] text-muted-brand">{timeAgo(set.created_at ?? "")}</p>
                   </div>
