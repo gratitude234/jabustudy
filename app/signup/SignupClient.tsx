@@ -43,14 +43,14 @@ function BannerView({ banner, onClose }: { banner: Banner; onClose: () => void }
   if (!banner) return null;
   const base = "rounded-2xl border p-3 text-sm flex items-start justify-between gap-3";
   const tone =
-    banner.type === "success" ? "border-emerald-200 bg-emerald-50 text-emerald-800" :
-    banner.type === "error"   ? "border-rose-200 bg-rose-50 text-rose-800" :
-                                "border-zinc-200 bg-zinc-50 text-zinc-800";
+    banner.type === "success" ? "border-emerald-200 bg-emerald-50 text-emerald-800 dark:bg-emerald-950/40 dark:border-emerald-900 dark:text-emerald-300" :
+    banner.type === "error"   ? "border-rose-200 bg-rose-50 text-rose-800 dark:bg-rose-950/40 dark:border-rose-900 dark:text-rose-400" :
+                                "border-zinc-200 bg-zinc-50 text-zinc-800 dark:bg-zinc-900 dark:border-zinc-700 dark:text-zinc-300";
   return (
     <div className={cx(base, tone)} role="status" aria-live="polite">
       <span>{banner.text}</span>
       <button onClick={onClose}
-        className="rounded-xl border bg-white/70 p-2 text-current hover:bg-white" aria-label="Close">
+        className="rounded-xl border bg-white/70 p-2 text-current hover:bg-white dark:bg-white/10 dark:hover:bg-white/20" aria-label="Close">
         <X className="h-4 w-4" />
       </button>
     </div>

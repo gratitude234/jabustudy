@@ -469,13 +469,13 @@ export default function UploadClient() {
 
         {/* Inline create course */}
         {showInlineCourse && (
-          <div className="rounded-2xl border border-indigo-200 bg-indigo-50 p-4 space-y-3">
-            <p className="text-sm font-semibold text-indigo-800">New course</p>
+          <div className="rounded-2xl border border-indigo-200 bg-indigo-50 p-4 space-y-3 dark:bg-indigo-950/40 dark:border-indigo-900">
+            <p className="text-sm font-semibold text-indigo-800 dark:text-indigo-300">New course</p>
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <div className="flex flex-col gap-1">
-                <label className="text-xs font-medium text-indigo-700">Course Code <span className="text-red-500">*</span></label>
+                <label className="text-xs font-medium text-indigo-700 dark:text-indigo-400">Course Code <span className="text-red-500">*</span></label>
                 <input
-                  className="h-9 rounded-xl border border-indigo-200 bg-white px-3 text-sm font-mono uppercase"
+                  className="h-9 rounded-xl border border-indigo-200 bg-white px-3 text-sm font-mono uppercase dark:bg-card dark:border-indigo-800"
                   placeholder="e.g. BCH201"
                   value={inlineCourse.code}
                   onChange={(e) => setInlineCourse((prev) => ({ ...prev, code: e.target.value.toUpperCase() }))}
@@ -484,9 +484,9 @@ export default function UploadClient() {
                 />
               </div>
               <div className="flex flex-col gap-1">
-                <label className="text-xs font-medium text-indigo-700">Course Title</label>
+                <label className="text-xs font-medium text-indigo-700 dark:text-indigo-400">Course Title</label>
                 <input
-                  className="h-9 rounded-xl border border-indigo-200 bg-white px-3 text-sm"
+                  className="h-9 rounded-xl border border-indigo-200 bg-white px-3 text-sm dark:bg-card dark:border-indigo-800"
                   placeholder="e.g. Biochemistry"
                   value={inlineCourse.title}
                   onChange={(e) => setInlineCourse((prev) => ({ ...prev, title: e.target.value }))}
@@ -585,13 +585,13 @@ export default function UploadClient() {
 
       {/* Errors / Summary */}
       {formErr && (
-        <div className="rounded-3xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">{formErr}</div>
+        <div className="rounded-3xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800 dark:bg-amber-950/40 dark:border-amber-900 dark:text-amber-400">{formErr}</div>
       )}
 
       {summary && (
         <div className={cn(
           "rounded-3xl border p-4 text-sm",
-          summary.failed > 0 ? "border-amber-200 bg-amber-50 text-amber-800" : "border-emerald-200 bg-emerald-50 text-emerald-800"
+          summary.failed > 0 ? "border-amber-200 bg-amber-50 text-amber-800 dark:bg-amber-950/40 dark:border-amber-900 dark:text-amber-400" : "border-emerald-200 bg-emerald-50 text-emerald-800 dark:bg-emerald-950/40 dark:border-emerald-900 dark:text-emerald-300"
         )}>
           <p className="font-medium">
             {summary.done} uploaded successfully{summary.failed > 0 ? `, ${summary.failed} failed` : ""}.

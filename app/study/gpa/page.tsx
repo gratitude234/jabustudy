@@ -150,12 +150,12 @@ function classifyGpa(gpa: number, max: number) {
   }
   const pct = max > 0 ? gpa / max : 0;
   if (pct >= 0.8)
-    return { label: "Excellent", hint: "You're doing great — keep it up.", tone: "border-emerald-200 bg-emerald-50 text-emerald-900" };
+    return { label: "Excellent", hint: "You're doing great — keep it up.", tone: "border-emerald-200 bg-emerald-50 text-emerald-900 dark:bg-emerald-950/40 dark:border-emerald-900 dark:text-emerald-300" };
   if (pct >= 0.65)
-    return { label: "Good", hint: "Solid performance — push a bit more.", tone: "border-blue-200 bg-blue-50 text-blue-900" };
+    return { label: "Good", hint: "Solid performance — push a bit more.", tone: "border-blue-200 bg-blue-50 text-blue-900 dark:bg-blue-950/40 dark:border-blue-900 dark:text-blue-400" };
   if (pct >= 0.5)
-    return { label: "Fair", hint: "You can improve — focus on weak courses.", tone: "border-amber-200 bg-amber-50 text-amber-900" };
-  return { label: "Needs work", hint: "Make a plan and get support early.", tone: "border-red-200 bg-red-50 text-red-900" };
+    return { label: "Fair", hint: "You can improve — focus on weak courses.", tone: "border-amber-200 bg-amber-50 text-amber-900 dark:bg-amber-950/40 dark:border-amber-900 dark:text-amber-400" };
+  return { label: "Needs work", hint: "Make a plan and get support early.", tone: "border-red-200 bg-red-50 text-red-900 dark:bg-red-950/40 dark:border-red-900 dark:text-red-400" };
 }
 
 // ─── Honours Classification ───────────────────────────────────────────────────
@@ -479,9 +479,9 @@ function BannerBox({ banner, onClose }: { banner: Banner; onClose: () => void })
 
   const tone =
     banner.type === "success"
-      ? "border-emerald-200 bg-emerald-50 text-emerald-800"
+      ? "border-emerald-200 bg-emerald-50 text-emerald-800 dark:bg-emerald-950/40 dark:border-emerald-900 dark:text-emerald-300"
       : banner.type === "error"
-      ? "border-red-200 bg-red-50 text-red-700"
+      ? "border-red-200 bg-red-50 text-red-700 dark:bg-red-950/40 dark:border-red-900 dark:text-red-400"
       : "border-border bg-card text-foreground";
 
   const icon =
@@ -668,7 +668,7 @@ function ImportModal({
 
         <div className="max-h-[65vh] overflow-y-auto p-5 space-y-4">
           {!result.ok && (
-            <div className="flex items-start gap-3 rounded-2xl border border-red-200 bg-red-50 p-4 text-sm text-red-800">
+            <div className="flex items-start gap-3 rounded-2xl border border-red-200 bg-red-50 p-4 text-sm text-red-800 dark:bg-red-950/40 dark:border-red-900 dark:text-red-400">
               <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
               <p>{result.error}</p>
             </div>

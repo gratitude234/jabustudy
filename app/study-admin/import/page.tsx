@@ -60,8 +60,8 @@ function Btn({ children, onClick, variant = "primary", disabled }: { children: R
   const base = "px-4 py-3 rounded-2xl text-sm font-semibold transition-all disabled:opacity-45 disabled:cursor-not-allowed";
   const variants = {
     primary: "bg-black text-white hover:bg-zinc-800",
-    ghost: "border bg-white text-zinc-600 hover:bg-zinc-50",
-    danger: "border border-red-200 bg-red-50 text-red-600 hover:bg-red-100",
+    ghost: "border bg-white text-zinc-600 hover:bg-zinc-50 dark:bg-card dark:text-zinc-300 dark:border-border dark:hover:bg-zinc-800",
+    danger: "border border-red-200 bg-red-50 text-red-600 hover:bg-red-100 dark:bg-red-950/40 dark:border-red-900 dark:text-red-400 dark:hover:bg-red-900/40",
   };
   return (
     <button onClick={onClick} disabled={disabled} className={[base, variants[variant]].join(" ")}>
@@ -505,7 +505,7 @@ export default function MCQImporter() {
         <StepIndicator current={step} />
 
         {parseError && (
-          <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 mb-5">
+          <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 mb-5 dark:bg-red-950/40 dark:border-red-900 dark:text-red-400">
             {parseError}
           </div>
         )}

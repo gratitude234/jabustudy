@@ -125,14 +125,14 @@ function buildHref(path: string, params: Record<string, string | number | null |
 function Badge({ children, tone = "zinc" }: { children: React.ReactNode; tone?: "zinc" | "green" | "red" | "amber" | "blue" }) {
   const classes =
     tone === "green"
-      ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+      ? "border-emerald-200 bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:border-emerald-900 dark:text-emerald-300"
       : tone === "red"
-        ? "border-red-200 bg-red-50 text-red-700"
+        ? "border-red-200 bg-red-50 text-red-700 dark:bg-red-950/40 dark:border-red-900 dark:text-red-400"
         : tone === "amber"
-          ? "border-amber-200 bg-amber-50 text-amber-800"
+          ? "border-amber-200 bg-amber-50 text-amber-800 dark:bg-amber-950/40 dark:border-amber-900 dark:text-amber-400"
           : tone === "blue"
-            ? "border-blue-200 bg-blue-50 text-blue-700"
-            : "border-zinc-200 bg-zinc-50 text-zinc-700";
+            ? "border-blue-200 bg-blue-50 text-blue-700 dark:bg-blue-950/40 dark:border-blue-900 dark:text-blue-400"
+            : "border-zinc-200 bg-zinc-50 text-zinc-700 dark:bg-zinc-900 dark:border-zinc-700 dark:text-zinc-300";
   return <span className={cn("inline-flex rounded-full border px-2 py-0.5 text-[11px] font-semibold", classes)}>{children}</span>;
 }
 
@@ -378,7 +378,7 @@ export function QuestionQualityClient({
       ) : null}
 
       {error ? (
-        <div className="rounded-3xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">{error}</div>
+        <div className="rounded-3xl border border-red-200 bg-red-50 p-4 text-sm text-red-700 dark:bg-red-950/40 dark:border-red-900 dark:text-red-400">{error}</div>
       ) : null}
 
       <div className="overflow-hidden rounded-3xl border bg-white shadow-sm">

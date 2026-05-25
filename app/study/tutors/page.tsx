@@ -56,8 +56,8 @@ function BannerBox({ banner, onClose }: { banner: Banner; onClose: () => void })
   if (!banner) return null;
   const tone =
     banner.type === "error"
-      ? "border-red-200 bg-red-50 text-red-700"
-      : "border-zinc-200 bg-white text-zinc-700";
+      ? "border-red-200 bg-red-50 text-red-700 dark:bg-red-950/40 dark:border-red-900 dark:text-red-400"
+      : "border-zinc-200 bg-white text-zinc-700 dark:bg-card dark:border-border dark:text-zinc-300";
   return (
     <div className={cn("rounded-2xl border p-4 text-sm", tone)} role="status" aria-live="polite">
       <div className="flex items-start justify-between gap-3">

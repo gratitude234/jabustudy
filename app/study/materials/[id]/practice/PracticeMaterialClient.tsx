@@ -1413,7 +1413,7 @@ export default function PracticeMaterialClient({
                 <p className="mb-2 text-[10px] font-bold uppercase tracking-wider text-muted-brand">Needs more practice</p>
                 <div className="space-y-1.5">
                   {missedTopics.map((t) => (
-                    <div key={t} className="flex items-center gap-2 rounded-xl border border-red-200 bg-red-50 p-2.5">
+                    <div key={t} className="flex items-center gap-2 rounded-xl border border-red-200 bg-red-50 p-2.5 dark:border-red-900 dark:bg-red-950/40">
                       <div className="h-1.5 w-1.5 shrink-0 rounded-full bg-red-500" />
                       <span className="flex-1 text-sm font-bold text-foreground">{t}</span>
                     </div>

@@ -505,8 +505,8 @@ export default function StudyAdminCoursesPage() {
             <span className={cn(
               "inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-semibold",
               selectedSetup?.status === "complete"
-                ? "border-emerald-200 bg-emerald-50 text-emerald-700"
-                : "border-amber-200 bg-amber-50 text-amber-800"
+                ? "border-emerald-200 bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:border-emerald-900 dark:text-emerald-300"
+                : "border-amber-200 bg-amber-50 text-amber-800 dark:bg-amber-950/40 dark:border-amber-900 dark:text-amber-400"
             )}>
               {selectedSetup?.status === "complete" ? <CheckCircle2 className="h-3.5 w-3.5" /> : <ClipboardList className="h-3.5 w-3.5" />}
               {selectedSetup?.status === "complete" ? "Complete" : "In progress"}
@@ -674,7 +674,7 @@ export default function StudyAdminCoursesPage() {
         </div>
       </div>
 
-      {err && <div className="rounded-3xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">{err}</div>}
+      {err && <div className="rounded-3xl border border-red-200 bg-red-50 p-4 text-sm text-red-700 dark:bg-red-950/40 dark:border-red-900 dark:text-red-400">{err}</div>}
 
       {/* Table */}
       <div className="rounded-3xl border bg-white shadow-sm overflow-hidden">
@@ -790,7 +790,7 @@ export default function StudyAdminCoursesPage() {
                               <button
                                 type="button"
                                 onClick={() => deactivate(c.id)}
-                                className="inline-flex h-7 items-center gap-1 rounded-xl border border-red-200 bg-red-50 px-3 text-xs text-red-700 hover:bg-red-100"
+                                className="inline-flex h-7 items-center gap-1 rounded-xl border border-red-200 bg-red-50 px-3 text-xs text-red-700 hover:bg-red-100 dark:bg-red-950/40 dark:border-red-900 dark:text-red-400 dark:hover:bg-red-900/40"
                               >
                                 <Ban className="h-3 w-3" /> Deactivate
                               </button>

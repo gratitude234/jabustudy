@@ -98,14 +98,14 @@ function IndexStatusBadge({ item }: { item: MaterialItem }) {
   const status = item.index_status ?? "pending";
   const classes =
     status === "ready"
-      ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+      ? "border-emerald-200 bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:border-emerald-900 dark:text-emerald-300"
       : status === "indexing"
-        ? "border-blue-200 bg-blue-50 text-blue-700"
+        ? "border-blue-200 bg-blue-50 text-blue-700 dark:bg-blue-950/40 dark:border-blue-900 dark:text-blue-400"
         : status === "failed"
-          ? "border-red-200 bg-red-50 text-red-700"
+          ? "border-red-200 bg-red-50 text-red-700 dark:bg-red-950/40 dark:border-red-900 dark:text-red-400"
           : status === "skipped"
-            ? "border-amber-200 bg-amber-50 text-amber-800"
-            : "border-zinc-200 bg-zinc-50 text-zinc-600";
+            ? "border-amber-200 bg-amber-50 text-amber-800 dark:bg-amber-950/40 dark:border-amber-900 dark:text-amber-400"
+            : "border-zinc-200 bg-zinc-50 text-zinc-600 dark:bg-zinc-900 dark:border-zinc-700 dark:text-zinc-400";
 
   return (
     <span
@@ -421,10 +421,10 @@ export default function StudyAdminMaterialsPage() {
       </div>
 
       {err ? (
-        <div className="rounded-3xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">{err}</div>
+        <div className="rounded-3xl border border-red-200 bg-red-50 p-4 text-sm text-red-700 dark:bg-red-950/40 dark:border-red-900 dark:text-red-400">{err}</div>
       ) : null}
       {msg ? (
-        <div className="rounded-3xl border border-emerald-200 bg-emerald-50 p-4 text-sm font-medium text-emerald-800">{msg}</div>
+        <div className="rounded-3xl border border-emerald-200 bg-emerald-50 p-4 text-sm font-medium text-emerald-800 dark:bg-emerald-950/40 dark:border-emerald-900 dark:text-emerald-300">{msg}</div>
       ) : null}
 
       <div className="rounded-3xl border bg-white p-4 shadow-sm">
@@ -576,8 +576,8 @@ export default function StudyAdminMaterialsPage() {
                     disabled={busyId === m.id}
                     onClick={() => reject(m.id)}
                     className={cn(
-                      "inline-flex h-10 items-center gap-2 rounded-2xl border border-red-200 bg-red-50 px-3 text-sm font-medium text-red-700",
-                      busyId === m.id ? "opacity-60" : "hover:bg-red-100"
+                      "inline-flex h-10 items-center gap-2 rounded-2xl border border-red-200 bg-red-50 px-3 text-sm font-medium text-red-700 dark:bg-red-950/40 dark:border-red-900 dark:text-red-400",
+                      busyId === m.id ? "opacity-60" : "hover:bg-red-100 dark:hover:bg-red-900/40"
                     )}
                   >
                     {busyId === m.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <X className="h-4 w-4" />}

@@ -257,7 +257,7 @@ export default function HistoryClient() {
       </div>
 
       {err && (
-        <div className="rounded-3xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">{err}</div>
+        <div className="rounded-3xl border border-red-200 bg-red-50 p-4 text-sm text-red-700 dark:bg-red-950/40 dark:border-red-900 dark:text-red-400">{err}</div>
       )}
 
       {/* Table */}
@@ -324,8 +324,8 @@ export default function HistoryClient() {
                           disabled={busyId === item.id}
                           onClick={() => deleteMaterial(item.id)}
                           className={cn(
-                            "inline-flex h-8 items-center gap-1 rounded-2xl border border-red-200 bg-red-50 px-3 text-xs font-medium text-red-700",
-                            busyId === item.id ? "opacity-50" : "hover:bg-red-100"
+                            "inline-flex h-8 items-center gap-1 rounded-2xl border border-red-200 bg-red-50 px-3 text-xs font-medium text-red-700 dark:bg-red-950/40 dark:border-red-900 dark:text-red-400",
+                            busyId === item.id ? "opacity-50" : "hover:bg-red-100 dark:hover:bg-red-900/40"
                           )}
                         >
                           {busyId === item.id ? <Loader2 className="h-3 w-3 animate-spin" /> : <Trash2 className="h-3 w-3" />}

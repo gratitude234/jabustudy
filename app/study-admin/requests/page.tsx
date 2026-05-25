@@ -61,10 +61,10 @@ function formatDate(iso: string) {
 function StatusPill({ status }: { status: CourseRequest["status"] }) {
   const tone =
     status === "approved"
-      ? "bg-emerald-50 text-emerald-800 border-emerald-200"
+      ? "bg-emerald-50 text-emerald-800 border-emerald-200 dark:bg-emerald-950/40 dark:border-emerald-900 dark:text-emerald-300"
       : status === "rejected"
-      ? "bg-red-50 text-red-700 border-red-200"
-      : "bg-amber-50 text-amber-900 border-amber-200";
+      ? "bg-red-50 text-red-700 border-red-200 dark:bg-red-950/40 dark:border-red-900 dark:text-red-400"
+      : "bg-amber-50 text-amber-900 border-amber-200 dark:bg-amber-950/40 dark:border-amber-900 dark:text-amber-400";
   const Icon = status === "approved" ? BadgeCheck : status === "rejected" ? Ban : Clock;
   return (
     <span className={cn("inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs", tone)}>
@@ -298,7 +298,7 @@ export default function StudyAdminRequestsPage() {
       </div>
 
       {err ? (
-        <div className="rounded-3xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">{err}</div>
+        <div className="rounded-3xl border border-red-200 bg-red-50 p-4 text-sm text-red-700 dark:bg-red-950/40 dark:border-red-900 dark:text-red-400">{err}</div>
       ) : null}
 
       <div className="rounded-3xl border bg-white p-4 shadow-sm">
@@ -389,8 +389,8 @@ export default function StudyAdminRequestsPage() {
                         disabled={busyId === r.id}
                         onClick={() => reject(r.id)}
                         className={cn(
-                          "inline-flex h-10 items-center gap-2 rounded-2xl border border-red-200 bg-red-50 px-3 text-sm font-medium text-red-700",
-                          busyId === r.id ? "opacity-60" : "hover:bg-red-100"
+                          "inline-flex h-10 items-center gap-2 rounded-2xl border border-red-200 bg-red-50 px-3 text-sm font-medium text-red-700 dark:bg-red-950/40 dark:border-red-900 dark:text-red-400",
+                          busyId === r.id ? "opacity-60" : "hover:bg-red-100 dark:hover:bg-red-900/40"
                         )}
                       >
                         {busyId === r.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <X className="h-4 w-4" />}

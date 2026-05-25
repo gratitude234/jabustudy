@@ -55,10 +55,10 @@ function BannerView({ banner, onClose }: { banner: Banner; onClose: () => void }
   const base = "rounded-2xl border p-3 text-sm flex items-start justify-between gap-3";
   const tone =
     banner.type === "success"
-      ? "border-emerald-200 bg-emerald-50 text-emerald-800"
+      ? "border-emerald-200 bg-emerald-50 text-emerald-800 dark:bg-emerald-950/40 dark:border-emerald-900 dark:text-emerald-300"
       : banner.type === "error"
-      ? "border-rose-200 bg-rose-50 text-rose-800"
-      : "border-zinc-200 bg-zinc-50 text-zinc-800";
+      ? "border-rose-200 bg-rose-50 text-rose-800 dark:bg-rose-950/40 dark:border-rose-900 dark:text-rose-400"
+      : "border-zinc-200 bg-zinc-50 text-zinc-800 dark:bg-zinc-900 dark:border-zinc-700 dark:text-zinc-300";
 
   return (
     <div className={cx(base, tone)} role="status" aria-live="polite">
