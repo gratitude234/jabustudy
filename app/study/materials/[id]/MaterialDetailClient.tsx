@@ -670,13 +670,6 @@ function InlinePreview({
   );
 }
 
-function computeWeakQuestionNextDue(missCount: number, fromIso: string): string {
-  const daysMap: Record<number, number> = { 1: 1, 2: 1 };
-  const days = daysMap[missCount] ?? Math.min(Math.pow(2, missCount - 2), 30);
-  const base = new Date(fromIso).getTime();
-  return new Date(base + days * 86_400_000).toISOString();
-}
-
 function PreviewModal({
   open,
   onClose,
@@ -868,9 +861,6 @@ export default function MaterialDetailClient({
   const toastRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const [generatedQuestions, setGeneratedQuestions] = useState<GeneratedQuestion[] | null>(null);
-  const [savingQs, setSavingQs] = useState(false);
-  const [savedSetId, setSavedSetId] = useState<string | null>(null);
-  const [saveQsError, setSaveQsError] = useState<string | null>(null);
   const [generatingMore, setGeneratingMore] = useState(false);
   const [generateMoreError, setGenerateMoreError] = useState<string | null>(null);
   const [hintShown, setHintShown] = useState<Record<number, boolean>>({});
@@ -1016,8 +1006,6 @@ export default function MaterialDetailClient({
     setCurrentQuestionIndex(0);
     setRetryPool(null);
     setHintShown({});
-    setSavedSetId(null);
-    setSaveQsError(null);
     setGenerateMoreError(null);
     syncedQuizMissesRef.current = null;
   }
@@ -1238,8 +1226,6 @@ export default function MaterialDetailClient({
     setWrittenGradeStates({});
     setRetryPool(null);
     setHintShown({});
-    setSavedSetId(null);
-    setSaveQsError(null);
     setGenerateMoreError(null);
     syncedQuizMissesRef.current = null;
     setCurrentQuestionIndex(nextIndex === -1 ? Math.max(0, questions.length - 1) : nextIndex);
@@ -1264,7 +1250,6 @@ export default function MaterialDetailClient({
 
     setGeneratingMore(true);
     setGenerateMoreError(null);
-    setSaveQsError(null);
     setStreamingQuestions([]);
     setGenerationStatus(args?.statusMessage ?? "Preparing question generation...");
     setGenerationMode(mode);
@@ -1397,83 +1382,6 @@ export default function MaterialDetailClient({
     return () => clearTimeout(timer);
   }, [activeAttemptId, generatedQuestions, quizState, writtenAnswers]);
 
-  useEffect(() => {
-    if (quizState !== "results" || !savedSetId || missedList.length === 0) return;
-
-    const syncKey = `${savedSetId}:${missedList.map(({ i }) => i).join(",")}`;
-    if (syncedQuizMissesRef.current === syncKey) return;
-    syncedQuizMissesRef.current = syncKey;
-
-    type ExistingWeakRow = {
-      question_id: string;
-      miss_count: number | null;
-      correct_streak: number | null;
-      last_missed_at: string | null;
-    };
-
-    type SavedQuestionRow = {
-      id: string;
-      prompt: string | null;
-      position: number | null;
-    };
-
-    void (async () => {
-      try {
-        const { data: authData } = await supabase.auth.getUser();
-        const userId = authData?.user?.id;
-        if (!userId) return;
-
-        const { data: dbQuestions } = await supabase
-          .from("study_quiz_questions")
-          .select("id, prompt, position")
-          .eq("set_id", savedSetId)
-          .order("position", { ascending: true });
-
-        const orderedQuestions = (dbQuestions ?? []) as SavedQuestionRow[];
-        if (orderedQuestions.length === 0) return;
-
-        const mappedQuestionIds = missedList
-          .map(({ i }) => orderedQuestions[i]?.id ?? null)
-          .filter((questionId): questionId is string => Boolean(questionId));
-
-        if (mappedQuestionIds.length === 0) return;
-
-        const { data: existingRows } = await supabase
-          .from("study_weak_questions")
-          .select("question_id, miss_count, correct_streak, last_missed_at")
-          .eq("user_id", userId)
-          .in("question_id", mappedQuestionIds);
-
-        const existingMap = new Map<string, ExistingWeakRow>();
-        for (const row of (existingRows ?? []) as ExistingWeakRow[]) {
-          existingMap.set(row.question_id, row);
-        }
-
-        const nowIso = new Date().toISOString();
-        const upsertRows = mappedQuestionIds.map((questionId) => {
-          const existing = existingMap.get(questionId);
-          const missCount = (existing?.miss_count ?? 0) + 1;
-          return {
-            user_id: userId,
-            question_id: questionId,
-            miss_count: missCount,
-            last_missed_at: nowIso,
-            next_due_at: computeWeakQuestionNextDue(missCount, nowIso),
-            correct_streak: 0,
-            graduated_at: null,
-            updated_at: nowIso,
-          };
-        });
-
-        await supabase
-          .from("study_weak_questions")
-          .upsert(upsertRows, { onConflict: "user_id,question_id" });
-      } catch {
-        // non-critical — SRS failure must never break the quiz UX
-      }
-    })();
-  }, [missedList, quizState, savedSetId]);
-
   async function handleToggleSave() {
     setSaving(true);
     const wasSaved = saved;
@@ -1568,27 +1476,6 @@ export default function MaterialDetailClient({
       const message = error instanceof Error ? error.message : "Could not grade this answer.";
       setWrittenGradeStates((prev) => ({ ...prev, [questionIndex]: { status: "error", message } }));
     }
-  }
-
-  async function handleSaveQuestions() {
-    if (!activeDraftSetId) {
-      setSaveQsError("No AI draft is open to save.");
-      return;
-    }
-    setSavingQs(true);
-    setSaveQsError(null);
-    try {
-      const res = await fetch(`/api/ai/generated-drafts/${activeDraftSetId}/keep`, { method: "POST" });
-      const data = await res.json().catch(() => null) as { ok?: boolean; setId?: string; message?: string; error?: string } | null;
-      if (!res.ok || !data?.ok) throw new Error(data?.message || data?.error || "Failed to save questions.");
-      setSavedSetId(data.setId ?? activeDraftSetId);
-      setMatchingDraft(null);
-      showToast("Saved to practice library");
-      await loadPreviousGeneratedSets();
-      syncedQuizMissesRef.current = null;
-    } catch (e: unknown) {
-      setSaveQsError(e instanceof Error ? e.message : "Failed to save questions.");
-    } finally { setSavingQs(false); }
   }
 
   function closeAiPracticeWorkspace() {
@@ -2391,9 +2278,6 @@ export default function MaterialDetailClient({
                   {generateMoreError && (
                     <p className="text-center text-xs font-semibold text-rose-600">{generateMoreError}</p>
                   )}
-                  {saveQsError && (
-                    <p className="text-center text-xs font-semibold text-rose-600">{saveQsError}</p>
-                  )}
                   <div className="flex items-center gap-2 rounded-2xl border border-border bg-background px-3 py-2">
                     <span className="shrink-0 text-[11px] font-extrabold uppercase tracking-wide text-muted-brand">Next set</span>
                     <select
@@ -2463,18 +2347,14 @@ export default function MaterialDetailClient({
                     </button>
                     </>
                   )}
-                  {savedSetId ? (
-                    <Link href={`/study/practice/${savedSetId}`}
-                      className="inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-primary px-4 py-3 text-sm font-semibold text-white transition hover:opacity-90 focus-visible:outline-none">
-                      Saved — view on practice page →
-                    </Link>
-                  ) : (
-                    <button type="button" onClick={handleSaveQuestions} disabled={savingQs}
-                      className="inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-primary px-4 py-3 text-sm font-semibold text-white transition hover:opacity-90 disabled:opacity-60 focus-visible:outline-none">
-                      {savingQs ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
-                      {savingQs ? "Saving…" : "Save to practice library"}
-                    </button>
-                  )}
+                  <button
+                    type="button"
+                    onClick={closeAiPracticeWorkspace}
+                    className="inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-primary px-4 py-3 text-sm font-semibold text-white transition hover:opacity-90 focus-visible:outline-none"
+                  >
+                    <CheckCircle2 className="h-4 w-4" />
+                    Finish session
+                  </button>
                 </div>
               )}
             </div>
