@@ -856,13 +856,14 @@ export default function MaterialDetailClient({
   const [generationStatus, setGenerationStatus] = useState("Preparing question generation...");
   const [generationMode, setGenerationMode] = useState<GenerationMode>("auto");
   const [generationTrust, setGenerationTrust] = useState<GenerationTrustStatus | null>(null);
+  const [generationStatusLoading, setGenerationStatusLoading] = useState(false);
   const [matchingDraft, setMatchingDraft] = useState<ActiveAiDraft | null>(null);
   const [activeDraftSetId, setActiveDraftSetId] = useState<string | null>(null);
   const [activeAttemptId, setActiveAttemptId] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<"practice" | "read" | "info">("practice");
 
   // Quiz state machine
-  const [quizState, setQuizState] = useState<"idle" | "loading" | "quiz" | "results">("idle");
+  const [quizState, setQuizState] = useState<"idle" | "configure" | "loading" | "quiz" | "results">("idle");
   const [quizConfig, setQuizConfig] = useState<{ count: number; difficulty: "easy" | "mixed" | "hard"; focus: string; questionFormat: QuestionFormat }>({
     count: 10,
     difficulty: "mixed",
@@ -967,6 +968,7 @@ export default function MaterialDetailClient({
       return null;
     }
 
+    setGenerationStatusLoading(true);
     try {
       const { params } = buildGenerationParams(config, mode);
       const res = await fetch(`/api/ai/generate-questions/status?${params.toString()}`, { cache: "no-store" });
@@ -983,6 +985,8 @@ export default function MaterialDetailClient({
       setGenerationTrust(failedStatus);
       setMatchingDraft(null);
       return failedStatus;
+    } finally {
+      setGenerationStatusLoading(false);
     }
   }
 
@@ -1247,36 +1251,40 @@ export default function MaterialDetailClient({
     setGeneratedQuestions(null);
     setGenerationAi(null);
     setStreamingQuestions([]);
-    setGenerationStatus("Checking for saved draft...");
-    setQuizState("loading");
+    setGenerationStatus("Checking practice status...");
+    setQuizState("configure");
+    await refreshGenerationStatus();
+  }
 
-    const status = await refreshGenerationStatus();
-    const draft = status?.matchingDraft ?? null;
-
-    try {
-      if (draft?.setId) {
-        await loadDraftWorkspace(draft.setId, draft.attempt?.id ?? null);
-        showToast("Saved draft ready - no credits charged.");
-        return;
-      }
-
-      if (status?.credits && !status.credits.canAfford) {
-        showToast("Not enough credits to generate questions.");
-        setQuizState("idle");
-        return;
-      }
-
-      if (status?.dailyLimit && status.dailyLimit.remaining <= 0) {
-        showToast("Daily question generation limit reached.");
-        setQuizState("idle");
-        return;
-      }
-
-      await generateWorkspaceDraft();
-    } catch (error) {
-      showToast(error instanceof Error ? error.message : "Could not open AI practice workspace.");
-      setQuizState("idle");
+  async function handleStartConfiguredPractice() {
+    if (!userId) {
+      signInForWorkspace();
+      return;
     }
+
+    if (matchingDraft?.setId) {
+      setQuizState("loading");
+      try {
+        await loadDraftWorkspace(matchingDraft.setId, matchingDraft.attempt?.id ?? null);
+        showToast("Saved draft ready - no credits charged.");
+      } catch (error) {
+        showToast(error instanceof Error ? error.message : "Could not open saved draft.");
+        setQuizState("configure");
+      }
+      return;
+    }
+
+    if (generationTrust?.credits && !generationTrust.credits.canAfford) {
+      showToast("Not enough credits to generate questions.");
+      return;
+    }
+
+    if (generationTrust?.dailyLimit && generationTrust.dailyLimit.remaining <= 0) {
+      showToast("Daily question generation limit reached.");
+      return;
+    }
+
+    await generateWorkspaceDraft();
   }
 
   function handleMcqChoice(questionIndex: number, question: GeneratedMcqQuestion, key: OptionKey, correct: boolean) {
@@ -1318,6 +1326,15 @@ export default function MaterialDetailClient({
 
     return () => clearTimeout(timer);
   }, [activeAttemptId, generatedQuestions, quizState, writtenAnswers]);
+
+  useEffect(() => {
+    if (quizState !== "configure" || !userId) return;
+    const timer = setTimeout(() => {
+      void refreshGenerationStatus();
+    }, 350);
+    return () => clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [generationMode, quizConfig, quizState, userId]);
 
   async function handleToggleSave() {
     setSaving(true);
@@ -1838,6 +1855,7 @@ export default function MaterialDetailClient({
                   </p>
                   <p className="text-sm font-bold text-foreground">
                     {quizState === "quiz" ? `Q ${currentQuestionIndex + 1} / ${qs.length}` :
+                     quizState === "configure" ? "Configure practice" :
                      "Results"}
                   </p>
                   {quizState === "quiz" && (
@@ -1879,6 +1897,130 @@ export default function MaterialDetailClient({
                   <X className="h-4 w-4" />
                 </button>
               </div>
+
+              {quizState === "configure" && (
+                <>
+                  <div className="flex-1 overflow-y-auto px-4 py-5 pb-36 md:px-6">
+                    <div className="mx-auto max-w-2xl space-y-4">
+                      <div className="flex flex-wrap items-center justify-between gap-2 rounded-2xl border border-border bg-background px-4 py-3">
+                        <div className="min-w-0">
+                          <p className="text-sm font-bold text-foreground">
+                            {matchingDraft ? "Saved draft available" : "Generate from this material"}
+                          </p>
+                          <p className="mt-0.5 text-xs text-muted-brand">
+                            {matchingDraft
+                              ? `${matchingDraft.questionsCount} questions. Opening it will not charge credits.`
+                              : "Choose the shape of this material-only practice session."}
+                          </p>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => void refreshGenerationStatus()}
+                          disabled={generationStatusLoading}
+                          className="inline-flex items-center gap-1.5 rounded-xl border border-border bg-card px-3 py-2 text-xs font-semibold text-foreground transition hover:bg-secondary/50 disabled:opacity-50"
+                        >
+                          {generationStatusLoading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
+                          Refresh
+                        </button>
+                      </div>
+
+                      <div className="grid gap-3 sm:grid-cols-2">
+                        <label className="space-y-1.5">
+                          <span className="text-[11px] font-extrabold uppercase tracking-wide text-muted-brand">Questions</span>
+                          <select
+                            value={quizConfig.count}
+                            onChange={(e) => setQuizConfig((prev) => ({ ...prev, count: Number(e.target.value) }))}
+                            className="w-full rounded-2xl border border-border bg-background px-4 py-3 text-sm font-semibold text-foreground outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
+                          >
+                            {[5, 10, 15, 20].map((count) => (
+                              <option key={count} value={count}>{count} questions</option>
+                            ))}
+                          </select>
+                        </label>
+
+                        <label className="space-y-1.5">
+                          <span className="text-[11px] font-extrabold uppercase tracking-wide text-muted-brand">Format</span>
+                          <select
+                            value={quizConfig.questionFormat}
+                            onChange={(e) => setQuizConfig((prev) => ({ ...prev, questionFormat: e.target.value as QuestionFormat }))}
+                            className="w-full rounded-2xl border border-border bg-background px-4 py-3 text-sm font-semibold text-foreground outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
+                          >
+                            <option value="mixed">Mixed</option>
+                            <option value="mcq">Objective only</option>
+                            <option value="written">Written/theory</option>
+                          </select>
+                        </label>
+
+                        <label className="space-y-1.5">
+                          <span className="text-[11px] font-extrabold uppercase tracking-wide text-muted-brand">Difficulty</span>
+                          <select
+                            value={quizConfig.difficulty}
+                            onChange={(e) => setQuizConfig((prev) => ({ ...prev, difficulty: e.target.value as "easy" | "mixed" | "hard" }))}
+                            className="w-full rounded-2xl border border-border bg-background px-4 py-3 text-sm font-semibold text-foreground outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
+                          >
+                            <option value="easy">Easy</option>
+                            <option value="mixed">Mixed</option>
+                            <option value="hard">Hard</option>
+                          </select>
+                        </label>
+
+                        <label className="space-y-1.5">
+                          <span className="text-[11px] font-extrabold uppercase tracking-wide text-muted-brand">Mode</span>
+                          <select
+                            value={generationMode}
+                            onChange={(e) => setGenerationMode(e.target.value as GenerationMode)}
+                            className="w-full rounded-2xl border border-border bg-background px-4 py-3 text-sm font-semibold text-foreground outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
+                          >
+                            {STUDENT_GENERATION_MODES.map(({ value, label }) => (
+                              <option key={value} value={value}>{label}</option>
+                            ))}
+                          </select>
+                        </label>
+                      </div>
+
+                      <label className="block space-y-1.5">
+                        <span className="text-[11px] font-extrabold uppercase tracking-wide text-muted-brand">Focus area</span>
+                        <input
+                          value={quizConfig.focus}
+                          onChange={(e) => setQuizConfig((prev) => ({ ...prev, focus: e.target.value }))}
+                          placeholder="Optional topic, page range, or weak area"
+                          className="w-full rounded-2xl border border-border bg-background px-4 py-3 text-sm text-foreground outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/20"
+                        />
+                      </label>
+
+                      <div className="flex flex-wrap gap-2 text-xs font-semibold text-muted-brand">
+                        {generationTrust?.credits ? (
+                          <span className="rounded-full border border-border bg-background px-3 py-1.5">
+                            Credits: {generationTrust.credits.balance} left, cost {generationTrust.credits.cost}
+                          </span>
+                        ) : null}
+                        {generationTrust?.dailyLimit ? (
+                          <span className="rounded-full border border-border bg-background px-3 py-1.5">
+                            Daily: {generationTrust.dailyLimit.remaining}/{generationTrust.dailyLimit.limit} left
+                          </span>
+                        ) : null}
+                        {generationTrust?.message && !generationTrust.ok ? (
+                          <span className="rounded-full border border-rose-500/25 bg-rose-500/10 px-3 py-1.5 text-rose-700 dark:text-rose-300">
+                            {generationTrust.message}
+                          </span>
+                        ) : null}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="absolute inset-x-0 bottom-0 border-t border-border bg-card px-4 py-4 pb-[max(1rem,env(safe-area-inset-bottom))]">
+                    <button
+                      type="button"
+                      onClick={() => void handleStartConfiguredPractice()}
+                      disabled={generationStatusLoading || generatingMore || (generationTrust?.credits ? !generationTrust.credits.canAfford && !matchingDraft : false) || (generationTrust?.dailyLimit ? generationTrust.dailyLimit.remaining <= 0 && !matchingDraft : false)}
+                      className="inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-primary px-4 py-3 text-sm font-semibold text-white transition hover:opacity-90 disabled:opacity-50 focus-visible:outline-none"
+                    >
+                      {generationStatusLoading || generatingMore ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
+                      {matchingDraft ? "Resume saved draft" : `Generate ${quizConfig.count} questions`}
+                    </button>
+                  </div>
+                </>
+              )}
 
               {/* ── Panel C: Quiz ── */}
               {quizState === "quiz" && currentQ && (
