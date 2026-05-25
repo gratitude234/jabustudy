@@ -855,7 +855,7 @@ export default function PracticeMaterialClient({
 
   const CreditsCard = () => (
     <div className="flex items-center gap-3 rounded-3xl border border-border bg-card px-4 py-3.5">
-      <div className="grid h-10 w-10 shrink-0 place-items-center rounded-2xl bg-amber-50">
+      <div className="grid h-10 w-10 shrink-0 place-items-center rounded-2xl bg-amber-50 dark:bg-amber-950/40">
         <Sparkles className="h-5 w-5 text-amber-500" />
       </div>
       <div className="min-w-0 flex-1">
@@ -893,7 +893,7 @@ export default function PracticeMaterialClient({
       <div className="space-y-4 p-4">
         <div className={cn(
           "flex items-center justify-between rounded-2xl border px-4 py-3 text-sm",
-          hasMatchingDraft ? "border-primary/25 bg-primary-light text-primary-text" : "border-amber-300 bg-amber-50 text-amber-800"
+          hasMatchingDraft ? "border-primary/25 bg-primary-light text-primary-text" : "border-amber-300 bg-amber-50 text-amber-800 dark:bg-amber-950/40 dark:border-amber-900 dark:text-amber-400"
         )}>
           <span className="font-semibold">{generationAvailabilityCopy}</span>
           <span className="font-extrabold">{hasMatchingDraft ? "Free" : `${credits} left`}</span>
@@ -1006,9 +1006,9 @@ export default function PracticeMaterialClient({
                 className={cn(
                   "rounded-xl border px-2 py-2 text-xs font-extrabold transition focus-visible:outline-none",
                   config.difficulty !== value && "border-border bg-background text-foreground hover:bg-secondary/50",
-                  config.difficulty === "easy" && value === "easy" && "border-green-300 bg-green-50 text-green-700",
-                  config.difficulty === "mixed" && value === "mixed" && "border-amber-300 bg-amber-50 text-amber-700",
-                  config.difficulty === "hard" && value === "hard" && "border-red-300 bg-red-50 text-red-600"
+                  config.difficulty === "easy" && value === "easy" && "border-green-300 bg-green-50 text-green-700 dark:bg-green-950/40 dark:border-green-900 dark:text-green-300",
+                  config.difficulty === "mixed" && value === "mixed" && "border-amber-300 bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:border-amber-900 dark:text-amber-400",
+                  config.difficulty === "hard" && value === "hard" && "border-red-300 bg-red-50 text-red-600 dark:bg-red-950/40 dark:border-red-900 dark:text-red-400"
                 )}
               >
                 {label}
@@ -1078,7 +1078,7 @@ export default function PracticeMaterialClient({
     return (
       <div className="fixed inset-0 z-50 flex flex-col overflow-y-auto bg-background">
         <div className="border-b border-border bg-card px-4 pb-4 pt-14">
-          <span className="inline-flex items-center rounded-full border border-amber-300 bg-amber-50 px-2.5 py-1 text-[11px] font-bold text-amber-700">
+          <span className="inline-flex items-center rounded-full border border-amber-300 bg-amber-50 px-2.5 py-1 text-[11px] font-bold text-amber-700 dark:bg-amber-950/40 dark:border-amber-900 dark:text-amber-400">
             Paused {pausedAgo}
           </span>
           <h1 className="mt-2 text-xl font-extrabold text-foreground">Session in progress</h1>
@@ -1112,7 +1112,7 @@ export default function PracticeMaterialClient({
             </div>
             <div className="flex flex-wrap gap-1.5">
               {session.batches.map((b, i) => (
-                <span key={i} className="rounded-lg border border-green-200 bg-green-50 px-2 py-1 text-[10px] font-semibold text-green-700">
+                <span key={i} className="rounded-lg border border-green-200 bg-green-50 px-2 py-1 text-[10px] font-semibold text-green-700 dark:bg-green-950/40 dark:border-green-900 dark:text-green-300">
                   Batch {i + 1}: {b.correct}/{b.count}
                 </span>
               ))}
@@ -1214,7 +1214,7 @@ export default function PracticeMaterialClient({
             <button
               type="button"
               onClick={() => setMode("configure")}
-              className="grid h-6 w-6 shrink-0 place-items-center rounded-full bg-secondary text-sm text-muted-brand"
+              className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-secondary text-base text-muted-brand"
               aria-label="Close session"
             >
               ×
@@ -1223,7 +1223,7 @@ export default function PracticeMaterialClient({
           <div className="mb-2 flex items-center gap-2">
             <span className="text-sm font-extrabold text-foreground">Q{currentIndex + 1} of {batchQuestions.length}</span>
             {session && session.total_correct > 0 && (
-              <span className="inline-flex items-center gap-1 rounded-full border border-green-200 bg-green-50 px-2 py-0.5 text-[11px] font-bold text-green-700">
+              <span className="inline-flex items-center gap-1 rounded-full border border-green-200 bg-green-50 px-2 py-0.5 text-[11px] font-bold text-green-700 dark:bg-green-950/40 dark:border-green-900 dark:text-green-300">
                 {session.total_correct} correct
               </span>
             )}
@@ -1239,7 +1239,7 @@ export default function PracticeMaterialClient({
           </div>
         </div>
 
-        <div className="flex-1 space-y-3 overflow-y-auto px-4 py-5 pb-8">
+        <div className="flex-1 space-y-3 overflow-y-auto px-4 py-4 pb-24">
           <div className="inline-flex items-center gap-1.5 rounded-full border border-primary/20 bg-primary-light px-2.5 py-1 text-[10px] font-bold text-primary">
             Batch {batchCount + 1} - {batchQuestions.length} questions
           </div>
@@ -1270,8 +1270,8 @@ export default function PracticeMaterialClient({
                       className={cn(
                         "flex w-full items-start gap-2.5 rounded-xl border-[1.5px] px-3 py-3 text-left transition focus-visible:outline-none",
                         !answered && "border-border bg-card hover:border-primary hover:bg-primary-light",
-                        answered && opt.is_correct && "border-green-400 bg-green-50",
-                        answered && isChosen && !opt.is_correct && "border-red-400 bg-red-50",
+                        answered && opt.is_correct && "border-green-400 bg-green-50 dark:bg-green-950/40 dark:border-green-700",
+                        answered && isChosen && !opt.is_correct && "border-red-400 bg-red-50 dark:bg-red-950/40 dark:border-red-700",
                         answered && !opt.is_correct && !isChosen && "border-border/40 text-muted-brand opacity-60"
                       )}
                     >
@@ -1289,8 +1289,8 @@ export default function PracticeMaterialClient({
                       <span
                         className={cn(
                           "flex-1 text-[13.5px] font-medium leading-relaxed",
-                          answered && opt.is_correct && "font-semibold text-green-800",
-                          answered && isChosen && !opt.is_correct && "text-red-700"
+                          answered && opt.is_correct && "font-semibold text-green-800 dark:text-green-300",
+                          answered && isChosen && !opt.is_correct && "text-red-700 dark:text-red-400"
                         )}
                       >
                         {opt.text}
@@ -1300,7 +1300,7 @@ export default function PracticeMaterialClient({
                 })}
               </div>
               {chosenOptionId && (
-                <div className={cn("flex items-start gap-2.5 rounded-xl p-3", chosenOption?.is_correct ? "bg-green-50" : "bg-red-50")}>
+                <div className={cn("flex items-start gap-2.5 rounded-xl p-3", chosenOption?.is_correct ? "bg-green-50 dark:bg-green-950/40" : "bg-red-50 dark:bg-red-950/40")}>
                   <span className="shrink-0 text-lg leading-tight">{chosenOption?.is_correct ? "✓" : "✗"}</span>
                   <p className="text-[12.5px] leading-relaxed text-foreground">
                     <strong>{chosenOption?.is_correct ? "Correct!" : "Not quite."}</strong>{" "}
@@ -1356,16 +1356,19 @@ export default function PracticeMaterialClient({
             </div>
           )}
 
-          {currentAnswered && (
+        </div>
+
+        {currentAnswered && (
+          <div className="shrink-0 border-t border-border bg-background/95 px-4 pb-5 pt-3 backdrop-blur">
             <button
               type="button"
               onClick={handleContinueQuestion}
-              className="w-full rounded-2xl bg-primary py-3.5 text-[15px] font-extrabold text-white transition hover:opacity-90 focus-visible:outline-none"
+              className="w-full rounded-2xl bg-primary py-4 text-[15px] font-extrabold text-white transition hover:opacity-90 focus-visible:outline-none active:scale-[0.99]"
             >
               {currentIndex + 1 >= batchQuestions.length ? "Finish batch →" : "Continue →"}
             </button>
-          )}
-        </div>
+          </div>
+        )}
       </div>
     );
   }
@@ -1398,7 +1401,7 @@ export default function PracticeMaterialClient({
           </div>
           <div className="mb-2 flex items-center gap-2">
             <span className="text-sm font-extrabold text-foreground">{updatedBatchCount} batch{updatedBatchCount === 1 ? "" : "es"}</span>
-            <span className="inline-flex items-center gap-1 rounded-full border border-green-200 bg-green-50 px-2 py-0.5 text-[11px] font-bold text-green-700">
+            <span className="inline-flex items-center gap-1 rounded-full border border-green-200 bg-green-50 px-2 py-0.5 text-[11px] font-bold text-green-700 dark:bg-green-950/40 dark:border-green-900 dark:text-green-300">
               {updatedSessionCorrect} correct
             </span>
             <span className="ml-auto text-sm font-extrabold tabular-nums text-foreground">
@@ -1411,83 +1414,86 @@ export default function PracticeMaterialClient({
         </div>
 
         <div className="fixed inset-0 z-20 bg-black/40" />
-        <div className="fixed inset-x-0 bottom-0 z-30 max-h-[88vh] overflow-y-auto rounded-t-3xl bg-card">
-          <div className="mx-auto mt-2.5 h-1 w-9 rounded-full bg-border" />
-          <div className="border-b border-border px-4 pb-3 pt-3.5">
+        <div className="fixed inset-x-0 bottom-0 z-30 flex max-h-[88vh] flex-col rounded-t-3xl bg-card">
+          <div className="mx-auto mt-2.5 h-1 w-9 shrink-0 rounded-full bg-border" />
+          <div className="shrink-0 border-b border-border px-4 pb-3 pt-3.5">
             <p className="text-lg font-extrabold text-foreground">Batch {updatedBatchCount} done</p>
             <p className="text-[12.5px] text-muted-brand">{completedBatch.total} questions - {title}</p>
           </div>
-          <div className="space-y-3 px-4 py-3.5">
-            <div className="flex items-center gap-3.5 rounded-2xl border border-border bg-background p-3">
-              <ScoreRing correct={completedBatch.correct} total={completedBatch.total} size={52} />
-              <div>
-                <p className="text-2xl font-extrabold leading-none text-foreground">
-                  {completedBatch.correct} <em className="text-sm font-semibold not-italic text-muted-brand">/ {completedBatch.total} correct</em>
-                </p>
-                <p className="mt-0.5 text-[11px] font-semibold text-muted-brand">
-                  Running total: {updatedSessionCorrect} / {updatedSessionTotal}
-                </p>
-              </div>
-            </div>
 
-            {missedTopics.length > 0 && (
-              <div>
-                <p className="mb-2 text-[10px] font-bold uppercase tracking-wider text-muted-brand">Needs more practice</p>
-                <div className="space-y-1.5">
-                  {missedTopics.map((t) => (
-                    <div key={t} className="flex items-center gap-2 rounded-xl border border-red-200 bg-red-50 p-2.5 dark:border-red-900 dark:bg-red-950/40">
-                      <div className="h-1.5 w-1.5 shrink-0 rounded-full bg-red-500" />
-                      <span className="flex-1 text-sm font-bold text-foreground">{t}</span>
-                    </div>
-                  ))}
+          <div className="flex-1 overflow-y-auto">
+            <div className="space-y-3 px-4 py-3.5">
+              <div className="flex items-center gap-3.5 rounded-2xl border border-border bg-background p-3">
+                <ScoreRing correct={completedBatch.correct} total={completedBatch.total} size={52} />
+                <div>
+                  <p className="text-2xl font-extrabold leading-none text-foreground">
+                    {completedBatch.correct} <em className="text-sm font-semibold not-italic text-muted-brand">/ {completedBatch.total} correct</em>
+                  </p>
+                  <p className="mt-0.5 text-[11px] font-semibold text-muted-brand">
+                    Running total: {updatedSessionCorrect} / {updatedSessionTotal}
+                  </p>
                 </div>
               </div>
-            )}
 
-            <div className="space-y-2.5 rounded-2xl border border-primary/20 bg-primary-light p-3.5">
-              <p className="flex items-center gap-1.5 text-xs font-extrabold text-primary-text">
-                <Sparkles className="h-3.5 w-3.5" /> Generate more - targeting weak areas
-              </p>
               {missedTopics.length > 0 && (
-                <div className="flex justify-between text-[12.5px]">
-                  <span className="font-semibold text-muted-brand">Focus</span>
-                  <span className="ml-3 truncate font-bold text-primary">{missedTopics.join(" + ")}</span>
+                <div>
+                  <p className="mb-2 text-[10px] font-bold uppercase tracking-wider text-muted-brand">Needs more practice</p>
+                  <div className="space-y-1.5">
+                    {missedTopics.map((t) => (
+                      <div key={t} className="flex items-center gap-2 rounded-xl border border-red-200 bg-red-50 p-2.5 dark:border-red-900 dark:bg-red-950/40">
+                        <div className="h-1.5 w-1.5 shrink-0 rounded-full bg-red-500" />
+                        <span className="flex-1 text-sm font-bold text-foreground">{t}</span>
+                      </div>
+                    ))}
+                  </div>
                 </div>
               )}
-              <div className="flex gap-1.5">
-                {([5, 10, 15, 20] as const).map((n) => (
-                  <button
-                    key={n}
-                    type="button"
-                    onClick={() => setMoreConfig((c) => ({ ...c, count: n }))}
-                    className={cn(
-                      "flex-1 rounded-xl border py-1.5 text-xs font-bold transition",
-                      moreConfig.count === n
-                        ? "border-primary bg-primary text-white"
-                        : "border-border bg-card text-foreground"
-                    )}
-                  >
-                    {n}
-                  </button>
-                ))}
-              </div>
-              <div className="flex items-center justify-between rounded-xl border border-border bg-card px-3 py-2 text-xs">
-                <span className="font-semibold text-muted-brand">Cost</span>
-                <span className="font-extrabold text-amber-600">{moreCost} credits · {credits} remaining</span>
+
+              <div className="space-y-2.5 rounded-2xl border border-primary/20 bg-primary-light p-3.5">
+                <p className="flex items-center gap-1.5 text-xs font-extrabold text-primary-text">
+                  <Sparkles className="h-3.5 w-3.5" /> Generate more - targeting weak areas
+                </p>
+                {missedTopics.length > 0 && (
+                  <div className="flex justify-between text-[12.5px]">
+                    <span className="font-semibold text-muted-brand">Focus</span>
+                    <span className="ml-3 truncate font-bold text-primary">{missedTopics.join(" + ")}</span>
+                  </div>
+                )}
+                <div className="flex gap-1.5">
+                  {([5, 10, 15, 20] as const).map((n) => (
+                    <button
+                      key={n}
+                      type="button"
+                      onClick={() => setMoreConfig((c) => ({ ...c, count: n }))}
+                      className={cn(
+                        "flex-1 rounded-xl border py-1.5 text-xs font-bold transition",
+                        moreConfig.count === n
+                          ? "border-primary bg-primary text-white"
+                          : "border-border bg-card text-foreground"
+                      )}
+                    >
+                      {n}
+                    </button>
+                  ))}
+                </div>
+                <div className="flex items-center justify-between rounded-xl border border-border bg-card px-3 py-2 text-xs">
+                  <span className="font-semibold text-muted-brand">Cost</span>
+                  <span className="font-extrabold text-amber-600">{moreCost} credits · {credits} remaining</span>
+                </div>
               </div>
             </div>
+          </div>
 
+          <div className="shrink-0 space-y-2 border-t border-border px-4 pb-6 pt-3">
             {error && <p className="text-center text-xs text-red-500">{error}</p>}
-
             <button
               type="button"
               disabled={!canMore}
               onClick={() => void handleSaveBatchAndGenerateMore(moreConfig)}
-              className="flex w-full items-center justify-center gap-2 rounded-2xl bg-primary py-3 text-sm font-extrabold text-white transition hover:opacity-90 disabled:opacity-50"
+              className="flex w-full items-center justify-center gap-2 rounded-2xl bg-primary py-3.5 text-sm font-extrabold text-white transition hover:opacity-90 disabled:opacity-50 active:scale-[0.99]"
             >
               <Sparkles className="h-4 w-4" /> Generate {moreConfig.count} more questions
             </button>
-
             <button
               type="button"
               onClick={() => void handleFinishSession()}
