@@ -577,6 +577,7 @@ async function handleGenerateQuestionsRequest(req: NextRequest) {
     questionFormat?: string;
     coveredQuestions?: string[];
     persistDraft?: boolean;
+    ignoreMatchingDraft?: boolean;
     generationIntent?: string;
     topicId?: string | null;
     subtopicId?: string | null;
@@ -589,6 +590,7 @@ async function handleGenerateQuestionsRequest(req: NextRequest) {
 
   const { coveredQuestions = [] } = body;
   const persistDraft = body.persistDraft === true;
+  const ignoreMatchingDraft = body.ignoreMatchingDraft === true;
   const requestConfig = normalizeQuestionGenerationRequest({
     materialId: body.materialId,
     count: body.count,
@@ -610,7 +612,7 @@ async function handleGenerateQuestionsRequest(req: NextRequest) {
   const topicId = requestConfig.topicId;
   const subtopicId = requestConfig.subtopicId;
   const estimatedCreditCost = requestConfig.creditCost;
-  const canReuseDraft = persistDraft && coveredQuestions.length === 0;
+  const canReuseDraft = persistDraft && !ignoreMatchingDraft && coveredQuestions.length === 0;
 
   // ── Fetch material ─────────────────────────────────────────────────────────
   const admin = adminSupabase;

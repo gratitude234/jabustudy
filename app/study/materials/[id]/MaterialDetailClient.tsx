@@ -149,6 +149,14 @@ type ActiveAiDraft = {
   } | null;
 };
 
+type ResumableAiDraft = ActiveAiDraft & {
+  progress: {
+    answeredCount: number;
+    totalCount: number;
+    nextQuestionNumber: number;
+  };
+};
+
 type GenerationTrustStatus = {
   ok?: boolean;
   message?: string;
@@ -857,7 +865,7 @@ export default function MaterialDetailClient({
   const [generationMode, setGenerationMode] = useState<GenerationMode>("auto");
   const [generationTrust, setGenerationTrust] = useState<GenerationTrustStatus | null>(null);
   const [generationStatusLoading, setGenerationStatusLoading] = useState(false);
-  const [matchingDraft, setMatchingDraft] = useState<ActiveAiDraft | null>(null);
+  const [resumableDraft, setResumableDraft] = useState<ResumableAiDraft | null>(null);
   const [activeDraftSetId, setActiveDraftSetId] = useState<string | null>(null);
   const [activeAttemptId, setActiveAttemptId] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<"practice" | "read" | "info">("practice");
@@ -964,7 +972,7 @@ export default function MaterialDetailClient({
   async function refreshGenerationStatus(config = quizConfig, mode: GenerationMode = generationMode) {
     if (!userId) {
       setGenerationTrust(null);
-      setMatchingDraft(null);
+      setResumableDraft(null);
       return null;
     }
 
@@ -975,7 +983,8 @@ export default function MaterialDetailClient({
       const data = (await res.json().catch(() => null)) as GenerationTrustStatus | null;
       if (!res.ok || !data?.ok) throw new Error(data?.message || "Could not load generation status.");
       setGenerationTrust(data);
-      setMatchingDraft(data.matchingDraft ?? null);
+      const draft = data.matchingDraft ?? null;
+      setResumableDraft(draft ? await inspectResumableDraft(draft) : null);
       return data;
     } catch (error) {
       const failedStatus: GenerationTrustStatus = {
@@ -983,7 +992,7 @@ export default function MaterialDetailClient({
         message: error instanceof Error ? error.message : "Could not load generation status.",
       };
       setGenerationTrust(failedStatus);
-      setMatchingDraft(null);
+      setResumableDraft(null);
       return failedStatus;
     } finally {
       setGenerationStatusLoading(false);
@@ -1063,6 +1072,82 @@ export default function MaterialDetailClient({
       if (isMcqQuestion(question)) return !restoredAnswers[index];
       return !(restoredWritten[index] ?? "").trim();
     });
+  }
+
+  async function inspectResumableDraft(draft: ActiveAiDraft): Promise<ResumableAiDraft | null> {
+    if (!userId) return null;
+
+    const { data: questionRows, error: questionError } = await supabase
+      .from("study_quiz_questions")
+      .select("id,question_type,position")
+      .eq("set_id", draft.setId)
+      .order("position", { ascending: true });
+
+    if (questionError) throw questionError;
+    const rows = ((questionRows ?? []) as any[])
+      .filter((row) => row?.id)
+      .map((row) => ({
+        id: String(row.id),
+        type: questionTypeOf({ question_type: row?.question_type ?? null } as any),
+      }));
+
+    if (!rows.length) return null;
+
+    const { data: attempts, error: attemptError } = await supabase
+      .from("study_practice_attempts")
+      .select("id,status,updated_at,created_at,submitted_at")
+      .eq("user_id", userId)
+      .eq("set_id", draft.setId)
+      .order("created_at", { ascending: false })
+      .limit(5);
+
+    if (attemptError) throw attemptError;
+
+    const attemptRows = ((attempts ?? []) as any[]);
+    const preferredAttempt = attemptRows[0] ?? draft.attempt;
+
+    if (preferredAttempt && String(preferredAttempt?.status ?? "") === "submitted") return null;
+
+    const attemptId = preferredAttempt?.id ? String(preferredAttempt.id) : null;
+    const answerRows = attemptId
+      ? await supabase
+        .from("study_attempt_answers")
+        .select("question_id,selected_option_id,text_answer")
+        .eq("attempt_id", attemptId)
+      : { data: [], error: null };
+
+    if (answerRows.error) throw answerRows.error;
+
+    const answeredByQuestion = new Map<string, boolean>();
+    for (const answer of ((answerRows.data ?? []) as any[])) {
+      const questionId = String(answer?.question_id ?? "");
+      if (!questionId) continue;
+      const question = rows.find((row) => row.id === questionId);
+      if (!question) continue;
+      const answered = question.type === "mcq"
+        ? Boolean(answer?.selected_option_id)
+        : typeof answer?.text_answer === "string" && answer.text_answer.trim().length > 0;
+      if (answered) answeredByQuestion.set(questionId, true);
+    }
+
+    const firstUnanswered = rows.findIndex((row) => !answeredByQuestion.get(row.id));
+    if (firstUnanswered === -1) return null;
+
+    return {
+      ...draft,
+      attempt: attemptId
+        ? {
+          id: attemptId,
+          status: preferredAttempt?.status ?? null,
+          updatedAt: preferredAttempt?.updated_at ?? null,
+        }
+        : null,
+      progress: {
+        answeredCount: answeredByQuestion.size,
+        totalCount: rows.length,
+        nextQuestionNumber: firstUnanswered + 1,
+      },
+    };
   }
 
   async function ensureWorkspaceAttempt(setId: string, providedAttemptId?: string | null) {
@@ -1171,6 +1256,7 @@ export default function MaterialDetailClient({
     syncedQuizMissesRef.current = null;
     setCurrentQuestionIndex(nextIndex === -1 ? Math.max(0, questions.length - 1) : nextIndex);
     setQuizState(nextIndex === -1 ? "results" : "quiz");
+    if (nextIndex === -1) void markWorkspaceAttemptComplete(attemptId, questions);
   }
 
   async function generateWorkspaceDraft(args?: {
@@ -1178,6 +1264,7 @@ export default function MaterialDetailClient({
     config?: typeof quizConfig;
     coveredQuestions?: string[];
     statusMessage?: string;
+    ignoreMatchingDraft?: boolean;
   }) {
     if (!userId) {
       signInForWorkspace();
@@ -1208,6 +1295,7 @@ export default function MaterialDetailClient({
           questionFormat: config.questionFormat,
           coveredQuestions,
           persistDraft: true,
+          ignoreMatchingDraft: args?.ignoreMatchingDraft === true,
           generationIntent: intent,
         }),
       });
@@ -1251,6 +1339,7 @@ export default function MaterialDetailClient({
     setGeneratedQuestions(null);
     setGenerationAi(null);
     setStreamingQuestions([]);
+    setResumableDraft(null);
     setGenerationStatus("Checking practice status...");
     setQuizState("configure");
     await refreshGenerationStatus();
@@ -1259,18 +1348,6 @@ export default function MaterialDetailClient({
   async function handleStartConfiguredPractice() {
     if (!userId) {
       signInForWorkspace();
-      return;
-    }
-
-    if (matchingDraft?.setId) {
-      setQuizState("loading");
-      try {
-        await loadDraftWorkspace(matchingDraft.setId, matchingDraft.attempt?.id ?? null);
-        showToast("Saved draft ready - no credits charged.");
-      } catch (error) {
-        showToast(error instanceof Error ? error.message : "Could not open saved draft.");
-        setQuizState("configure");
-      }
       return;
     }
 
@@ -1284,7 +1361,45 @@ export default function MaterialDetailClient({
       return;
     }
 
-    await generateWorkspaceDraft();
+    await generateWorkspaceDraft({ ignoreMatchingDraft: true });
+  }
+
+  async function handleResumeDraft() {
+    if (!userId) {
+      signInForWorkspace();
+      return;
+    }
+    if (!resumableDraft?.setId) return;
+
+    setQuizState("loading");
+    try {
+      await loadDraftWorkspace(resumableDraft.setId, resumableDraft.attempt?.id ?? null);
+      showToast(`Continuing from Q${resumableDraft.progress.nextQuestionNumber}.`);
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : "Could not open unfinished draft.");
+      setQuizState("configure");
+    }
+  }
+
+  function hasAnsweredEveryWorkspaceQuestion(
+    questions: GeneratedQuestion[] = qs,
+    currentAnswers: typeof answers = answers,
+    currentWrittenAnswers: typeof writtenAnswers = writtenAnswers
+  ) {
+    return questions.length > 0 && firstUnansweredIndex(questions, currentAnswers, currentWrittenAnswers) === -1;
+  }
+
+  async function markWorkspaceAttemptComplete(attemptId: string | null = activeAttemptId, questions: GeneratedQuestion[] = qs) {
+    if (!attemptId || !userId || !hasAnsweredEveryWorkspaceQuestion(questions)) return;
+    await supabase
+      .from("study_practice_attempts")
+      .update({
+        status: "submitted",
+        submitted_at: new Date().toISOString(),
+        total_questions: questions.length,
+      } as any)
+      .eq("id", attemptId)
+      .eq("user_id", userId);
   }
 
   function handleMcqChoice(questionIndex: number, question: GeneratedMcqQuestion, key: OptionKey, correct: boolean) {
@@ -1336,6 +1451,14 @@ export default function MaterialDetailClient({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [generationMode, quizConfig, quizState, userId]);
 
+  useEffect(() => {
+    if (quizState !== "results" || !activeAttemptId || !hasAnsweredEveryWorkspaceQuestion()) return;
+    void markWorkspaceAttemptComplete().catch(() => {
+      // Completion is only used to hide finished drafts from resume prompts.
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [quizState, activeAttemptId, generatedQuestions, answers, writtenAnswers]);
+
   async function handleToggleSave() {
     setSaving(true);
     const wasSaved = saved;
@@ -1372,6 +1495,7 @@ export default function MaterialDetailClient({
       mode,
       coveredQuestions: generatedQuestions?.map((q) => q.question) ?? [],
       statusMessage: "Preparing the next set...",
+      ignoreMatchingDraft: true,
     });
   }
 
@@ -1391,6 +1515,7 @@ export default function MaterialDetailClient({
       config: focusedConfig,
       coveredQuestions: generatedQuestions?.map((q) => q.question) ?? [],
       statusMessage: "Generating questions on your weak topics...",
+      ignoreMatchingDraft: true,
     });
   }
 
@@ -1905,11 +2030,11 @@ export default function MaterialDetailClient({
                       <div className="flex flex-wrap items-center justify-between gap-2 rounded-2xl border border-border bg-background px-4 py-3">
                         <div className="min-w-0">
                           <p className="text-sm font-bold text-foreground">
-                            {matchingDraft ? "Saved draft available" : "Generate from this material"}
+                            {resumableDraft ? "Unfinished draft available" : "Generate from this material"}
                           </p>
                           <p className="mt-0.5 text-xs text-muted-brand">
-                            {matchingDraft
-                              ? `${matchingDraft.questionsCount} questions. Opening it will not charge credits.`
+                            {resumableDraft
+                              ? `${resumableDraft.progress.answeredCount}/${resumableDraft.progress.totalCount} answered. Resume only if you want to continue it.`
                               : "Choose the shape of this material-only practice session."}
                           </p>
                         </div>
@@ -1923,6 +2048,23 @@ export default function MaterialDetailClient({
                           Refresh
                         </button>
                       </div>
+
+                      {resumableDraft && (
+                        <button
+                          type="button"
+                          onClick={() => void handleResumeDraft()}
+                          disabled={generationStatusLoading || generatingMore}
+                          className="group flex w-full items-center justify-between gap-3 rounded-2xl border border-primary/25 bg-primary-light px-4 py-3 text-left transition hover:border-primary/40 hover:bg-primary-light/80 disabled:opacity-50"
+                        >
+                          <span className="min-w-0">
+                            <span className="block text-sm font-semibold text-primary-text">Resume unfinished draft</span>
+                            <span className="mt-0.5 block text-xs text-muted-brand">
+                              Continue from Q{resumableDraft.progress.nextQuestionNumber}. No credits charged.
+                            </span>
+                          </span>
+                          <ArrowRight className="h-4 w-4 shrink-0 text-primary transition group-hover:translate-x-0.5" />
+                        </button>
+                      )}
 
                       <div className="grid gap-3 sm:grid-cols-2">
                         <label className="space-y-1.5">
@@ -2012,11 +2154,11 @@ export default function MaterialDetailClient({
                     <button
                       type="button"
                       onClick={() => void handleStartConfiguredPractice()}
-                      disabled={generationStatusLoading || generatingMore || (generationTrust?.credits ? !generationTrust.credits.canAfford && !matchingDraft : false) || (generationTrust?.dailyLimit ? generationTrust.dailyLimit.remaining <= 0 && !matchingDraft : false)}
+                      disabled={generationStatusLoading || generatingMore || (generationTrust?.credits ? !generationTrust.credits.canAfford : false) || (generationTrust?.dailyLimit ? generationTrust.dailyLimit.remaining <= 0 : false)}
                       className="inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-primary px-4 py-3 text-sm font-semibold text-white transition hover:opacity-90 disabled:opacity-50 focus-visible:outline-none"
                     >
                       {generationStatusLoading || generatingMore ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
-                      {matchingDraft ? "Resume saved draft" : `Generate ${quizConfig.count} questions`}
+                      Generate {quizConfig.count} questions
                     </button>
                   </div>
                 </>
@@ -2351,7 +2493,7 @@ export default function MaterialDetailClient({
                     className="inline-flex w-full items-center justify-center gap-2 rounded-2xl border border-primary bg-primary-light px-4 py-3 text-sm font-semibold text-primary-text transition hover:opacity-90 disabled:opacity-50 focus-visible:outline-none">
                     {generatingMore
                       ? <><Loader2 className="h-4 w-4 animate-spin" /> Generating…</>
-                      : <><Sparkles className="h-4 w-4" /> Generate {quizConfig.count} more {formatQuestionFormat(quizConfig.questionFormat)} questions</>
+                      : <><Sparkles className="h-4 w-4" /> Generate new questions</>
                     }
                   </button>
                   {generatingMore && (
