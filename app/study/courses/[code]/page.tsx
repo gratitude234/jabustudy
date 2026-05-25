@@ -1,7 +1,6 @@
 "use client";
 // app/study/courses/[code]/page.tsx
 
-import { CourseAIPracticeCta } from "./_components/CourseAIPracticeCta";
 import { cn } from "@/lib/utils";
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
@@ -452,13 +451,6 @@ export default function CourseHubPage() {
                 </div>
                 <UploadCloud className="h-5 w-5 shrink-0 text-primary" />
               </Link>
-            )}
-
-            {course && (
-              <CourseAIPracticeCta
-                courseId={course.id}
-                courseCode={course.course_code}
-              />
             )}
 
             {/* Quick actions */}

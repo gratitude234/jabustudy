@@ -789,7 +789,7 @@ export async function generateCoverageAwareQuestions(args: {
   const failures: Record<string, number> = {};
   let ai = outlineAi;
 
-  const BATCH_SIZE = parsePositiveInt(process.env.QUESTION_BATCH_SIZE) ?? 2;
+  const BATCH_SIZE = parsePositiveInt(process.env.QUESTION_BATCH_SIZE) ?? 4;
   let planCursor = 0;
 
   while (accepted.length < args.count && planCursor < plan.length) {

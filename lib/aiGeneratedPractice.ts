@@ -603,11 +603,11 @@ export async function saveGeneratedPracticeSet(args: SaveGeneratedPracticeArgs):
     };
   generatedQuestions = repaired.questions;
 
-  if (allGeneratedMcq) {
+  if (allGeneratedMcq && repaired.repaired) {
     generatedQuestions = await validateSourceBackedQuestions(args.materialId, generatedQuestions);
   }
 
-  if (generatedQuestions.length > 0) {
+  if (generatedQuestions.length > 0 && repaired.repaired) {
     await assertQuestionsNotDuplicateForCourse({
       materialId: args.materialId,
       ownerUserId: args.userId,
