@@ -1308,7 +1308,7 @@ export default function MaterialDetailClient({
     syncedQuizMissesRef.current = null;
     setCurrentQuestionIndex(resumeIndex);
     setQuizState(nextIndex === -1 ? "results" : "quiz");
-    if (nextIndex === -1) void markWorkspaceAttemptComplete(attemptId, questions, setId, restoredAnswers, restoredWritten);
+    if (nextIndex === -1) void submitWorkspaceAttempt(attemptId, questions, setId);
   }
 
   async function generateWorkspaceDraft(args?: {
@@ -1433,22 +1433,12 @@ export default function MaterialDetailClient({
     }
   }
 
-  function hasAnsweredEveryWorkspaceQuestion(
-    questions: GeneratedQuestion[] = qs,
-    currentAnswers: typeof answers = answers,
-    currentWrittenAnswers: typeof writtenAnswers = writtenAnswers
-  ) {
-    return questions.length > 0 && firstUnansweredIndex(questions, currentAnswers, currentWrittenAnswers) === -1;
-  }
-
-  async function markWorkspaceAttemptComplete(
+  async function submitWorkspaceAttempt(
     attemptId: string | null = activeAttemptId,
     questions: GeneratedQuestion[] = qs,
-    setId: string | null = activeDraftSetId,
-    currentAnswers: typeof answers = answers,
-    currentWrittenAnswers: typeof writtenAnswers = writtenAnswers
+    setId: string | null = activeDraftSetId
   ) {
-    if (!attemptId || !userId || !hasAnsweredEveryWorkspaceQuestion(questions, currentAnswers, currentWrittenAnswers)) return;
+    if (!attemptId || !userId || questions.length <= 0) return;
     await supabase
       .from("study_practice_attempts")
       .update({
@@ -1511,12 +1501,12 @@ export default function MaterialDetailClient({
   }, [generationMode, quizConfig, quizState, userId]);
 
   useEffect(() => {
-    if (quizState !== "results" || !activeAttemptId || !hasAnsweredEveryWorkspaceQuestion()) return;
-    void markWorkspaceAttemptComplete().catch(() => {
-      // Completion is only used to hide finished drafts from resume prompts.
+    if (quizState !== "results" || !activeAttemptId || !qs.length) return;
+    void submitWorkspaceAttempt().catch(() => {
+      // Submitted status is only used to hide finished drafts from resume prompts.
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [quizState, activeAttemptId, generatedQuestions, answers, writtenAnswers]);
+  }, [quizState, activeAttemptId, generatedQuestions]);
 
   useEffect(() => {
     if (quizState !== "quiz") return;
@@ -1622,13 +1612,20 @@ export default function MaterialDetailClient({
     }
   }
 
-  function closeAiPracticeWorkspace() {
+  async function closeAiPracticeWorkspace() {
     if (quizState === "loading") {
       setGenerationStatus("Your AI draft is still being saved. Practice will open when it is ready.");
       return;
     }
     if (quizState === "quiz") {
       writeWorkspaceCursor(activeDraftSetId, activeAttemptId, currentQuestionIndex);
+    }
+    if (quizState === "results") {
+      try {
+        await submitWorkspaceAttempt();
+      } catch {
+        // The results screen also submits in an effect; close should not block on a transient failure.
+      }
     }
     setQuizState("idle");
   }
