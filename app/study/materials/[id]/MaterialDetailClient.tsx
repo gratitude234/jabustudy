@@ -938,6 +938,17 @@ export default function MaterialDetailClient({
         .filter((t): t is string => Boolean(t))
     )
   ).slice(0, 2);
+  const generateDisabledReason =
+    generationStatusLoading ? "Checking availability..."
+      : generatingMore ? "Generating..."
+        : generationTrust?.credits && !generationTrust.credits.canAfford ? "Not enough credits"
+          : generationTrust?.dailyLimit && generationTrust.dailyLimit.remaining <= 0 ? "Daily limit reached"
+            : null;
+  const dailyLimitLabel = generationTrust?.dailyLimit
+    ? generationTrust.dailyLimit.remaining <= 0
+      ? `Daily limit reached (${generationTrust.dailyLimit.used}/${generationTrust.dailyLimit.limit} used)`
+      : `Daily: ${generationTrust.dailyLimit.remaining} left today`
+    : null;
 
   function signInForWorkspace() {
     if (typeof window === "undefined") return;
@@ -2084,7 +2095,7 @@ export default function MaterialDetailClient({
                 <>
                   <div className="flex-1 overflow-y-auto px-4 py-5 pb-36 md:px-6">
                     <div className="mx-auto max-w-2xl space-y-4">
-                      <div className="flex flex-wrap items-center justify-between gap-2 rounded-2xl border border-border bg-background px-4 py-3">
+                      <div className="rounded-2xl border border-border bg-background px-4 py-3">
                         <div className="min-w-0">
                           <p className="text-sm font-bold text-foreground">
                             {resumableDraft ? "Unfinished draft available" : "Generate from this material"}
@@ -2095,15 +2106,6 @@ export default function MaterialDetailClient({
                               : "Choose the shape of this material-only practice session."}
                           </p>
                         </div>
-                        <button
-                          type="button"
-                          onClick={() => void refreshGenerationStatus()}
-                          disabled={generationStatusLoading}
-                          className="inline-flex items-center gap-1.5 rounded-xl border border-border bg-card px-3 py-2 text-xs font-semibold text-foreground transition hover:bg-secondary/50 disabled:opacity-50"
-                        >
-                          {generationStatusLoading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
-                          Refresh
-                        </button>
                       </div>
 
                       {resumableDraft && (
@@ -2195,7 +2197,7 @@ export default function MaterialDetailClient({
                         ) : null}
                         {generationTrust?.dailyLimit ? (
                           <span className="rounded-full border border-border bg-background px-3 py-1.5">
-                            Daily: {generationTrust.dailyLimit.remaining}/{generationTrust.dailyLimit.limit} left
+                            {dailyLimitLabel}
                           </span>
                         ) : null}
                         {generationTrust?.message && !generationTrust.ok ? (
@@ -2211,11 +2213,11 @@ export default function MaterialDetailClient({
                     <button
                       type="button"
                       onClick={() => void handleStartConfiguredPractice()}
-                      disabled={generationStatusLoading || generatingMore || (generationTrust?.credits ? !generationTrust.credits.canAfford : false) || (generationTrust?.dailyLimit ? generationTrust.dailyLimit.remaining <= 0 : false)}
+                      disabled={Boolean(generateDisabledReason)}
                       className="inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-primary px-4 py-3 text-sm font-semibold text-white transition hover:opacity-90 disabled:opacity-50 focus-visible:outline-none"
                     >
                       {generationStatusLoading || generatingMore ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
-                      Generate {quizConfig.count} questions
+                      {generateDisabledReason ?? `Generate ${quizConfig.count} questions`}
                     </button>
                   </div>
                 </>
