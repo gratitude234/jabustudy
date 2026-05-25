@@ -1074,6 +1074,42 @@ export default function MaterialDetailClient({
     });
   }
 
+  function workspaceCursorKey(setId: string, attemptId: string) {
+    return `jabu:materialAiCursor:${m.id}:${setId}:${attemptId}`;
+  }
+
+  function readWorkspaceCursor(setId: string, attemptId: string | null, totalQuestions: number) {
+    if (typeof window === "undefined" || !attemptId || totalQuestions <= 0) return null;
+    try {
+      const raw = window.localStorage.getItem(workspaceCursorKey(setId, attemptId));
+      if (!raw) return null;
+      const parsed = JSON.parse(raw) as { index?: unknown };
+      const index = Number(parsed?.index);
+      if (!Number.isInteger(index) || index < 0 || index >= totalQuestions) return null;
+      return index;
+    } catch {
+      return null;
+    }
+  }
+
+  function writeWorkspaceCursor(setId: string | null, attemptId: string | null, index: number) {
+    if (typeof window === "undefined" || !setId || !attemptId || !Number.isInteger(index) || index < 0) return;
+    try {
+      window.localStorage.setItem(workspaceCursorKey(setId, attemptId), JSON.stringify({ index, updatedAt: Date.now() }));
+    } catch {
+      // ignore local cursor failures
+    }
+  }
+
+  function clearWorkspaceCursor(setId: string | null, attemptId: string | null) {
+    if (typeof window === "undefined" || !setId || !attemptId) return;
+    try {
+      window.localStorage.removeItem(workspaceCursorKey(setId, attemptId));
+    } catch {
+      // ignore
+    }
+  }
+
   async function inspectResumableDraft(draft: ActiveAiDraft): Promise<ResumableAiDraft | null> {
     if (!userId) return null;
 
@@ -1132,6 +1168,7 @@ export default function MaterialDetailClient({
 
     const firstUnanswered = rows.findIndex((row) => !answeredByQuestion.get(row.id));
     if (firstUnanswered === -1) return null;
+    const savedCursor = readWorkspaceCursor(draft.setId, attemptId, rows.length);
 
     return {
       ...draft,
@@ -1145,7 +1182,7 @@ export default function MaterialDetailClient({
       progress: {
         answeredCount: answeredByQuestion.size,
         totalCount: rows.length,
-        nextQuestionNumber: firstUnanswered + 1,
+        nextQuestionNumber: (savedCursor ?? firstUnanswered) + 1,
       },
     };
   }
@@ -1243,6 +1280,10 @@ export default function MaterialDetailClient({
     }
 
     const nextIndex = firstUnansweredIndex(questions, restoredAnswers, restoredWritten);
+    const savedCursor = readWorkspaceCursor(setId, attemptId, questions.length);
+    const resumeIndex = nextIndex === -1
+      ? Math.max(0, questions.length - 1)
+      : savedCursor ?? nextIndex;
     setGeneratedQuestions(questions);
     setActiveDraftSetId(setId);
     setActiveAttemptId(attemptId);
@@ -1254,9 +1295,9 @@ export default function MaterialDetailClient({
     setHintShown({});
     setGenerateMoreError(null);
     syncedQuizMissesRef.current = null;
-    setCurrentQuestionIndex(nextIndex === -1 ? Math.max(0, questions.length - 1) : nextIndex);
+    setCurrentQuestionIndex(resumeIndex);
     setQuizState(nextIndex === -1 ? "results" : "quiz");
-    if (nextIndex === -1) void markWorkspaceAttemptComplete(attemptId, questions);
+    if (nextIndex === -1) void markWorkspaceAttemptComplete(attemptId, questions, setId, restoredAnswers, restoredWritten);
   }
 
   async function generateWorkspaceDraft(args?: {
@@ -1389,8 +1430,14 @@ export default function MaterialDetailClient({
     return questions.length > 0 && firstUnansweredIndex(questions, currentAnswers, currentWrittenAnswers) === -1;
   }
 
-  async function markWorkspaceAttemptComplete(attemptId: string | null = activeAttemptId, questions: GeneratedQuestion[] = qs) {
-    if (!attemptId || !userId || !hasAnsweredEveryWorkspaceQuestion(questions)) return;
+  async function markWorkspaceAttemptComplete(
+    attemptId: string | null = activeAttemptId,
+    questions: GeneratedQuestion[] = qs,
+    setId: string | null = activeDraftSetId,
+    currentAnswers: typeof answers = answers,
+    currentWrittenAnswers: typeof writtenAnswers = writtenAnswers
+  ) {
+    if (!attemptId || !userId || !hasAnsweredEveryWorkspaceQuestion(questions, currentAnswers, currentWrittenAnswers)) return;
     await supabase
       .from("study_practice_attempts")
       .update({
@@ -1400,6 +1447,7 @@ export default function MaterialDetailClient({
       } as any)
       .eq("id", attemptId)
       .eq("user_id", userId);
+    clearWorkspaceCursor(setId, attemptId);
   }
 
   function handleMcqChoice(questionIndex: number, question: GeneratedMcqQuestion, key: OptionKey, correct: boolean) {
@@ -1458,6 +1506,12 @@ export default function MaterialDetailClient({
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [quizState, activeAttemptId, generatedQuestions, answers, writtenAnswers]);
+
+  useEffect(() => {
+    if (quizState !== "quiz") return;
+    writeWorkspaceCursor(activeDraftSetId, activeAttemptId, currentQuestionIndex);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [quizState, activeDraftSetId, activeAttemptId, currentQuestionIndex]);
 
   async function handleToggleSave() {
     setSaving(true);
@@ -1561,6 +1615,9 @@ export default function MaterialDetailClient({
     if (quizState === "loading") {
       setGenerationStatus("Your AI draft is still being saved. Practice will open when it is ready.");
       return;
+    }
+    if (quizState === "quiz") {
+      writeWorkspaceCursor(activeDraftSetId, activeAttemptId, currentQuestionIndex);
     }
     setQuizState("idle");
   }
