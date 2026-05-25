@@ -1733,12 +1733,13 @@ export default function MaterialDetailClient({
               <p className="mt-1 text-xs text-muted-brand">Continue your open practice session for this material.</p>
             </div>
             <div className="p-4">
-              <Link
-                href={`/study/materials/${m.id}/practice`}
+              <button
+                type="button"
+                onClick={() => void openAiPracticeWorkspace()}
                 className="flex w-full items-center justify-center gap-2 rounded-2xl bg-primary px-4 py-3 text-sm font-bold text-white shadow-sm transition hover:opacity-90 focus-visible:outline-none"
               >
                 <PenLine className="h-4 w-4" /> Open practice session
-              </Link>
+              </button>
             </div>
           </div>
 
