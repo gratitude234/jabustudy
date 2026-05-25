@@ -47,6 +47,9 @@ type OptionKey = "A" | "B" | "C" | "D";
 
 type GeneratedMcqQuestion = {
   question_type?: "mcq" | null;
+  dbQuestionId?: string;
+  optionIds?: Partial<Record<OptionKey, string>>;
+  setId?: string;
   question: string;
   options: Record<OptionKey, string>;
   answer: OptionKey;
@@ -69,6 +72,8 @@ type GeneratedMcqQuestion = {
 
 type GeneratedWrittenQuestion = {
   question_type: "short_answer" | "theory";
+  dbQuestionId?: string;
+  setId?: string;
   question: string;
   model_answer: string;
   marking_points: string[];
@@ -141,6 +146,38 @@ type PreviousGeneratedSet = {
     completed_at: string | null;
     updated_at: string | null;
   } | null;
+};
+
+type ActiveAiDraft = {
+  setId: string;
+  title: string | null;
+  questionsCount: number;
+  createdAt: string | null;
+  expiresAt: string | null;
+  requestSignature: string | null;
+  attempt: {
+    id: string;
+    status: string | null;
+    updatedAt: string | null;
+  } | null;
+};
+
+type GenerationTrustStatus = {
+  ok?: boolean;
+  message?: string;
+  credits?: {
+    balance: number;
+    cost: number;
+    canAfford: boolean;
+  };
+  dailyLimit?: {
+    limit: number;
+    used: number;
+    remaining: number;
+    retryAfterSeconds?: number | null;
+  };
+  matchingDraft?: ActiveAiDraft | null;
+  latestDraft?: ActiveAiDraft | null;
 };
 
 const STUDENT_GENERATION_MODES: Array<{ value: GenerationMode; label: string; sub: string }> = [
@@ -841,11 +878,16 @@ export default function MaterialDetailClient({
   const [streamingQuestions, setStreamingQuestions] = useState<GeneratedQuestion[]>([]);
   const [generationStatus, setGenerationStatus] = useState("Preparing question generation...");
   const [generationMode, setGenerationMode] = useState<GenerationMode>("auto");
+  const [generationTrust, setGenerationTrust] = useState<GenerationTrustStatus | null>(null);
+  const [generationStatusLoading, setGenerationStatusLoading] = useState(false);
+  const [matchingDraft, setMatchingDraft] = useState<ActiveAiDraft | null>(null);
+  const [activeDraftSetId, setActiveDraftSetId] = useState<string | null>(null);
+  const [activeAttemptId, setActiveAttemptId] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<"practice" | "read" | "info">("practice");
   const [prevSets, setPrevSets] = useState<PreviousGeneratedSet[]>([]);
 
   // Quiz state machine
-  const [quizState, setQuizState] = useState<"idle" | "loading" | "quiz" | "results">("idle");
+  const [quizState, setQuizState] = useState<"idle" | "configure" | "loading" | "quiz" | "results">("idle");
   const [quizConfig, setQuizConfig] = useState<{ count: number; difficulty: "easy" | "mixed" | "hard"; focus: string; questionFormat: QuestionFormat }>({
     count: 10,
     difficulty: "mixed",
@@ -883,52 +925,53 @@ export default function MaterialDetailClient({
     })();
   }, [m.uploader_id]);
 
-  useEffect(() => {
+  async function loadPreviousGeneratedSets(cancelled?: () => boolean) {
     if (!userId) {
       setPrevSets([]);
       return;
     }
 
+    const { data: sets } = await supabase
+      .from("study_quiz_sets")
+      .select("id, title, created_at, questions_count")
+      .eq("source_material_id", m.id)
+      .order("created_at", { ascending: false })
+      .limit(5);
+
+    const materialSets = (sets ?? []) as Array<{
+      id: string;
+      title: string | null;
+      created_at: string | null;
+      questions_count: number | null;
+    }>;
+
+    if (!materialSets.length) {
+      if (!cancelled?.()) setPrevSets([]);
+      return;
+    }
+
+    const { data: attempts } = await supabase
+      .from("study_practice_attempts")
+      .select("set_id, status, completed_at, updated_at")
+      .eq("user_id", userId)
+      .in("set_id", materialSets.map((set) => set.id))
+      .order("updated_at", { ascending: false });
+
+    const attemptMap = new Map<string, PreviousGeneratedSet["attempt"]>();
+    for (const attempt of (attempts ?? []) as NonNullable<PreviousGeneratedSet["attempt"]>[]) {
+      if (!attemptMap.has(attempt.set_id)) attemptMap.set(attempt.set_id, attempt);
+    }
+
+    if (!cancelled?.()) {
+      setPrevSets(materialSets.map((set) => ({ ...set, attempt: attemptMap.get(set.id) ?? null })));
+    }
+  }
+
+  useEffect(() => {
     let cancelled = false;
-
-    void (async () => {
-      const { data: sets } = await supabase
-        .from("study_quiz_sets")
-        .select("id, title, created_at, questions_count")
-        .eq("source_material_id", m.id)
-        .order("created_at", { ascending: false })
-        .limit(5);
-
-      const materialSets = (sets ?? []) as Array<{
-        id: string;
-        title: string | null;
-        created_at: string | null;
-        questions_count: number | null;
-      }>;
-
-      if (!materialSets.length) {
-        if (!cancelled) setPrevSets([]);
-        return;
-      }
-
-      const { data: attempts } = await supabase
-        .from("study_practice_attempts")
-        .select("set_id, status, completed_at, updated_at")
-        .eq("user_id", userId)
-        .in("set_id", materialSets.map((set) => set.id))
-        .order("updated_at", { ascending: false });
-
-      const attemptMap = new Map<string, PreviousGeneratedSet["attempt"]>();
-      for (const attempt of (attempts ?? []) as NonNullable<PreviousGeneratedSet["attempt"]>[]) {
-        if (!attemptMap.has(attempt.set_id)) attemptMap.set(attempt.set_id, attempt);
-      }
-
-      if (!cancelled) {
-        setPrevSets(materialSets.map((set) => ({ ...set, attempt: attemptMap.get(set.id) ?? null })));
-      }
-    })();
-
+    void loadPreviousGeneratedSets(() => cancelled);
     return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [m.id, userId]);
 
   // Hide bottom nav while quiz sheet is open
@@ -960,6 +1003,392 @@ export default function MaterialDetailClient({
         .filter((t): t is string => Boolean(t))
     )
   ).slice(0, 2);
+
+  function signInForWorkspace() {
+    if (typeof window === "undefined") return;
+    window.location.href = `/login?next=/study/materials/${m.id}`;
+  }
+
+  function resetWorkspaceProgress() {
+    setAnswers({});
+    setWrittenAnswers({});
+    setWrittenCompared({});
+    setWrittenGradeStates({});
+    setCurrentQuestionIndex(0);
+    setRetryPool(null);
+    setHintShown({});
+    setSavedSetId(null);
+    setSaveQsError(null);
+    setGenerateMoreError(null);
+    syncedQuizMissesRef.current = null;
+  }
+
+  function buildGenerationParams(config = quizConfig, mode: GenerationMode = generationMode) {
+    const intent = resolveGenerationIntent(mode, config);
+    const params = new URLSearchParams({
+      materialId: m.id,
+      count: String(config.count),
+      difficulty: config.difficulty,
+      questionFormat: config.questionFormat,
+      generationIntent: intent,
+    });
+    if (config.focus.trim()) params.set("focus", config.focus.trim());
+    return { params, intent };
+  }
+
+  async function refreshGenerationStatus(config = quizConfig, mode: GenerationMode = generationMode) {
+    if (!userId) {
+      setGenerationTrust(null);
+      setMatchingDraft(null);
+      return;
+    }
+
+    setGenerationStatusLoading(true);
+    try {
+      const { params } = buildGenerationParams(config, mode);
+      const res = await fetch(`/api/ai/generate-questions/status?${params.toString()}`, { cache: "no-store" });
+      const data = (await res.json().catch(() => null)) as GenerationTrustStatus | null;
+      if (!res.ok || !data?.ok) throw new Error(data?.message || "Could not load generation status.");
+      setGenerationTrust(data);
+      setMatchingDraft(data.matchingDraft ?? null);
+    } catch (error) {
+      setGenerationTrust({ ok: false, message: error instanceof Error ? error.message : "Could not load generation status." });
+      setMatchingDraft(null);
+    } finally {
+      setGenerationStatusLoading(false);
+    }
+  }
+
+  function mapDraftQuestion(row: any, setId: string): GeneratedQuestion | null {
+    const questionType = questionTypeOf({
+      question_type: row?.question_type ?? null,
+      question: String(row?.prompt ?? ""),
+      options: { A: "", B: "", C: "", D: "" },
+      answer: "A",
+      explanation: "",
+    } as GeneratedQuestion);
+
+    if (questionType === "mcq") {
+      const rawOptions = Array.isArray(row?.study_quiz_options) ? row.study_quiz_options : [];
+      const sortedOptions = [...rawOptions].sort((a, b) => (Number(a?.position ?? 0) - Number(b?.position ?? 0)));
+      const options: Record<OptionKey, string> = { A: "", B: "", C: "", D: "" };
+      const optionIds: Partial<Record<OptionKey, string>> = {};
+      let answer: OptionKey = "A";
+
+      (["A", "B", "C", "D"] as const).forEach((key, index) => {
+        const opt = sortedOptions[index];
+        options[key] = String(opt?.text ?? "");
+        if (opt?.id) optionIds[key] = String(opt.id);
+        if (opt?.is_correct) answer = key;
+      });
+
+      return {
+        question_type: "mcq",
+        dbQuestionId: String(row.id),
+        optionIds,
+        setId,
+        question: String(row?.prompt ?? ""),
+        options,
+        answer,
+        explanation: String(row?.explanation ?? row?.ai_explanation ?? ""),
+        hint: typeof row?.hint === "string" ? row.hint : undefined,
+        questionKind: row?.question_kind ?? undefined,
+        difficultyLevel: row?.difficulty_level ?? undefined,
+        cognitiveLevel: row?.cognitive_level ?? undefined,
+        sourceTopic: row?.source_topic ?? undefined,
+        questionFingerprint: row?.question_fingerprint ?? undefined,
+        generationMeta: row?.generation_meta ?? null,
+        studyRef: row?.study_ref && typeof row.study_ref === "object" ? row.study_ref : undefined,
+      };
+    }
+
+    return {
+      question_type: questionType === "theory" ? "theory" : "short_answer",
+      dbQuestionId: String(row.id),
+      setId,
+      question: String(row?.prompt ?? ""),
+      model_answer: String(row?.model_answer ?? ""),
+      marking_points: Array.isArray(row?.marking_points)
+        ? row.marking_points.map((point: unknown) => String(point ?? "")).filter(Boolean)
+        : [],
+      explanation: String(row?.explanation ?? row?.ai_explanation ?? ""),
+      hint: typeof row?.hint === "string" ? row.hint : undefined,
+      questionKind: row?.question_kind ?? undefined,
+      difficultyLevel: row?.difficulty_level ?? undefined,
+      cognitiveLevel: row?.cognitive_level ?? undefined,
+      sourceTopic: row?.source_topic ?? undefined,
+      questionFingerprint: row?.question_fingerprint ?? undefined,
+      generationMeta: row?.generation_meta ?? null,
+      studyRef: row?.study_ref && typeof row.study_ref === "object" ? row.study_ref : undefined,
+    };
+  }
+
+  function firstUnansweredIndex(
+    questions: GeneratedQuestion[],
+    restoredAnswers: Record<number, { chosen: string; correct: boolean; skipped: boolean }>,
+    restoredWritten: Record<number, string>
+  ) {
+    return questions.findIndex((question, index) => {
+      if (isMcqQuestion(question)) return !restoredAnswers[index];
+      return !(restoredWritten[index] ?? "").trim();
+    });
+  }
+
+  async function ensureWorkspaceAttempt(setId: string, providedAttemptId?: string | null) {
+    if (!userId) throw new Error("Please sign in to use the AI practice workspace.");
+
+    if (providedAttemptId) {
+      const { data } = await supabase
+        .from("study_practice_attempts")
+        .select("id,status")
+        .eq("id", providedAttemptId)
+        .eq("user_id", userId)
+        .eq("set_id", setId)
+        .maybeSingle();
+      if (data?.id) return String(data.id);
+    }
+
+    const { data: existingAttempt } = await supabase
+      .from("study_practice_attempts")
+      .select("id")
+      .eq("user_id", userId)
+      .eq("set_id", setId)
+      .eq("status", "in_progress")
+      .order("created_at", { ascending: false })
+      .maybeSingle();
+
+    if (existingAttempt?.id) return String(existingAttempt.id);
+
+    const startedIso = new Date().toISOString();
+    const { data: created, error } = await supabase
+      .from("study_practice_attempts")
+      .insert({ user_id: userId, set_id: setId, status: "in_progress", started_at: startedIso } as any)
+      .select("id")
+      .maybeSingle();
+
+    if (error || !created?.id) throw new Error(error?.message || "Could not create practice session.");
+    return String(created.id);
+  }
+
+  async function loadDraftWorkspace(setId: string, providedAttemptId?: string | null) {
+    if (!userId) {
+      signInForWorkspace();
+      return;
+    }
+
+    setGenerationStatus("Loading your saved AI draft...");
+    const [{ data: questionRows, error: questionError }, attemptId] = await Promise.all([
+      supabase
+        .from("study_quiz_questions")
+        .select(
+          "id,prompt,explanation,question_type,model_answer,marking_points,ai_explanation,study_ref,question_kind,difficulty_level,cognitive_level,source_topic,question_fingerprint,generation_meta,position," +
+          "study_quiz_options(id,question_id,text,is_correct,position)"
+        )
+        .eq("set_id", setId)
+        .order("position", { ascending: true }),
+      ensureWorkspaceAttempt(setId, providedAttemptId),
+    ]);
+
+    if (questionError) throw questionError;
+
+    const questions = ((questionRows ?? []) as any[])
+      .map((row) => mapDraftQuestion(row, setId))
+      .filter((question): question is GeneratedQuestion => Boolean(question));
+
+    if (!questions.length) throw new Error("No questions found in this AI draft.");
+
+    const { data: answerRows, error: answerError } = await supabase
+      .from("study_attempt_answers")
+      .select("question_id, selected_option_id, text_answer")
+      .eq("attempt_id", attemptId);
+
+    if (answerError) throw answerError;
+
+    const questionIndexById = new Map<string, number>();
+    questions.forEach((question, index) => {
+      if (question.dbQuestionId) questionIndexById.set(question.dbQuestionId, index);
+    });
+
+    const restoredAnswers: Record<number, { chosen: string; correct: boolean; skipped: boolean }> = {};
+    const restoredWritten: Record<number, string> = {};
+
+    for (const row of (answerRows ?? []) as any[]) {
+      const index = questionIndexById.get(String(row?.question_id ?? ""));
+      if (index === undefined) continue;
+      const question = questions[index];
+
+      if (isMcqQuestion(question) && row?.selected_option_id) {
+        const chosen = (Object.entries(question.optionIds ?? {}) as Array<[OptionKey, string]>)
+          .find(([, optionId]) => optionId === String(row.selected_option_id))?.[0];
+        if (chosen) restoredAnswers[index] = { chosen, correct: chosen === question.answer, skipped: false };
+      } else if (typeof row?.text_answer === "string") {
+        restoredWritten[index] = row.text_answer;
+      }
+    }
+
+    const nextIndex = firstUnansweredIndex(questions, restoredAnswers, restoredWritten);
+    setGeneratedQuestions(questions);
+    setActiveDraftSetId(setId);
+    setActiveAttemptId(attemptId);
+    setAnswers(restoredAnswers);
+    setWrittenAnswers(restoredWritten);
+    setWrittenCompared({});
+    setWrittenGradeStates({});
+    setRetryPool(null);
+    setHintShown({});
+    setSavedSetId(null);
+    setSaveQsError(null);
+    setGenerateMoreError(null);
+    syncedQuizMissesRef.current = null;
+    setCurrentQuestionIndex(nextIndex === -1 ? Math.max(0, questions.length - 1) : nextIndex);
+    setQuizState(nextIndex === -1 ? "results" : "quiz");
+  }
+
+  async function generateWorkspaceDraft(args?: {
+    mode?: GenerationMode;
+    config?: typeof quizConfig;
+    coveredQuestions?: string[];
+    statusMessage?: string;
+  }) {
+    if (!userId) {
+      signInForWorkspace();
+      return;
+    }
+
+    const mode = args?.mode ?? generationMode;
+    const config = args?.config ?? quizConfig;
+    const coveredQuestions = args?.coveredQuestions ?? [];
+    const { intent } = buildGenerationParams(config, mode);
+
+    setGeneratingMore(true);
+    setGenerateMoreError(null);
+    setSaveQsError(null);
+    setStreamingQuestions([]);
+    setGenerationStatus(args?.statusMessage ?? "Preparing question generation...");
+    setGenerationMode(mode);
+    setQuizState("loading");
+
+    try {
+      const res = await fetch("/api/ai/generate-questions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          materialId: m.id,
+          count: config.count,
+          difficulty: config.difficulty,
+          focus: config.focus || undefined,
+          questionFormat: config.questionFormat,
+          coveredQuestions,
+          persistDraft: true,
+          generationIntent: intent,
+        }),
+      });
+
+      const result = await readNdjsonQuestions(
+        res,
+        (question) => setStreamingQuestions((prev) => [...prev, question]),
+        (status) => setGenerationStatus(status.message)
+      );
+
+      if (!result.draftSetId) throw new Error("Questions generated, but the draft was not saved. No credits charged.");
+      if (result.receiptMessage) showToast(result.receiptMessage);
+      if (typeof result.creditsRemaining === "number") {
+        setGenerationTrust((prev) => prev ? {
+          ...prev,
+          credits: prev.credits ? { ...prev.credits, balance: result.creditsRemaining! } : prev.credits,
+        } : prev);
+      }
+      setGenerationAi(result.ai);
+      await loadDraftWorkspace(result.draftSetId, null);
+      void refreshGenerationStatus(config, mode);
+    } catch (error) {
+      const detail = error instanceof Error ? error.message : "Something went wrong.";
+      setGenerateMoreError(detail.includes("no credits charged") ? detail : `Generation failed - no credits charged. ${detail}`);
+      setQuizState("configure");
+    } finally {
+      setGeneratingMore(false);
+      setStreamingQuestions([]);
+    }
+  }
+
+  async function openAiPracticeWorkspace() {
+    if (!userId) {
+      signInForWorkspace();
+      return;
+    }
+    resetWorkspaceProgress();
+    setActiveDraftSetId(null);
+    setActiveAttemptId(null);
+    setGeneratedQuestions(null);
+    setGenerationStatus("Preparing question generation...");
+    setQuizState("configure");
+    await refreshGenerationStatus();
+  }
+
+  async function handleStartWorkspaceGeneration() {
+    if (matchingDraft?.setId) {
+      setQuizState("loading");
+      try {
+        await loadDraftWorkspace(matchingDraft.setId, matchingDraft.attempt?.id ?? null);
+        showToast("Saved draft ready - no credits charged.");
+      } catch (error) {
+        setGenerateMoreError(error instanceof Error ? error.message : "Could not open saved draft.");
+        setQuizState("configure");
+      }
+      return;
+    }
+
+    await generateWorkspaceDraft();
+  }
+
+  function handleMcqChoice(questionIndex: number, question: GeneratedMcqQuestion, key: OptionKey, correct: boolean) {
+    setAnswers((prev) => ({ ...prev, [questionIndex]: { chosen: key, correct, skipped: false } }));
+
+    const optionId = question.optionIds?.[key];
+    if (!activeAttemptId || !question.dbQuestionId || !optionId) return;
+
+    void supabase.from("study_attempt_answers").upsert(
+      {
+        attempt_id: activeAttemptId,
+        question_id: question.dbQuestionId,
+        selected_option_id: optionId,
+        answered_at: new Date().toISOString(),
+      } as any,
+      { onConflict: "attempt_id,question_id" }
+    );
+  }
+
+  useEffect(() => {
+    if (!activeAttemptId || quizState === "loading") return;
+    const writtenRows = (generatedQuestions ?? [])
+      .map((question, index) => ({ question, index }))
+      .filter(({ question, index }) => isWrittenQuestion(question) && question.dbQuestionId && Object.prototype.hasOwnProperty.call(writtenAnswers, index));
+
+    if (!writtenRows.length) return;
+
+    const timer = setTimeout(() => {
+      const now = new Date().toISOString();
+      const rows = writtenRows.map(({ question, index }) => ({
+        attempt_id: activeAttemptId,
+        question_id: question.dbQuestionId!,
+        text_answer: writtenAnswers[index] ?? "",
+        answered_at: now,
+      }));
+
+      void supabase.from("study_attempt_answers").upsert(rows as any[], { onConflict: "attempt_id,question_id" });
+    }, 650);
+
+    return () => clearTimeout(timer);
+  }, [activeAttemptId, generatedQuestions, quizState, writtenAnswers]);
+
+  useEffect(() => {
+    if (quizState !== "configure" || !userId) return;
+    const timer = setTimeout(() => {
+      void refreshGenerationStatus();
+    }, 350);
+    return () => clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [generationMode, quizConfig, quizState, userId]);
 
   useEffect(() => {
     if (quizState !== "results" || !savedSetId || missedList.length === 0) return;
@@ -1070,60 +1499,11 @@ export default function MaterialDetailClient({
   }
 
   async function handleGenerateMore(mode: GenerationMode = generationMode) {
-    const intent = resolveGenerationIntent(mode, quizConfig);
-    setGeneratingMore(true);
-    setGenerateMoreError(null);
-    setStreamingQuestions([]);
-    setGenerationStatus("Preparing the next set...");
-    setGenerationMode(mode);
-    try {
-      const res = await fetch("/api/ai/generate-questions", {
-        method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          materialId: m.id,
-          count: quizConfig.count,
-          difficulty: quizConfig.difficulty,
-          focus: quizConfig.focus || undefined,
-          questionFormat: quizConfig.questionFormat,
-          coveredQuestions: generatedQuestions?.map((q) => q.question) ?? [],
-          generationIntent: intent,
-        }),
-      });
-      const { questions: moreQuestions, ai: moreAi } = await readNdjsonQuestions(res, (q) => {
-        setStreamingQuestions((prev) => [...prev, q]);
-      }, (status) => {
-        setGenerationStatus(status.message);
-      });
-      if (!moreQuestions.length) throw new Error("Failed to generate questions.");
-      console.info("[study-ai] generated more questions", {
-        provider: moreAi?.provider ?? "unknown",
-        model: moreAi?.model ?? "unknown",
-        inputMode: moreAi?.inputMode ?? "unknown",
-        reason: moreAi?.reason ?? null,
-        fallbackProvider: moreAi?.fallbackProvider ?? null,
-        fallbackReason: moreAi?.fallbackReason ?? null,
-        count: moreQuestions.length,
-      });
-      setGeneratedQuestions(moreQuestions);
-      setGenerationAi(moreAi);
-      setAnswers({});
-      setWrittenAnswers({});
-      setWrittenCompared({});
-      setWrittenGradeStates({});
-      setCurrentQuestionIndex(0);
-      setRetryPool(null);
-      setHintShown({});
-      setSavedSetId(null);
-      setSaveQsError(null);
-      syncedQuizMissesRef.current = null;
-      setQuizState("quiz");
-    } catch (e: unknown) {
-      const detail = e instanceof Error ? e.message : "Something went wrong.";
-      setGenerateMoreError(detail.includes("no credits charged") ? detail : `Generation failed - no credits charged. ${detail}`);
-    } finally {
-      setGeneratingMore(false);
-      setStreamingQuestions([]);
-    }
+    await generateWorkspaceDraft({
+      mode,
+      coveredQuestions: generatedQuestions?.map((q) => q.question) ?? [],
+      statusMessage: "Preparing the next set...",
+    });
   }
 
   async function handleGenerateMoreFromMistakes() {
@@ -1135,49 +1515,14 @@ export default function MaterialDetailClient({
       )
     );
     if (!uniqueTopics.length) return handleGenerateMore("weak_areas");
-    setGeneratingMore(true);
-    setGenerateMoreError(null);
-    setStreamingQuestions([]);
-    setGenerationStatus("Generating questions on your weak topics...");
-    setGenerationMode("weak_areas");
-    try {
-      const res = await fetch("/api/ai/generate-questions", {
-        method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          materialId: m.id,
-          count: quizConfig.count,
-          difficulty: quizConfig.difficulty,
-          focus: uniqueTopics.join(", "),
-          questionFormat: quizConfig.questionFormat,
-          coveredQuestions: generatedQuestions?.map((q) => q.question) ?? [],
-          generationIntent: "weak_areas",
-        }),
-      });
-      const { questions: moreQuestions, ai: moreAi } = await readNdjsonQuestions(res,
-        (q) => { setStreamingQuestions((prev) => [...prev, q]); },
-        (status) => { setGenerationStatus(status.message); }
-      );
-      if (!moreQuestions.length) throw new Error("Failed to generate questions.");
-      setGeneratedQuestions(moreQuestions);
-      setGenerationAi(moreAi);
-      setAnswers({});
-      setWrittenAnswers({});
-      setWrittenCompared({});
-      setWrittenGradeStates({});
-      setCurrentQuestionIndex(0);
-      setRetryPool(null);
-      setHintShown({});
-      setSavedSetId(null);
-      setSaveQsError(null);
-      syncedQuizMissesRef.current = null;
-      setQuizState("quiz");
-    } catch (e: unknown) {
-      const detail = e instanceof Error ? e.message : "Something went wrong.";
-      setGenerateMoreError(detail.includes("no credits charged") ? detail : `Generation failed - no credits charged. ${detail}`);
-    } finally {
-      setGeneratingMore(false);
-      setStreamingQuestions([]);
-    }
+    const focusedConfig = { ...quizConfig, focus: uniqueTopics.join(", ") };
+    setQuizConfig(focusedConfig);
+    await generateWorkspaceDraft({
+      mode: "weak_areas",
+      config: focusedConfig,
+      coveredQuestions: generatedQuestions?.map((q) => q.question) ?? [],
+      statusMessage: "Generating questions on your weak topics...",
+    });
   }
 
   async function gradeGeneratedWrittenAnswer(questionIndex: number, question: GeneratedWrittenQuestion) {
@@ -1219,27 +1564,20 @@ export default function MaterialDetailClient({
   }
 
   async function handleSaveQuestions() {
-    if (!generatedQuestions) return;
+    if (!activeDraftSetId) {
+      setSaveQsError("No AI draft is open to save.");
+      return;
+    }
     setSavingQs(true);
     setSaveQsError(null);
     try {
-      const res = await fetch("/api/ai/save-generated-questions", {
-        method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ materialId: m.id, questions: generatedQuestions }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error ?? "Failed to save questions.");
-      setSavedSetId(data.setId);
-      if (data.repaired || data.skippedCount > 0) {
-        const savedCount = Number(data.savedCount ?? generatedQuestions.length);
-        const replacedCount = Number(data.replacedCount ?? 0);
-        const skippedCount = Number(data.skippedCount ?? 0);
-        const details = [
-          replacedCount > 0 ? `replaced ${replacedCount}` : "",
-          skippedCount > 0 ? `skipped ${skippedCount}` : "",
-        ].filter(Boolean).join(", ");
-        showToast(`Saved ${savedCount} questions${details ? ` (${details} duplicate${replacedCount + skippedCount === 1 ? "" : "s"})` : ""}`);
-      }
+      const res = await fetch(`/api/ai/generated-drafts/${activeDraftSetId}/keep`, { method: "POST" });
+      const data = await res.json().catch(() => null) as { ok?: boolean; setId?: string; message?: string; error?: string } | null;
+      if (!res.ok || !data?.ok) throw new Error(data?.message || data?.error || "Failed to save questions.");
+      setSavedSetId(data.setId ?? activeDraftSetId);
+      setMatchingDraft(null);
+      showToast("Saved to practice library");
+      await loadPreviousGeneratedSets();
       syncedQuizMissesRef.current = null;
     } catch (e: unknown) {
       setSaveQsError(e instanceof Error ? e.message : "Failed to save questions.");
@@ -1564,12 +1902,13 @@ export default function MaterialDetailClient({
               <p className="mt-1 text-xs text-muted-brand">Continue your open practice session for this material.</p>
             </div>
             <div className="p-4">
-              <Link
-                href={`/study/materials/${m.id}/practice`}
-                className="flex w-full items-center justify-center gap-2 rounded-2xl bg-primary px-4 py-3 text-sm font-bold text-white shadow-sm transition hover:opacity-90"
+              <button
+                type="button"
+                onClick={() => void openAiPracticeWorkspace()}
+                className="flex w-full items-center justify-center gap-2 rounded-2xl bg-primary px-4 py-3 text-sm font-bold text-white shadow-sm transition hover:opacity-90 focus-visible:outline-none"
               >
-                <PenLine className="h-4 w-4" /> Open practice session
-              </Link>
+                <PenLine className="h-4 w-4" /> Open AI workspace
+              </button>
             </div>
           </div>
 
@@ -1693,6 +2032,7 @@ export default function MaterialDetailClient({
                   </p>
                   <p className="text-sm font-bold text-foreground">
                     {quizState === "quiz" ? `Q ${currentQuestionIndex + 1} / ${qs.length}` :
+                     quizState === "configure" ? "Configure practice" :
                      "Results"}
                   </p>
                   {quizState === "quiz" && (
@@ -1734,6 +2074,153 @@ export default function MaterialDetailClient({
                   <X className="h-4 w-4" />
                 </button>
               </div>
+
+              {quizState === "configure" && (
+                <div className="flex-1 overflow-y-auto px-4 py-5 pb-8 md:px-6">
+                  <div className="mx-auto max-w-2xl space-y-5">
+                    <div className="rounded-2xl border border-border bg-background p-4">
+                      <div className="flex flex-wrap items-start justify-between gap-3">
+                        <div>
+                          <p className="text-sm font-extrabold text-foreground">Generate from this material</p>
+                          <p className="mt-1 text-xs leading-relaxed text-muted-brand">
+                            Drafts and answers stay tied to this material until you save them to your practice library.
+                          </p>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => void refreshGenerationStatus()}
+                          disabled={generationStatusLoading}
+                          className="inline-flex items-center gap-1.5 rounded-xl border border-border bg-card px-3 py-2 text-xs font-semibold text-foreground transition hover:bg-secondary/50 disabled:opacity-50"
+                        >
+                          {generationStatusLoading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
+                          Refresh
+                        </button>
+                      </div>
+
+                      <div className="mt-4 grid gap-3 sm:grid-cols-3">
+                        <div className="rounded-xl border border-border bg-card px-3 py-2">
+                          <p className="text-[10px] font-extrabold uppercase tracking-wide text-muted-brand">Credits</p>
+                          <p className="mt-1 text-sm font-bold text-foreground">
+                            {generationTrust?.credits
+                              ? `${generationTrust.credits.balance} left`
+                              : generationStatusLoading ? "Checking..." : "Unavailable"}
+                          </p>
+                          {generationTrust?.credits && (
+                            <p className="text-[11px] text-muted-brand">Cost: {generationTrust.credits.cost}</p>
+                          )}
+                        </div>
+                        <div className="rounded-xl border border-border bg-card px-3 py-2">
+                          <p className="text-[10px] font-extrabold uppercase tracking-wide text-muted-brand">Daily limit</p>
+                          <p className="mt-1 text-sm font-bold text-foreground">
+                            {generationTrust?.dailyLimit
+                              ? `${generationTrust.dailyLimit.remaining}/${generationTrust.dailyLimit.limit} left`
+                              : generationStatusLoading ? "Checking..." : "Unavailable"}
+                          </p>
+                          {generationTrust?.dailyLimit && (
+                            <p className="text-[11px] text-muted-brand">{generationTrust.dailyLimit.used} used today</p>
+                          )}
+                        </div>
+                        <div className="rounded-xl border border-border bg-card px-3 py-2">
+                          <p className="text-[10px] font-extrabold uppercase tracking-wide text-muted-brand">Draft</p>
+                          <p className="mt-1 text-sm font-bold text-foreground">
+                            {matchingDraft ? `${matchingDraft.questionsCount} saved Qs` : "No match"}
+                          </p>
+                          {matchingDraft?.createdAt && (
+                            <p className="text-[11px] text-muted-brand">{timeAgo(matchingDraft.createdAt)}</p>
+                          )}
+                        </div>
+                      </div>
+
+                      {generationTrust?.message && !generationTrust.ok && (
+                        <p className="mt-3 rounded-xl border border-rose-500/25 bg-rose-500/10 px-3 py-2 text-xs font-semibold text-rose-700 dark:text-rose-300">
+                          {generationTrust.message}
+                        </p>
+                      )}
+                      {matchingDraft && (
+                        <p className="mt-3 rounded-xl border border-primary/20 bg-primary-light px-3 py-2 text-xs font-semibold text-primary-text">
+                          Resume saved draft. Opening it will not charge credits.
+                        </p>
+                      )}
+                      {generateMoreError && (
+                        <p className="mt-3 rounded-xl border border-rose-500/25 bg-rose-500/10 px-3 py-2 text-xs font-semibold text-rose-700 dark:text-rose-300">
+                          {generateMoreError}
+                        </p>
+                      )}
+                    </div>
+
+                    <div className="grid gap-4 md:grid-cols-2">
+                      <label className="space-y-2">
+                        <span className="text-xs font-extrabold uppercase tracking-wide text-muted-brand">Question count</span>
+                        <select
+                          value={quizConfig.count}
+                          onChange={(e) => setQuizConfig((prev) => ({ ...prev, count: Number(e.target.value) }))}
+                          className="w-full rounded-2xl border border-border bg-background px-4 py-3 text-sm font-semibold text-foreground outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
+                        >
+                          {[5, 10, 15, 20].map((count) => (
+                            <option key={count} value={count}>{count} questions</option>
+                          ))}
+                        </select>
+                      </label>
+                      <label className="space-y-2">
+                        <span className="text-xs font-extrabold uppercase tracking-wide text-muted-brand">Format</span>
+                        <select
+                          value={quizConfig.questionFormat}
+                          onChange={(e) => setQuizConfig((prev) => ({ ...prev, questionFormat: e.target.value as QuestionFormat }))}
+                          className="w-full rounded-2xl border border-border bg-background px-4 py-3 text-sm font-semibold text-foreground outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
+                        >
+                          <option value="mixed">Mixed</option>
+                          <option value="mcq">Objective only</option>
+                          <option value="written">Written/theory</option>
+                        </select>
+                      </label>
+                      <label className="space-y-2">
+                        <span className="text-xs font-extrabold uppercase tracking-wide text-muted-brand">Difficulty</span>
+                        <select
+                          value={quizConfig.difficulty}
+                          onChange={(e) => setQuizConfig((prev) => ({ ...prev, difficulty: e.target.value as "easy" | "mixed" | "hard" }))}
+                          className="w-full rounded-2xl border border-border bg-background px-4 py-3 text-sm font-semibold text-foreground outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
+                        >
+                          <option value="easy">Easy</option>
+                          <option value="mixed">Mixed</option>
+                          <option value="hard">Hard</option>
+                        </select>
+                      </label>
+                      <label className="space-y-2">
+                        <span className="text-xs font-extrabold uppercase tracking-wide text-muted-brand">Generation mode</span>
+                        <select
+                          value={generationMode}
+                          onChange={(e) => setGenerationMode(e.target.value as GenerationMode)}
+                          className="w-full rounded-2xl border border-border bg-background px-4 py-3 text-sm font-semibold text-foreground outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
+                        >
+                          {STUDENT_GENERATION_MODES.map(({ value, label }) => (
+                            <option key={value} value={value}>{label}</option>
+                          ))}
+                        </select>
+                      </label>
+                    </div>
+
+                    <label className="block space-y-2">
+                      <span className="text-xs font-extrabold uppercase tracking-wide text-muted-brand">Focus area</span>
+                      <input
+                        value={quizConfig.focus}
+                        onChange={(e) => setQuizConfig((prev) => ({ ...prev, focus: e.target.value }))}
+                        placeholder="Optional topic, page range, or weak area"
+                        className="w-full rounded-2xl border border-border bg-background px-4 py-3 text-sm text-foreground outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/20"
+                      />
+                    </label>
+
+                    <button
+                      type="button"
+                      onClick={() => void handleStartWorkspaceGeneration()}
+                      disabled={generationStatusLoading || generatingMore || (generationTrust?.credits ? !generationTrust.credits.canAfford && !matchingDraft : false) || (generationTrust?.dailyLimit ? generationTrust.dailyLimit.remaining <= 0 && !matchingDraft : false)}
+                      className="inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-primary px-4 py-3 text-sm font-bold text-white shadow-sm transition hover:opacity-90 disabled:opacity-50 focus-visible:outline-none"
+                    >
+                      {generatingMore || generationStatusLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
+                      {matchingDraft ? "Resume saved draft" : `Generate ${quizConfig.count} questions`}
+                    </button>
+                  </div>
+                </div>
+              )}
 
               {/* ── Panel C: Quiz ── */}
               {quizState === "quiz" && currentQ && (
@@ -1800,7 +2287,7 @@ export default function MaterialDetailClient({
                                 disabled={answered}
                                 onClick={() => {
                                   if (answered) return;
-                                  setAnswers((prev) => ({ ...prev, [currentQuestionIndex]: { chosen: key, correct: isCorrect, skipped: false } }));
+                                  handleMcqChoice(currentQuestionIndex, currentQ, key, isCorrect);
                                 }}
                                 className={cn(
                                   "flex w-full items-start gap-2.5 rounded-xl border px-3.5 py-2.5 text-sm text-left transition focus-visible:outline-none",
@@ -2118,7 +2605,7 @@ export default function MaterialDetailClient({
                     </>
                   )}
                   {savedSetId ? (
-                    <Link href="/study/practice"
+                    <Link href={`/study/practice/${savedSetId}`}
                       className="inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-primary px-4 py-3 text-sm font-semibold text-white transition hover:opacity-90 focus-visible:outline-none">
                       Saved — view on practice page →
                     </Link>
