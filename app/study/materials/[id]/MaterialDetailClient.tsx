@@ -3,7 +3,6 @@
 // app/study/materials/[id]/MaterialDetailClient.tsx
 
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import {
   ArrowLeft,
@@ -15,7 +14,6 @@ import {
   ChevronRight,
   ChevronDown,
   ChevronUp,
-  Coins,
   Download,
   Eye,
   ExternalLink,
@@ -127,41 +125,9 @@ type AiGenerationMeta = {
   };
 };
 
-type GenerateQuestionsResponse = {
-  questions?: GeneratedQuestion[];
-  ai?: AiGenerationMeta;
-  error?: string;
-};
-
 type GenerationStreamStatus = {
   message: string;
   phase?: string;
-};
-
-type ActiveAiDraft = {
-  setId: string;
-  title: string | null;
-  questionsCount: number;
-  createdAt: string | null;
-  expiresAt: string | null;
-  requestSignature?: string | null;
-  attempt?: { id: string; status: string | null; updatedAt: string | null } | null;
-};
-
-type GenerationTrustStatus = {
-  credits: {
-    balance: number;
-    cost: number;
-    canAfford: boolean;
-  };
-  dailyLimit: {
-    limit: number;
-    used: number;
-    remaining: number;
-    retryAfterSeconds: number;
-  };
-  matchingDraft: ActiveAiDraft | null;
-  latestDraft: ActiveAiDraft | null;
 };
 
 type PreviousGeneratedSet = {
@@ -186,24 +152,11 @@ const STUDENT_GENERATION_MODES: Array<{ value: GenerationMode; label: string; su
   { value: "topic",             label: "Focus on a topic",          sub: "Use the focus area you type below." },
 ];
 
-const QUESTION_FORMATS: Array<{ value: QuestionFormat; label: string; sub: string }> = [
-  { value: "mixed", label: "Mixed", sub: "Objective, short-answer, and theory" },
-  { value: "mcq", label: "Objective", sub: "A-D questions only" },
-  { value: "written", label: "Written/Theory", sub: "Typed answers and marking points" },
-];
-
 function resolveGenerationIntent(mode: GenerationMode, config: { difficulty: "easy" | "mixed" | "hard"; focus: string }): GenerationIntent {
   if (mode !== "auto") return mode;
   if (config.focus.trim()) return "topic";
   if (config.difficulty === "hard") return "hard";
   return "weak_areas";
-}
-
-function generationModeCopy(mode: GenerationMode, config: { difficulty: "easy" | "mixed" | "hard"; focus: string }) {
-  if (mode !== "auto") return STUDENT_GENERATION_MODES.find((item) => item.value === mode)?.sub ?? "";
-  if (config.focus.trim()) return "Auto will focus on the topic you typed.";
-  if (config.difficulty === "hard") return "Auto will generate harder exam-style questions.";
-  return "Auto will cover weak areas first.";
 }
 
 type Course = {
@@ -242,11 +195,6 @@ function detectKind(m: Material): "pdf" | "image" | "other" {
   if (src.includes(".pdf")) return "pdf";
   if (src.match(/\.(png|jpg|jpeg|webp|gif)/)) return "image";
   return "other";
-}
-
-function isAiGenSupported(m: Material): boolean {
-  const src = (m.file_path ?? "").toLowerCase();
-  return /\.(pdf|png|jpg|jpeg|webp|docx|pptx)$/.test(src);
 }
 
 function fileTypeBadge(kind: "pdf" | "image" | "other", m: Material) {
@@ -856,24 +804,20 @@ export default function MaterialDetailClient({
   initialSaved = false,
   relatedMaterials: initialRelatedMaterials = [],
   fromCourse = null,
-  initialCredits = 20,
   userId,
 }: {
   material: Material;
   initialSaved?: boolean;
   relatedMaterials?: any[];
   fromCourse?: string | null;
-  initialCredits?: number;
   userId?: string;
 }) {
-  const router = useRouter();
   const kind = detectKind(m);
   const badge = fileTypeBadge(kind, m);
   const course = m.study_courses;
   const title = (m.title ?? course?.course_code ?? "Untitled material").trim();
   const fileUrl = m.file_path ? `/api/study/materials/${m.id}/download` : "";
   const hasFile = fileUrl.length > 0;
-  const aiSupported = isAiGenSupported(m);
 
   const [saved, setSaved] = useState(initialSaved);
   const [saving, setSaving] = useState(false);
@@ -886,7 +830,6 @@ export default function MaterialDetailClient({
   const [relatedMaterials] = useState<any[]>(initialRelatedMaterials);
   const toastRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const [genQsError, setGenQsError] = useState<string | null>(null);
   const [generatedQuestions, setGeneratedQuestions] = useState<GeneratedQuestion[] | null>(null);
   const [savingQs, setSavingQs] = useState(false);
   const [savedSetId, setSavedSetId] = useState<string | null>(null);
@@ -898,13 +841,6 @@ export default function MaterialDetailClient({
   const [streamingQuestions, setStreamingQuestions] = useState<GeneratedQuestion[]>([]);
   const [generationStatus, setGenerationStatus] = useState("Preparing question generation...");
   const [generationMode, setGenerationMode] = useState<GenerationMode>("auto");
-  const [activeDraft, setActiveDraft] = useState<ActiveAiDraft | null>(null);
-  const [matchingDraft, setMatchingDraft] = useState<ActiveAiDraft | null>(null);
-  const [generationTrust, setGenerationTrust] = useState<GenerationTrustStatus | null>(null);
-  const [customizeOpen, setCustomizeOpen] = useState(false);
-  const [draftLoading, setDraftLoading] = useState(false);
-  const [draftAction, setDraftAction] = useState<"discard" | "new" | null>(null);
-  const [credits, setCredits] = useState(initialCredits);
   const [activeTab, setActiveTab] = useState<"practice" | "read" | "info">("practice");
   const [prevSets, setPrevSets] = useState<PreviousGeneratedSet[]>([]);
 
@@ -946,11 +882,6 @@ export default function MaterialDetailClient({
       } catch {}
     })();
   }, [m.uploader_id]);
-
-  useEffect(() => {
-    void loadActiveDraft();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [m.id, quizConfig.count, quizConfig.difficulty, quizConfig.focus, quizConfig.questionFormat, generationMode]);
 
   useEffect(() => {
     if (!userId) {
@@ -1138,82 +1069,6 @@ export default function MaterialDetailClient({
     catch { showToast("Could not copy link"); }
   }
 
-  async function handleGenerateQuestions() {
-    if (matchingDraft?.setId) {
-      showToast("Saved draft ready - no credits charged.");
-      router.push(`/study/practice/${encodeURIComponent(matchingDraft.setId)}${matchingDraft.attempt?.id ? `?attempt=${encodeURIComponent(matchingDraft.attempt.id)}` : ""}`);
-      return;
-    }
-
-    setQuizState("loading");
-    setStreamingQuestions([]);
-    setGenerationStatus("Preparing question generation...");
-    setGenQsError(null);
-    setGenerationAi(null);
-    setSavedSetId(null);
-    setSaveQsError(null);
-    syncedQuizMissesRef.current = null;
-    try {
-      const res = await fetch("/api/ai/generate-questions", {
-        method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          materialId: m.id,
-          count: quizConfig.count,
-          difficulty: quizConfig.difficulty,
-          focus: quizConfig.focus || undefined,
-          questionFormat: quizConfig.questionFormat,
-          persistDraft: true,
-          generationIntent: resolveGenerationIntent(generationMode, quizConfig),
-        }),
-      });
-      const {
-        questions,
-        ai,
-        draftSetId,
-        savedCount,
-        repaired,
-        replacedCount,
-        skippedCount,
-        creditsRemaining,
-        receiptMessage,
-        reusedDraft,
-      } = await readNdjsonQuestions(res, (q) => {
-        setStreamingQuestions((prev) => [...prev, q]);
-      }, (status) => {
-        setGenerationStatus(status.message);
-      });
-      if (typeof creditsRemaining === "number") setCredits(creditsRemaining);
-      if (!draftSetId) throw new Error("Questions generated, but the draft could not be saved. Please try again.");
-      if (!reusedDraft && !questions.length) throw new Error("Failed to generate questions.");
-      console.info("[study-ai] generated questions", {
-        provider: ai?.provider ?? "unknown",
-        model: ai?.model ?? "unknown",
-        inputMode: ai?.inputMode ?? "unknown",
-        reason: ai?.reason ?? null,
-        fallbackProvider: ai?.fallbackProvider ?? null,
-        fallbackReason: ai?.fallbackReason ?? null,
-        count: questions.length,
-      });
-      const repairDetails = [
-        Number(replacedCount ?? 0) > 0 ? `replaced ${replacedCount}` : "",
-        Number(skippedCount ?? 0) > 0 ? `skipped ${skippedCount}` : "",
-      ].filter(Boolean).join(", ");
-      showToast(
-        receiptMessage
-          ? receiptMessage
-          : repaired || repairDetails
-          ? `Saved ${savedCount ?? questions.length} questions (${repairDetails || "cleaned up"} duplicate${(Number(replacedCount ?? 0) + Number(skippedCount ?? 0)) === 1 ? "" : "s"})`
-          : "Draft saved. Opening practice..."
-      );
-      router.push(`/study/practice/${encodeURIComponent(draftSetId)}`);
-      return;
-    } catch (e: unknown) {
-      const detail = e instanceof Error ? e.message : "Something went wrong.";
-      setGenQsError(detail.includes("no credits charged") ? detail : `Generation failed - no credits charged. ${detail}`);
-      setQuizState("idle");
-    }
-  }
-
   async function handleGenerateMore(mode: GenerationMode = generationMode) {
     const intent = resolveGenerationIntent(mode, quizConfig);
     setGeneratingMore(true);
@@ -1234,13 +1089,12 @@ export default function MaterialDetailClient({
           generationIntent: intent,
         }),
       });
-      const { questions: moreQuestions, ai: moreAi, creditsRemaining } = await readNdjsonQuestions(res, (q) => {
+      const { questions: moreQuestions, ai: moreAi } = await readNdjsonQuestions(res, (q) => {
         setStreamingQuestions((prev) => [...prev, q]);
       }, (status) => {
         setGenerationStatus(status.message);
       });
       if (!moreQuestions.length) throw new Error("Failed to generate questions.");
-      if (typeof creditsRemaining === "number") setCredits(creditsRemaining);
       console.info("[study-ai] generated more questions", {
         provider: moreAi?.provider ?? "unknown",
         model: moreAi?.model ?? "unknown",
@@ -1299,12 +1153,11 @@ export default function MaterialDetailClient({
           generationIntent: "weak_areas",
         }),
       });
-      const { questions: moreQuestions, ai: moreAi, creditsRemaining } = await readNdjsonQuestions(res,
+      const { questions: moreQuestions, ai: moreAi } = await readNdjsonQuestions(res,
         (q) => { setStreamingQuestions((prev) => [...prev, q]); },
         (status) => { setGenerationStatus(status.message); }
       );
       if (!moreQuestions.length) throw new Error("Failed to generate questions.");
-      if (typeof creditsRemaining === "number") setCredits(creditsRemaining);
       setGeneratedQuestions(moreQuestions);
       setGenerationAi(moreAi);
       setAnswers({});
@@ -1324,59 +1177,6 @@ export default function MaterialDetailClient({
     } finally {
       setGeneratingMore(false);
       setStreamingQuestions([]);
-    }
-  }
-
-  async function loadActiveDraft() {
-    if (!isAiGenSupported(m)) return;
-    setDraftLoading(true);
-    try {
-      const params = new URLSearchParams({
-        materialId: m.id,
-        count: String(quizConfig.count),
-        difficulty: quizConfig.difficulty,
-        questionFormat: quizConfig.questionFormat,
-        generationIntent: resolveGenerationIntent(generationMode, quizConfig),
-      });
-      if (quizConfig.focus.trim()) params.set("focus", quizConfig.focus.trim());
-
-      const res = await fetch(`/api/ai/generate-questions/status?${params.toString()}`);
-      const data = await res.json().catch(() => null) as ({ ok?: boolean } & Partial<GenerationTrustStatus>) | null;
-      if (res.ok && data?.ok && data.credits && data.dailyLimit) {
-        const nextStatus: GenerationTrustStatus = {
-          credits: data.credits,
-          dailyLimit: data.dailyLimit,
-          matchingDraft: data.matchingDraft ?? null,
-          latestDraft: data.latestDraft ?? null,
-        };
-        setGenerationTrust(nextStatus);
-        setCredits(data.credits.balance);
-        setMatchingDraft(nextStatus.matchingDraft);
-        setActiveDraft(nextStatus.latestDraft);
-      }
-    } catch {
-      // Draft lookup should not block the material page.
-    } finally {
-      setDraftLoading(false);
-    }
-  }
-
-  async function discardActiveDraft(action: "discard" | "new" = "discard") {
-    if (!activeDraft?.setId) return;
-    setDraftAction(action);
-    try {
-      const res = await fetch(`/api/ai/generated-drafts/${encodeURIComponent(activeDraft.setId)}/discard`, { method: "POST" });
-      const data = await res.json().catch(() => null) as { ok?: boolean; message?: string } | null;
-      if (!res.ok || !data?.ok) throw new Error(data?.message || "Could not discard draft.");
-      setActiveDraft(null);
-      setMatchingDraft(null);
-      setGenerationTrust((prev) => prev ? { ...prev, matchingDraft: null, latestDraft: null } : prev);
-      showToast("Draft discarded");
-      if (action === "new") void handleGenerateQuestions();
-    } catch (error: unknown) {
-      showToast(error instanceof Error ? error.message : "Could not discard draft.");
-    } finally {
-      setDraftAction(null);
     }
   }
 
@@ -1488,15 +1288,6 @@ export default function MaterialDetailClient({
 
   const backHref = fromCourse ? `/study/courses/${encodeURIComponent(fromCourse)}` : "/study/library";
   const backLabel = fromCourse ?? "Materials";
-  const creditCost = generationTrust?.credits.cost ?? Math.ceil(quizConfig.count / 5);
-  const dailyRemaining = generationTrust?.dailyLimit.remaining ?? 4;
-  const hasMatchingDraft = Boolean(matchingDraft?.setId);
-  const canGenerate = aiSupported && quizState !== "loading" && (
-    hasMatchingDraft || ((generationTrust?.credits.canAfford ?? credits >= creditCost) && dailyRemaining > 0)
-  );
-  const generationAvailabilityCopy = hasMatchingDraft
-    ? "Saved draft ready - no credits charged"
-    : `${creditCost} credit${creditCost === 1 ? "" : "s"} - ${dailyRemaining} generation${dailyRemaining === 1 ? "" : "s"} left today`;
   const tabLabels: Array<{ value: typeof activeTab; label: string }> = [
     { value: "practice", label: "Practice" },
     { value: "read", label: "Read" },
@@ -1764,256 +1555,18 @@ export default function MaterialDetailClient({
             activeTab !== "practice" ? "hidden md:flex" : "flex"
           )}
         >
-          <div className="flex items-center gap-3 rounded-2xl border border-border bg-card px-4 py-3.5 shadow-sm">
-            <div className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-amber-50">
-              <Coins className="h-5 w-5 text-amber-500" />
-            </div>
-            <div className="min-w-0 flex-1">
-              <p className="text-[11px] font-bold uppercase tracking-wider text-muted-brand">AI Credits</p>
-              <p className="text-lg font-extrabold text-foreground">
-                {credits} <span className="text-sm font-semibold text-muted-brand">remaining</span>
-              </p>
-              <div className="mt-1.5 h-1 overflow-hidden rounded-full bg-border">
-                <div
-                  className={cn(
-                    "h-full rounded-full transition-all",
-                    credits <= 2
-                      ? "bg-gradient-to-r from-red-500 to-red-400"
-                      : "bg-gradient-to-r from-amber-500 to-amber-400"
-                  )}
-                  style={{ width: `${Math.min(100, (credits / 20) * 100)}%` }}
-                />
-              </div>
-            </div>
-            <button
-              type="button"
-              className="h-9 shrink-0 rounded-xl border border-primary/25 bg-primary-light px-3 text-xs font-bold text-primary"
-            >
-              + Get more
-            </button>
-          </div>
-
-          {draftLoading ? (
-            <div className="rounded-2xl border border-primary/20 bg-primary-light/40 px-4 py-3 text-xs font-semibold text-primary shadow-sm">
-              Checking for saved AI drafts...
-            </div>
-          ) : activeDraft ? (
-            <div className="rounded-2xl border border-primary/20 bg-primary-light/45 p-4 shadow-sm">
-              <div className="flex items-start gap-3">
-                <div className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-card text-primary">
-                  <PenLine className="h-4 w-4" />
-                </div>
-                <div className="min-w-0">
-                  <p className="text-sm font-extrabold text-primary-text">Draft found</p>
-                  <p className="mt-1 text-xs leading-relaxed text-primary/75">
-                    {activeDraft.questionsCount} question{activeDraft.questionsCount === 1 ? "" : "s"} saved from this material.
-                  </p>
-                </div>
-              </div>
-              <div className="mt-3 grid grid-cols-2 gap-2">
-                <Link
-                  href={`/study/practice/${encodeURIComponent(activeDraft.setId)}${activeDraft.attempt?.id ? `?attempt=${encodeURIComponent(activeDraft.attempt.id)}` : ""}`}
-                  className="inline-flex items-center justify-center rounded-xl bg-primary px-3 py-2.5 text-xs font-bold text-white transition hover:opacity-90"
-                >
-                  Resume draft
-                </Link>
-                <button
-                  type="button"
-                  onClick={() => void discardActiveDraft("discard")}
-                  disabled={draftAction !== null}
-                  className="inline-flex items-center justify-center rounded-xl border border-primary/25 bg-card px-3 py-2.5 text-xs font-bold text-primary-text transition hover:bg-background disabled:opacity-60"
-                >
-                  {draftAction === "discard" ? "Discarding..." : "Discard"}
-                </button>
-              </div>
-              <button
-                type="button"
-                onClick={() => void discardActiveDraft("new")}
-                disabled={draftAction !== null}
-                className="mt-2 inline-flex w-full items-center justify-center rounded-xl border border-border bg-card px-3 py-2.5 text-xs font-bold text-muted-brand transition hover:bg-background disabled:opacity-60"
-              >
-                {draftAction === "new" ? "Starting..." : "Start new"}
-              </button>
-            </div>
-          ) : null}
-
           <div className="overflow-hidden rounded-2xl border border-border bg-card shadow-sm">
             <div className="border-b border-border bg-secondary/20 px-4 py-3.5">
               <p className="flex items-center gap-2 text-base font-extrabold text-foreground">
-                <Sparkles className="h-4 w-4 text-primary" />
-                AI Practice
+                <PenLine className="h-4 w-4 text-primary" />
+                Practice
               </p>
-              <p className="mt-1 text-xs text-muted-brand">Start with 10 questions, or customize the set.</p>
+              <p className="mt-1 text-xs text-muted-brand">Continue your open practice session for this material.</p>
             </div>
-            <div className="space-y-3.5 p-4">
-              <div className={cn(
-                "flex items-center justify-between rounded-2xl border px-4 py-2.5 text-sm",
-                hasMatchingDraft ? "border-primary/25 bg-primary-light text-primary-text" : "border-amber-300 bg-amber-50 text-amber-800"
-              )}>
-                <span className="font-semibold">{generationAvailabilityCopy}</span>
-                <span className="font-extrabold">
-                  {hasMatchingDraft ? "Free" : `${credits} left`}
-                </span>
-              </div>
-
-              {genQsError && <p className="text-center text-xs text-red-500">{genQsError}</p>}
-              {!aiSupported && (
-                <p className="text-center text-xs text-muted-brand">AI practice is available for PDF, image, Word, and PowerPoint files.</p>
-              )}
-              {aiSupported && !hasMatchingDraft && dailyRemaining <= 0 && (
-                <p className="text-center text-xs font-semibold text-amber-700">Daily generation limit reached.</p>
-              )}
-              {aiSupported && !hasMatchingDraft && !(generationTrust?.credits.canAfford ?? credits >= creditCost) && (
-                <p className="text-center text-xs font-semibold text-amber-700">Not enough credits for this set.</p>
-              )}
-
-              <button
-                type="button"
-                disabled={!canGenerate}
-                onClick={() => void handleGenerateQuestions()}
-                className="flex w-full items-center gap-3 rounded-2xl bg-primary px-4 py-3.5 text-left text-white shadow-sm transition hover:opacity-90 disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 active:scale-[0.99]"
-              >
-                <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-white/15">
-                  <Sparkles className="h-5 w-5" />
-                </span>
-                <span className="min-w-0 flex-1">
-                  <span className="block text-base font-extrabold">
-                    {hasMatchingDraft ? "Resume saved draft" : `Generate ${quizConfig.count} questions`}
-                  </span>
-                  <span className="text-xs font-medium text-white/75">
-                    {hasMatchingDraft ? "No credits charged" : "Opens practice immediately"}
-                  </span>
-                </span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => setCustomizeOpen((open) => !open)}
-                className="flex w-full items-center justify-center gap-2 rounded-2xl border border-border bg-background px-4 py-3 text-sm font-bold text-foreground transition hover:bg-secondary/50"
-              >
-                {customizeOpen ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
-                Customize
-              </button>
-
-              {customizeOpen && (
-                <div className="space-y-3.5">
-              <div>
-                <p className="mb-2 text-[11px] font-bold uppercase tracking-wider text-muted-brand">Questions</p>
-                <div className="flex gap-2">
-                  {([5, 10, 15, 20] as const).map((n) => (
-                    <button
-                      key={n}
-                      type="button"
-                      onClick={() => setQuizConfig((c) => ({ ...c, count: n }))}
-                      className={cn(
-                        "h-10 flex-1 rounded-xl border text-sm font-bold transition focus-visible:outline-none",
-                        quizConfig.count === n
-                          ? "border-primary bg-primary text-white"
-                          : "border-border bg-background text-foreground hover:bg-secondary/50"
-                      )}
-                    >
-                      {n}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              <div>
-                <p className="mb-2 text-[11px] font-bold uppercase tracking-wider text-muted-brand">Format</p>
-                <div className="space-y-2">
-                  {QUESTION_FORMATS.map(({ value, label, sub }) => (
-                    <button
-                      key={value}
-                      type="button"
-                      onClick={() => setQuizConfig((c) => ({ ...c, questionFormat: value }))}
-                      className={cn(
-                        "flex w-full items-start gap-3 rounded-2xl border px-3 py-2.5 text-left transition focus-visible:outline-none",
-                        quizConfig.questionFormat === value
-                          ? "border-primary bg-primary-light ring-1 ring-primary/25"
-                          : "border-border bg-background hover:bg-secondary/40"
-                      )}
-                    >
-                      <span
-                        className={cn(
-                          "mt-0.5 h-4 w-4 shrink-0 rounded-full border-2",
-                          quizConfig.questionFormat === value ? "border-primary bg-primary" : "border-border bg-card"
-                        )}
-                      />
-                      <span>
-                        <span className={cn("block text-sm font-bold", quizConfig.questionFormat === value ? "text-primary-text" : "text-foreground")}>
-                          {label}
-                        </span>
-                        <span className="mt-0.5 block text-[11px] leading-snug text-muted-brand">{sub}</span>
-                      </span>
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              <div>
-                <p className="mb-2 text-[11px] font-bold uppercase tracking-wider text-muted-brand">Difficulty</p>
-                <div className="grid grid-cols-3 gap-2">
-                  {([
-                    { value: "easy", label: "Easy" },
-                    { value: "mixed", label: "Mixed" },
-                    { value: "hard", label: "Exam-hard" },
-                  ] as const).map(({ value, label }) => (
-                    <button
-                      key={value}
-                      type="button"
-                      onClick={() => setQuizConfig((c) => ({ ...c, difficulty: value }))}
-                      className={cn(
-                        "h-10 rounded-xl border px-2 text-xs font-extrabold transition focus-visible:outline-none",
-                        quizConfig.difficulty !== value && "border-border bg-background text-foreground hover:bg-secondary/50",
-                        quizConfig.difficulty === "easy" && value === "easy" && "border-green-300 bg-green-50 text-green-700",
-                        quizConfig.difficulty === "mixed" && value === "mixed" && "border-amber-300 bg-amber-50 text-amber-700",
-                        quizConfig.difficulty === "hard" && value === "hard" && "border-red-300 bg-red-50 text-red-600"
-                      )}
-                    >
-                      {label}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              <div>
-                <p className="mb-2 text-[11px] font-bold uppercase tracking-wider text-muted-brand">Smart targeting</p>
-                <div className="relative rounded-2xl border border-border bg-background px-3 py-2.5">
-                  <select
-                    value={generationMode}
-                    onChange={(e) => setGenerationMode(e.target.value as GenerationMode)}
-                    className="w-full appearance-none bg-transparent pr-8 text-sm font-bold text-foreground outline-none"
-                  >
-                    {STUDENT_GENERATION_MODES.map(({ value, label }) => (
-                      <option key={value} value={value}>{label}</option>
-                    ))}
-                  </select>
-                  <ChevronDown className="pointer-events-none absolute right-3 top-3.5 h-4 w-4 text-muted-brand" />
-                  <p className="mt-1.5 text-xs leading-snug text-muted-brand">
-                    {generationModeCopy(generationMode, quizConfig)}
-                  </p>
-                </div>
-              </div>
-
-              {(generationMode === "topic" || quizConfig.focus) && (
-                <div>
-                  <p className="mb-2 text-[11px] font-bold uppercase tracking-wider text-muted-brand">Focus area</p>
-                  <input
-                    type="text"
-                    value={quizConfig.focus}
-                    onChange={(e) => setQuizConfig((c) => ({ ...c, focus: e.target.value }))}
-                    placeholder="e.g. continuity and limits"
-                    className="w-full rounded-2xl border border-border bg-background px-4 py-3 text-sm outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/20"
-                  />
-                </div>
-              )}
-
-                </div>
-              )}
-
+            <div className="p-4">
               <Link
                 href={`/study/materials/${m.id}/practice`}
-                className="flex w-full items-center justify-center gap-2 rounded-2xl border border-border bg-background px-4 py-3 text-sm font-bold text-foreground transition hover:bg-secondary/50"
+                className="flex w-full items-center justify-center gap-2 rounded-2xl bg-primary px-4 py-3 text-sm font-bold text-white shadow-sm transition hover:opacity-90"
               >
                 <PenLine className="h-4 w-4" /> Open practice session
               </Link>

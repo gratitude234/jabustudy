@@ -3,7 +3,6 @@ import { cache } from "react";
 import { notFound } from "next/navigation";
 import type { Metadata } from "next";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
-import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import MaterialDetailClient from "./MaterialDetailClient";
 
 type Props = { params: Promise<{ id: string }>; searchParams: Promise<{ from?: string }> };
@@ -74,13 +73,13 @@ export default async function MaterialDetailPage({ params, searchParams }: Props
 
   const supabase = await createSupabaseServerClient();
 
-  // Get user first (needed for credits + saved queries)
+  // Get user first (needed for saved queries)
   const userResult = await supabase.auth.getUser();
   const userId = userResult.data?.user?.id;
 
   const courseId = (m.study_courses as any)?.id as string | undefined;
 
-  const [relatedResult, savedResult, creditsResult] = await Promise.all([
+  const [relatedResult, savedResult] = await Promise.all([
     courseId
       ? supabase
           .from("study_materials")
@@ -101,19 +100,10 @@ export default async function MaterialDetailPage({ params, searchParams }: Props
           .eq("material_id", id)
           .maybeSingle()
       : Promise.resolve({ data: null }),
-    userId
-      ? createSupabaseAdminClient()
-          .from("study_user_credits")
-          .select("balance")
-          .eq("user_id", userId)
-          .maybeSingle()
-      : Promise.resolve({ data: null }),
   ]);
 
   const relatedMaterials = (relatedResult.data ?? []) as any[];
   const initialSaved = !!savedResult.data;
-  const initialCredits =
-    typeof creditsResult.data?.balance === "number" ? creditsResult.data.balance : 20;
 
   return (
     <MaterialDetailClient
@@ -121,7 +111,6 @@ export default async function MaterialDetailPage({ params, searchParams }: Props
       initialSaved={initialSaved}
       relatedMaterials={relatedMaterials}
       fromCourse={from ?? null}
-      initialCredits={initialCredits}
       userId={userId}
     />
   );
