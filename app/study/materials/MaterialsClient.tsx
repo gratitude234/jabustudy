@@ -507,7 +507,7 @@ function MaterialCard({
                 </Link>
               )}
               <span className="rounded-full border border-border bg-background px-2 py-0.5 text-[11px] font-semibold text-muted-brand">
-                {dlCount.toLocaleString("en-NG")} downloads
+                Helped {dlCount.toLocaleString("en-NG")} student{dlCount === 1 ? "" : "s"}
               </span>
               {isPopular && (
                 <span className="inline-flex items-center gap-1 rounded-full border border-amber-300/50 bg-amber-50 px-2 py-0.5 text-[10px] font-semibold text-amber-800 dark:border-amber-700/40 dark:bg-amber-950/30 dark:text-amber-300">Popular</span>
@@ -649,6 +649,11 @@ export default function MaterialsClient() {
 
   // Toast
   const [toast, setToast] = useState<string | null>(null);
+  const [giveBackPrompt, setGiveBackPrompt] = useState<{
+    courseCode: string;
+    courseId: string | null;
+    materialType: MaterialTypeKey;
+  } | null>(null);
   useEffect(() => {
     if (!toast) return;
     const t = window.setTimeout(() => setToast(null), 2600);
@@ -1228,6 +1233,21 @@ export default function MaterialsClient() {
     );
   }
 
+  function showGiveBackPrompt(m: MaterialRow) {
+    const courseCode = (m.study_courses?.course_code ?? courseParam ?? "").toString().trim().toUpperCase();
+    if (!courseCode) return;
+    const materialType = (m.material_type === "past_question" || m.material_type === "handout"
+      ? m.material_type
+      : typeParam === "past_question" || typeParam === "handout"
+        ? typeParam
+        : "past_question") as MaterialTypeKey;
+    setGiveBackPrompt({
+      courseCode,
+      courseId: m.course_id ?? m.study_courses?.id ?? null,
+      materialType,
+    });
+  }
+
   const hasAnyFilters = Boolean(
     qParam ||
       levelParam ||
@@ -1249,6 +1269,33 @@ export default function MaterialsClient() {
   const showingTo = Math.min(total, materials.length);
 
   const activeTypeLabel = MATERIAL_TYPES.find((t) => t.key === typeParam)?.label ?? "All";
+  const activeCourseCode = (courseParam || qParam).trim().toUpperCase();
+  const emptyDept = (deptParam || scopeDept).trim();
+  const emptyLevel = (levelParam || (scopeLevel ? String(scopeLevel) : "")).trim();
+  const emptyScopeLabel = [emptyLevel ? `${emptyLevel}L` : "", emptyDept].filter(Boolean).join(" ");
+  const emptyUploadHref = buildHref("/study/materials/upload", {
+    course: activeCourseCode || null,
+    type: typeParam !== "all" ? typeParam : null,
+  });
+  const emptyTitle = activeCourseCode
+    ? typeParam === "past_question"
+      ? `No past questions yet for ${activeCourseCode}`
+      : `No materials yet for ${activeCourseCode}`
+    : emptyScopeLabel
+      ? `No materials yet for ${emptyScopeLabel}`
+      : "No materials yet";
+  const emptyDescription = activeCourseCode
+    ? `Be the first to help coursemates studying ${activeCourseCode}.`
+    : emptyScopeLabel
+      ? `Upload the first useful file for ${emptyScopeLabel}.`
+      : "Be the first to upload study materials for your department.";
+  const emptyCta = activeCourseCode
+    ? typeParam === "past_question"
+      ? `Upload ${activeCourseCode} past question`
+      : `Upload ${activeCourseCode} material`
+    : typeParam === "past_question"
+      ? "Upload a past question"
+      : "Help your department";
 
   const courseChips = useMemo(() => {
     if (!prefsLoaded) return [];
@@ -1301,6 +1348,7 @@ export default function MaterialsClient() {
       window.open(href, "_blank", "noreferrer");
       bumpDownloads(m.id);
       setToast("Opened file");
+      showGiveBackPrompt(m);
       return;
     }
     setPreviewTitle((m.title ?? "Material").trim() || "Material");
@@ -1308,6 +1356,7 @@ export default function MaterialsClient() {
     setPreviewKind(kind);
     setPreviewOpen(true);
     bumpDownloads(m.id);
+    showGiveBackPrompt(m);
   }
 
   return (
@@ -1819,25 +1868,11 @@ export default function MaterialsClient() {
           <div className="sm:col-span-2">
             <EmptyState
               icon={<FileText className="h-5 w-5" />}
-              title={
-                courseParam
-                  ? `No materials for ${courseParam} yet`
-                  : (levelParam || deptParam)
-                  ? "No materials found"
-                  : "No materials yet"
-              }
-              description={
-                courseParam
-                  ? "Upload the first material for this course and help your classmates find it faster."
-                  : (levelParam || deptParam)
-                  ? "Try adjusting your filters, or upload the first one."
-                  : (prefsLoaded && !!scopeDept)
-                  ? "Nothing here yet. Upload the first material for your department."
-                  : "Be the first to upload study materials for your department."
-              }
+              title={emptyTitle}
+              description={emptyDescription}
               action={
                 <Link
-                  href="/study/materials/upload"
+                  href={emptyUploadHref}
                   className={cn(
                     "inline-flex items-center gap-2 rounded-2xl border border-border bg-background px-4 py-3 text-sm font-semibold text-foreground no-underline",
                     "hover:bg-secondary/50",
@@ -1845,7 +1880,7 @@ export default function MaterialsClient() {
                   )}
                 >
                   <UploadCloud className="h-4 w-4" />
-                  Upload a material
+                  {emptyCta}
                 </Link>
               }
             />
@@ -2069,6 +2104,36 @@ export default function MaterialsClient() {
             className="pointer-events-auto w-full max-w-sm rounded-2xl border border-border bg-card px-4 py-3 text-sm font-semibold text-foreground shadow-lg"
           >
             {toast}
+          </div>
+        </div>
+      ) : null}
+
+      {giveBackPrompt ? (
+        <div className="fixed inset-x-0 bottom-24 z-40 flex justify-center px-4 md:bottom-8">
+          <div className="flex w-full max-w-md items-center justify-between gap-3 rounded-2xl border border-border bg-card px-4 py-3 text-sm text-foreground shadow-lg">
+            <p className="min-w-0 text-xs font-semibold leading-relaxed">
+              Got a past question or handout for {giveBackPrompt.courseCode} too? Upload it and help the next person.
+            </p>
+            <div className="flex shrink-0 items-center gap-2">
+              <Link
+                href={buildHref("/study/materials/upload", {
+                  course: giveBackPrompt.courseCode,
+                  course_id: giveBackPrompt.courseId,
+                  type: giveBackPrompt.materialType,
+                })}
+                className="rounded-xl bg-primary px-3 py-1.5 text-xs font-bold text-white no-underline hover:opacity-90"
+              >
+                Upload
+              </Link>
+              <button
+                type="button"
+                onClick={() => setGiveBackPrompt(null)}
+                className="grid h-7 w-7 place-items-center rounded-xl border border-border bg-background text-muted-brand hover:bg-secondary/50"
+                aria-label="Dismiss upload prompt"
+              >
+                <X className="h-3.5 w-3.5" />
+              </button>
+            </div>
           </div>
         </div>
       ) : null}

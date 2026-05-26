@@ -61,6 +61,46 @@ type DepartmentRow = {
   name: string | null;
 };
 
+type ContributionStats = {
+  totalUploads: number;
+  approvedUploads: number;
+  pendingUploads: number;
+  rejectedBrokenUploads: number;
+  studentsHelped: number;
+  coursesHelped: number;
+  practiceSetsPowered: number;
+  practiceQuestionsPowered: number;
+};
+
+type TopContributionMaterial = {
+  id: string;
+  title: string | null;
+  downloads: number;
+  practiceQuestionsPowered: number;
+  course: CourseMini | null;
+};
+
+type ContributionResponse = {
+  ok?: boolean;
+  stats?: Partial<ContributionStats>;
+  topMaterials?: TopContributionMaterial[];
+};
+
+const EMPTY_CONTRIBUTION_STATS: ContributionStats = {
+  totalUploads: 0,
+  approvedUploads: 0,
+  pendingUploads: 0,
+  rejectedBrokenUploads: 0,
+  studentsHelped: 0,
+  coursesHelped: 0,
+  practiceSetsPowered: 0,
+  practiceQuestionsPowered: 0,
+};
+
+const EMPTY_CONTRIBUTION_RESPONSE: ContributionResponse = {
+  ok: false,
+};
+
 function formatDate(iso: string) {
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return iso;
@@ -117,6 +157,8 @@ export default function MyUploadsPage() {
   const [err, setErr] = useState<string | null>(null);
   const [repMe, setRepMe] = useState<RepMeResponse | null>(null);
   const [repDeptName, setRepDeptName] = useState<string | null>(null);
+  const [contributionStats, setContributionStats] = useState<ContributionStats>(EMPTY_CONTRIBUTION_STATS);
+  const [topMaterials, setTopMaterials] = useState<TopContributionMaterial[]>([]);
 
   const isRep = repMe?.ok && repMe.status === "approved" && !!repMe.role;
   const roleLabel = isRep && repMe?.role === "dept_librarian" ? "Dept Librarian" : "Course Rep";
@@ -137,7 +179,7 @@ export default function MyUploadsPage() {
           return;
         }
 
-        const [repRes, materialsRes] = await Promise.all([
+        const [repRes, materialsRes, contributionRes] = await Promise.all([
           fetch("/api/study/rep-applications/me", { cache: "no-store" }).then((r) =>
             r.json() as Promise<RepMeResponse>
           ),
@@ -149,6 +191,9 @@ export default function MyUploadsPage() {
             .eq("uploader_id", user.id)
             .order("created_at", { ascending: false })
             .limit(50),
+          fetch("/api/study/contributions/me", { cache: "no-store" })
+            .then((r) => r.json() as Promise<ContributionResponse>)
+            .catch(() => EMPTY_CONTRIBUTION_RESPONSE),
         ]);
 
         if (!mounted) return;
@@ -162,6 +207,16 @@ export default function MyUploadsPage() {
             : row.study_courses ?? null,
         }));
         setItems(rows);
+        if (contributionRes.ok && contributionRes.stats) {
+          setContributionStats({
+            ...EMPTY_CONTRIBUTION_STATS,
+            ...contributionRes.stats,
+          });
+          setTopMaterials(contributionRes.topMaterials ?? []);
+        } else {
+          setContributionStats(EMPTY_CONTRIBUTION_STATS);
+          setTopMaterials([]);
+        }
 
         const repDepartmentId = repRes.scope?.department_id;
         if (repRes.ok && repRes.status === "approved" && repDepartmentId) {
@@ -190,20 +245,7 @@ export default function MyUploadsPage() {
     };
   }, [router]);
 
-  const stats = useMemo(() => {
-    const totalUploads = items.length;
-    const approvedCount = items.filter((m) => !!m.approved).length;
-    const pendingCount = items.filter((m) => !m.approved && !((m.description || "").trim())).length;
-    const rejectedCount = items.filter((m) => !m.approved && !!((m.description || "").trim())).length;
-    const totalDownloads = items.reduce((sum, m) => sum + (m.downloads ?? 0), 0);
-    return {
-      totalUploads,
-      approvedCount,
-      pendingCount,
-      rejectedCount,
-      totalDownloads,
-    };
-  }, [items]);
+  const stats = useMemo(() => contributionStats, [contributionStats]);
 
   return (
     <div className="space-y-4 pb-28 md:pb-6">
@@ -236,13 +278,13 @@ export default function MyUploadsPage() {
           <div className="hidden items-center gap-2 text-xs text-muted-brand md:flex">
             <span className="rounded-full bg-secondary px-2 py-1">Total: {stats.totalUploads}</span>
             <span className="rounded-full bg-emerald-50 px-2 py-1 text-emerald-700 dark:bg-emerald-950/20 dark:text-emerald-400">
-              Approved: {stats.approvedCount}
+              Approved: {stats.approvedUploads}
             </span>
             <span className="rounded-full bg-amber-50 px-2 py-1 text-amber-700 dark:bg-amber-950/20 dark:text-amber-400">
-              Pending: {stats.pendingCount}
+              Pending: {stats.pendingUploads}
             </span>
             <span className="rounded-full bg-rose-50 px-2 py-1 text-rose-700 dark:bg-rose-950/20 dark:text-rose-400">
-              Rejected: {stats.rejectedCount}
+              Rejected: {stats.rejectedBrokenUploads}
             </span>
           </div>
         )}
@@ -299,8 +341,8 @@ export default function MyUploadsPage() {
               <div className="grid grid-cols-3 divide-x divide-border border-b border-border">
                 {[
                   { label: "Uploads", value: stats.totalUploads },
-                  { label: "Approved", value: stats.approvedCount },
-                  { label: "Downloads", value: stats.totalDownloads },
+                  { label: "Approved", value: stats.approvedUploads },
+                  { label: "Students helped", value: stats.studentsHelped },
                 ].map(({ label, value }) => (
                   <div key={label} className="px-4 py-3 text-center">
                     <p className="text-xl font-extrabold tabular-nums text-foreground">
@@ -312,26 +354,60 @@ export default function MyUploadsPage() {
                   </div>
                 ))}
               </div>
-              {stats.pendingCount > 0 && (
+              {stats.pendingUploads > 0 && (
                 <div className="px-4 py-3">
                   <p className="text-xs text-amber-700 dark:text-amber-400">
-                    {stats.pendingCount} upload{stats.pendingCount !== 1 ? "s" : ""} pending review
+                    {stats.pendingUploads} upload{stats.pendingUploads !== 1 ? "s" : ""} pending review
                   </p>
                 </div>
               )}
             </div>
           ) : (
-            <div className="grid grid-cols-3 gap-3">
+            <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
               {[
                 { label: "Uploaded", value: stats.totalUploads },
-                { label: "Downloads", value: stats.totalDownloads },
-                { label: "Rejected", value: stats.rejectedCount },
+                { label: "Students helped", value: stats.studentsHelped },
+                { label: "Courses helped", value: stats.coursesHelped },
+                { label: "Practice powered", value: stats.practiceQuestionsPowered },
               ].map(({ label, value }) => (
                 <div key={label} className="rounded-2xl border border-border bg-card p-3 text-center shadow-sm">
-                  <p className="text-xl font-extrabold text-foreground">{value}</p>
+                  <p className="text-xl font-extrabold text-foreground">{value.toLocaleString("en-NG")}</p>
                   <p className="mt-0.5 text-[11px] text-muted-brand">{label}</p>
                 </div>
               ))}
+            </div>
+          )}
+
+          {topMaterials.length > 0 && (
+            <div className="overflow-hidden rounded-3xl border border-border bg-card shadow-sm">
+              <div className="border-b border-border px-5 py-4">
+                <p className="text-sm font-extrabold text-foreground">Top impact</p>
+                <p className="mt-0.5 text-xs text-muted-brand">
+                  Your uploads helping the most students.
+                </p>
+              </div>
+              <div className="divide-y divide-border">
+                {topMaterials.map((material) => {
+                  const code = material.course?.course_code ?? "Course";
+                  return (
+                    <Link
+                      key={material.id}
+                      href={`/study/materials/${encodeURIComponent(material.id)}`}
+                      className="flex items-center justify-between gap-3 px-4 py-3 no-underline transition hover:bg-secondary/30"
+                    >
+                      <span className="min-w-0">
+                        <span className="block truncate text-sm font-semibold text-foreground">
+                          {material.title ?? "Untitled material"}
+                        </span>
+                        <span className="mt-0.5 block text-xs text-muted-brand">
+                          {code} · helped {material.downloads.toLocaleString("en-NG")} student{material.downloads === 1 ? "" : "s"} · {material.practiceQuestionsPowered.toLocaleString("en-NG")} questions powered
+                        </span>
+                      </span>
+                      <ExternalLink className="h-3.5 w-3.5 shrink-0 text-primary" />
+                    </Link>
+                  );
+                })}
+              </div>
             </div>
           )}
 
@@ -339,7 +415,7 @@ export default function MyUploadsPage() {
             <div className="border-b border-border px-5 py-4">
               <p className="text-sm font-extrabold text-foreground">Your materials</p>
               <p className="mt-0.5 text-xs text-muted-brand">
-                Review status, downloads, and any rejection notes.
+                Review status, students helped, and any rejection notes.
               </p>
             </div>
             <div className="divide-y divide-border">
@@ -371,7 +447,7 @@ export default function MyUploadsPage() {
                           {courseMeta.join(" · ")}
                         </p>
                         <div className="mt-2 flex flex-wrap items-center gap-3 text-[11px] text-muted-brand">
-                          <span>{(it.downloads ?? 0).toLocaleString()} downloads</span>
+                          <span>Helped {(it.downloads ?? 0).toLocaleString()} student{(it.downloads ?? 0) === 1 ? "" : "s"}</span>
                           <span>Uploaded {formatDate(it.created_at)}</span>
                         </div>
                       </div>
