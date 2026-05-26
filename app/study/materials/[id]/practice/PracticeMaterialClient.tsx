@@ -46,7 +46,6 @@ type Material = {
   verified: boolean | null;
   featured: boolean | null;
   created_at: string | null;
-  uploader_email: string | null;
   uploader_id: string | null;
   ai_summary: string | null;
   study_courses: Course | null;

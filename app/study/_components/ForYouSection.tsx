@@ -53,11 +53,18 @@ type WeakAreaResult = {
 type WeakAttemptRow = {
   score: number | null;
   total_questions: number | null;
+  scored_questions_count?: number | null;
   study_quiz_sets:
     | { course_code: string | null }
     | Array<{ course_code: string | null }>
     | null;
 };
+
+function scoreDenominator(row: Pick<WeakAttemptRow, "scored_questions_count" | "total_questions">) {
+  return typeof row.scored_questions_count === "number"
+    ? row.scored_questions_count
+    : row.total_questions ?? 0;
+}
 
 interface ForYouSectionProps {
   chips: Chips;
@@ -72,9 +79,10 @@ async function fetchWeakAreas(): Promise<WeakAreaResult> {
 
   const { data, error } = await supabase
     .from("study_practice_attempts")
-    .select("score, total_questions, study_quiz_sets(course_code)")
+    .select("score, total_questions, scored_questions_count, study_quiz_sets(course_code)")
     .eq("user_id", userId)
     .eq("status", "submitted")
+    .not("score", "is", null)
     .not("total_questions", "is", null)
     .gt("total_questions", 0)
     .order("created_at", { ascending: false })
@@ -94,7 +102,7 @@ async function fetchWeakAreas(): Promise<WeakAreaResult> {
     if (!code) continue;
 
     const score = Number(row.score ?? 0);
-    const total = Number(row.total_questions ?? 0);
+    const total = Number(scoreDenominator(row));
     if (!Number.isFinite(score) || !Number.isFinite(total) || total <= 0) continue;
 
     const current = acc.get(code) ?? { totalScore: 0, totalQs: 0, count: 0 };
@@ -584,7 +592,7 @@ export function MaterialCard({
             {isWeak ? (
               <span className="inline-flex items-center gap-1 rounded-full border border-amber-300/60 bg-amber-50 px-2 py-1 text-amber-800 dark:border-amber-700/40 dark:bg-amber-950/40 dark:text-amber-300">
                 <AlertTriangle className="h-3 w-3" />
-                Needs work - {accuracyPct}%
+                Course avg - {accuracyPct}%
               </span>
             ) : null}
           </div>

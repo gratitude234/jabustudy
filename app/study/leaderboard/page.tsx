@@ -122,6 +122,12 @@ function periodLabel(period: Period) {
   return "All-time";
 }
 
+function departmentLabel(department: string | null | undefined, fallback = "My Department") {
+  const label = department?.trim();
+  if (!label) return fallback;
+  return /\b(department|dept\.?)\b/i.test(label) ? label : `${label} Dept.`;
+}
+
 function normalizeCourseCode(code: string | null | undefined) {
   return (code ?? "").replace(/\s+/g, "").toUpperCase();
 }
@@ -207,9 +213,7 @@ async function fetchLeaderboard(scope: Scope, period: Period, requestedCourseCod
   if (scope === "faculty" && userPrefs?.faculty_id) {
     scopeLabel = userPrefs.faculty ? `${userPrefs.faculty} Faculty` : "My Faculty";
   } else if (scope === "dept" && userPrefs?.department_id) {
-    scopeLabel = userPrefs.department
-      ? `${userPrefs.department} Dept.`
-      : "My Department";
+    scopeLabel = departmentLabel(userPrefs.department);
   } else if (scope === "level" && userPrefs?.level) {
     scopeLabel = `${userPrefs.level}L Students`;
   } else if (scope === "course") {
@@ -341,7 +345,7 @@ function PeriodTabs({
   ];
 
   return (
-    <nav className="flex items-center gap-2 overflow-x-auto [scrollbar-width:none]" aria-label="Leaderboard period">
+    <nav className="flex items-center gap-2 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden" aria-label="Leaderboard period">
       {tabs.map((t) => {
         const active = period === t.key;
         return (
@@ -387,7 +391,7 @@ function ScopeTabs({
     },
     {
       key: "dept",
-      label: userPrefs?.department ?? "My dept",
+      label: departmentLabel(userPrefs?.department, "My dept"),
       disabled: !userPrefs?.department_id,
     },
     {
@@ -403,7 +407,7 @@ function ScopeTabs({
   ];
 
   return (
-    <nav className="flex items-center gap-2 overflow-x-auto [scrollbar-width:none]" aria-label="Leaderboard scope">
+    <nav className="flex flex-wrap items-center gap-2" aria-label="Leaderboard scope">
       {tabs.map((t) => {
         const active = scope === t.key;
         const href = leaderboardHref(period, t.key, t.key === "course" ? courseCode : null);
@@ -412,7 +416,7 @@ function ScopeTabs({
             <span
               key={t.key}
               aria-disabled="true"
-              className="shrink-0 rounded-full border border-white/15 bg-white/5 px-3 py-1.5 text-xs font-semibold text-white/35"
+              className="max-w-[11rem] truncate rounded-full border border-white/15 bg-white/5 px-3 py-1.5 text-xs font-semibold text-white/35 sm:max-w-none"
             >
               {t.label}
             </span>
@@ -425,7 +429,7 @@ function ScopeTabs({
             href={href}
             aria-current={active ? "page" : undefined}
             className={cn(
-              "shrink-0 rounded-full border px-3 py-1.5 text-xs font-semibold transition",
+              "max-w-[11rem] truncate rounded-full border px-3 py-1.5 text-xs font-semibold transition sm:max-w-none",
               "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/70 focus-visible:ring-offset-2 focus-visible:ring-offset-primary",
               active
                 ? "border-white bg-white text-primary-text"
@@ -452,7 +456,7 @@ function CourseTabs({
   if (courses.length === 0) return null;
 
   return (
-    <nav className="flex items-center gap-2 overflow-x-auto [scrollbar-width:none]" aria-label="Course leaderboard">
+    <nav className="flex items-center gap-2 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden" aria-label="Course leaderboard">
       {courses.map((course) => {
         const active = normalizeCourseCode(activeCourseCode) === normalizeCourseCode(course.course_code);
         return (
@@ -491,7 +495,7 @@ function LeaderboardStats({
 }) {
   const stats = [
     {
-      label: "Students ranked",
+      label: "Ranked",
       value: rankedCount > 0 ? formatNumber(rankedCount) : "0",
       icon: Users,
     },
@@ -770,12 +774,13 @@ function RankRow({
 export default async function LeaderboardPage({
   searchParams,
 }: {
-  searchParams?: { scope?: string; period?: string; course?: string };
+  searchParams?: Promise<{ scope?: string; period?: string; course?: string }>;
 }) {
+  const resolvedSearchParams = await searchParams;
   const entryState = await getLeaderboardEntryState();
-  const rawScope = (searchParams?.scope ?? "").toLowerCase();
-  const rawPeriod = (searchParams?.period ?? "").toLowerCase();
-  const rawCourse = (searchParams?.course ?? "").trim();
+  const rawScope = (resolvedSearchParams?.scope ?? "").toLowerCase();
+  const rawPeriod = (resolvedSearchParams?.period ?? "").toLowerCase();
+  const rawCourse = (resolvedSearchParams?.course ?? "").trim();
   const period: Period =
     rawScope === "week"
       ? "week"

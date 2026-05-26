@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { attachPublicUploaders } from "@/lib/studyUploaderDisplay";
 
 function normalizeQuery(v: string) {
   return (v || "").trim().replace(/\s+/g, " ");
@@ -115,7 +116,7 @@ export async function GET(req: Request) {
         .from("study_materials")
         .select(
           `id,title,description,file_path,session,approved,created_at,downloads,up_votes,
-           course_id,material_type,featured,verified,ai_summary,
+           course_id,material_type,featured,verified,ai_summary,uploader_id,
            study_courses:course_id(id,faculty,department,level,semester,course_code,course_title,faculty_id,department_id)`,
           { count: "exact" }
         )
@@ -158,9 +159,10 @@ export async function GET(req: Request) {
       if (mineRes.error) {
         return NextResponse.json({ ok: false, error: mineRes.error.message }, { status: 400 });
       }
+      const items = await attachPublicUploaders((mineRes.data as any[]) ?? []);
       return NextResponse.json({
         ok: true,
-        items: (mineRes.data as any[]) ?? [],
+        items,
         total: mineRes.count ?? 0,
         page,
         page_size: pageSize,
@@ -171,7 +173,7 @@ export async function GET(req: Request) {
       .from("study_materials")
       .select(
         `id,title,description,file_path,session,approved,created_at,downloads,up_votes,
-         course_id,material_type,featured,verified,ai_summary,
+         course_id,material_type,featured,verified,ai_summary,uploader_id,
          study_courses:course_id(id,faculty,department,level,semester,course_code,course_title,faculty_id,department_id)`,
         { count: "exact" }
       )
@@ -239,9 +241,10 @@ export async function GET(req: Request) {
       return NextResponse.json({ ok: false, error: msg, schemaHint }, { status: 400 });
     }
 
+    const items = await attachPublicUploaders((res.data as any[]) ?? []);
     return NextResponse.json({
       ok: true,
-      items: (res.data as any[]) ?? [],
+      items,
       total: res.count ?? 0,
       page,
       page_size: pageSize,

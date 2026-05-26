@@ -216,8 +216,11 @@ type Material = {
   verified: boolean | null;
   featured: boolean | null;
   created_at: string | null;
-  uploader_email: string | null;
   uploader_id: string | null;
+  uploader?: {
+    displayName: string;
+    initials: string;
+  };
   ai_summary: string | null;
   study_courses: Course | null;
 };
@@ -242,19 +245,6 @@ function FileIcon({ kind }: { kind: "pdf" | "image" | "other" }) {
   if (kind === "pdf") return <FileText className="h-6 w-6" />;
   if (kind === "image") return <ImageIcon className="h-6 w-6" />;
   return <File className="h-6 w-6" />;
-}
-
-function obfuscateEmail(email: string | null | undefined): string {
-  if (!email) return "Anonymous";
-  const [local, domain] = email.split("@");
-  if (!local || !domain) return email.slice(0, 3) + "***";
-  return local.slice(0, 3) + "***@" + domain;
-}
-
-function getInitials(email: string | null | undefined): string {
-  if (!email) return "?";
-  const local = email.split("@")[0] ?? "";
-  return local.slice(0, 2).toUpperCase();
 }
 
 function formatMaterialType(t: string | null) {
@@ -848,6 +838,8 @@ export default function MaterialDetailClient({
   const [saving, setSaving] = useState(false);
   const [downloads, setDownloads] = useState(m.downloads ?? 0);
   const [uploaderIsRep, setUploaderIsRep] = useState(false);
+  const uploaderName = m.uploader?.displayName ?? "A student";
+  const uploaderInitials = m.uploader?.initials ?? "AS";
   const [previewOpen, setPreviewOpen] = useState(false);
   const [readingRef, setReadingRef] = useState<{ open: boolean; page?: number; studyRef?: GuidedStudyRef } | null>(null);
   const [toast, setToast] = useState<string | null>(null);
@@ -1741,7 +1733,7 @@ export default function MaterialDetailClient({
                   </p>
                   <h1 className="break-words text-lg font-extrabold leading-snug text-white sm:text-xl">{title}</h1>
                   <p className="mt-1 line-clamp-2 text-sm text-white/75">
-                    Uploaded by {obfuscateEmail(m.uploader_email)} · {timeAgo(m.created_at ?? "")}
+                    Uploaded by {uploaderName} · {timeAgo(m.created_at ?? "")}
                   </p>
                 </div>
               </div>
@@ -1867,13 +1859,13 @@ export default function MaterialDetailClient({
               <div className="mt-4 flex items-center justify-between gap-3 border-t border-border pt-4">
                 <div className="flex min-w-0 items-center gap-2.5">
                   <div className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-primary-light text-xs font-bold text-primary">
-                    {getInitials(m.uploader_email)}
+                    {uploaderInitials}
                   </div>
                   <div className="min-w-0">
                     <p className="text-[10px] text-muted-brand">Uploaded by</p>
                     <div className="flex min-w-0 flex-wrap items-center gap-2">
                       <p className="truncate text-xs font-semibold text-foreground">
-                        {m.uploader_email ? obfuscateEmail(m.uploader_email) : "A student"}
+                        {uploaderName}
                       </p>
                       {uploaderIsRep && (
                         <span className="inline-flex items-center gap-1 rounded-full border border-primary/30 bg-primary-light px-2 py-0.5 text-[10px] font-semibold text-primary-text">

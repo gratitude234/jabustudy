@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createSupabaseAdminClient } from "../../../../lib/supabase/admin";
 import { requireStudyModeratorFromRequest } from "../../../../lib/studyAdmin/requireStudyModeratorFromRequest";
+import { getAdminUploaderMap } from "@/lib/studyUploaderDisplay";
 
 function applyScopeToMaterialsQuery(query: any, scope: any) {
   // super sees everything
@@ -76,6 +77,7 @@ export async function GET(req: Request) {
           "verified",
           "featured",
           "file_hash",
+          "uploader_id",
           "uploader_email",
           "index_status",
           "indexed_at",
@@ -113,7 +115,24 @@ export async function GET(req: Request) {
     const { data, error } = await query;
     if (error) throw error;
 
-    return NextResponse.json({ ok: true, items: data ?? [] });
+    const rows = (data ?? []) as any[];
+    const uploaderMap = await getAdminUploaderMap(rows.map((row) => row.uploader_id));
+    const items = rows.map((row) => {
+      const profile = row.uploader_id ? uploaderMap[row.uploader_id] : null;
+      const fallbackEmail = typeof row.uploader_email === "string" && row.uploader_email.trim() ? row.uploader_email.trim() : null;
+      const email = profile?.email ?? fallbackEmail;
+      const fullName = profile?.fullName ?? null;
+      return {
+        ...row,
+        uploader: {
+          fullName,
+          email,
+          displayName: fullName ?? email ?? "Unknown uploader",
+        },
+      };
+    });
+
+    return NextResponse.json({ ok: true, items });
   } catch (e: any) {
     const status = Number(e?.status) || 500;
     return NextResponse.json(

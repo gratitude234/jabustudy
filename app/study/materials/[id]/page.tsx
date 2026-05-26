@@ -3,6 +3,7 @@ import { cache } from "react";
 import { notFound } from "next/navigation";
 import type { Metadata } from "next";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { fallbackPublicUploader, getPublicUploaderMap } from "@/lib/studyUploaderDisplay";
 import MaterialDetailClient from "./MaterialDetailClient";
 
 type Props = { params: Promise<{ id: string }>; searchParams: Promise<{ from?: string }> };
@@ -18,7 +19,7 @@ const getMaterial = cache(async (id: string) => {
       `id, title, description, material_type, session,
        approved, downloads, up_votes, down_votes,
        file_url, file_path, ai_summary,
-       verified, featured, created_at, uploader_email, uploader_id,
+       verified, featured, created_at, uploader_id,
        study_courses (
          id, course_code, course_title,
          level, semester, faculty, department
@@ -30,7 +31,12 @@ const getMaterial = cache(async (id: string) => {
     .maybeSingle();
 
   if (error || !data) return null;
-  return data;
+  const uploaderMap = await getPublicUploaderMap([(data as any).uploader_id]);
+  const uploader = (data as any).uploader_id
+    ? uploaderMap[(data as any).uploader_id] ?? fallbackPublicUploader()
+    : fallbackPublicUploader();
+
+  return { ...data, uploader };
 });
 
 // ─── Dynamic metadata for sharing ────────────────────────────────────────────

@@ -41,7 +41,13 @@ type MaterialItem = {
   created_at: string;
   approved: boolean;
   file_hash: string | null;
+  uploader_id: string | null;
   uploader_email: string | null;
+  uploader?: {
+    fullName: string | null;
+    email: string | null;
+    displayName: string;
+  } | null;
   index_status: "pending" | "indexing" | "ready" | "failed" | "skipped" | null;
   indexed_at: string | null;
   index_error: string | null;
@@ -494,6 +500,8 @@ export default function StudyAdminMaterialsPage() {
               const broken = !m.file_path || !m.file_url;
               const canReindex = m.approved && isIndexableMaterialPath(m.file_path);
               const indexBusy = busyId === m.id || m.index_status === "indexing";
+              const uploaderName = m.uploader?.fullName?.trim() || null;
+              const uploaderEmail = m.uploader?.email?.trim() || m.uploader_email?.trim() || null;
               return (
               <div key={m.id} className="flex flex-col gap-3 py-4 sm:flex-row sm:items-center sm:justify-between">
                 <input
@@ -529,7 +537,9 @@ export default function StudyAdminMaterialsPage() {
                     {m.title || m.study_courses.course_title || "Untitled"}
                   </p>
                   <p className="mt-1 text-xs text-zinc-500">
-                    Uploaded {formatDate(m.created_at)}{m.uploader_email ? ` · ${m.uploader_email}` : ""}
+                    Uploaded {formatDate(m.created_at)}
+                    {uploaderName ? ` · ${uploaderName}` : uploaderEmail ? ` · ${uploaderEmail}` : ""}
+                    {uploaderName && uploaderEmail ? ` · ${uploaderEmail}` : ""}
                     {m.file_hash ? ` · hash: ${m.file_hash.slice(0, 10)}…` : ""}
                   </p>
                   {m.index_error ? (
