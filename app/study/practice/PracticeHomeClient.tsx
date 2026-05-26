@@ -1,5 +1,5 @@
 ﻿"use client";
-import { cn, formatWhen, normalizeQuery, buildHref, pctToColor } from "@/lib/utils";
+import { cn, normalizeQuery, buildHref, pctToColor } from "@/lib/utils";
 import { getPracticeStreak } from "@/lib/studyPractice";
 
 import Link from "next/link";
@@ -58,7 +58,7 @@ function storedSemesterToParam(value: string) {
   return "";
 }
 
-type ViewKey = "for_you" | "recent" | "all";
+type ViewKey = "for_you" | "all";
 
 type QuizSetRow = {
   id: string;
@@ -120,23 +120,6 @@ function practiceSetSelectFields(disabledColumns: Set<PracticeSetOptionalField>)
     ...PRACTICE_SET_OPTIONAL_FIELDS.filter((field) => !disabledColumns.has(field)),
   ].join(",");
 }
-
-type LatestAttempt = {
-  id: string;
-  set_id: string | null;
-  created_at: string | null;
-  updated_at?: string | null;
-  status?: string | null;
-
-  score?: number | null;
-  total_questions?: number | null;
-
-  study_quiz_sets?: {
-    id: string;
-    title: string | null;
-    course_code?: string | null;
-  } | null;
-};
 
 // Per-set attempt summary â€" injected into QuizSetCard for personal context
 type SetAttemptSummary = {
@@ -435,7 +418,6 @@ function SecondaryButton({
 function MiniTabs({ value, onChange }: { value: ViewKey; onChange: (v: ViewKey) => void }) {
   const items: Array<{ k: ViewKey; label: string; icon: React.ReactNode }> = [
     { k: "for_you", label: "For you", icon: <Sparkles className="h-4 w-4" /> },
-    { k: "recent", label: "Recent", icon: <History className="h-4 w-4" /> },
     { k: "all", label: "All sets", icon: <Layers className="h-4 w-4" /> },
   ];
 
@@ -911,7 +893,8 @@ function PracticeHomeInner() {
   const difficultyParam = sp.get("difficulty") ?? "";
 
   // view tab
-  const viewParam = (sp.get("view") ?? "for_you") as ViewKey;
+  const rawViewParam = sp.get("view") ?? "for_you";
+  const viewParam: ViewKey = rawViewParam === "all" ? "all" : "for_you";
 
   // published-only toggle
   const publishedParam = sp.get("published") ?? "";
@@ -957,9 +940,6 @@ function PracticeHomeInner() {
   const [dueData, setDueData] = useState<DuePracticeData | null>(null);
   const [dueLoading, setDueLoading] = useState(true);
   const [quickLoading, setQuickLoading] = useState(false);
-
-  // Attempts
-  const [recentAttempts, setRecentAttempts] = useState<LatestAttempt[]>([]);
 
   // User prefs â€" used to personalize the "For you" tab without requiring URL params
   const [userPrefs, setUserPrefs] = useState<{
@@ -1132,52 +1112,6 @@ function PracticeHomeInner() {
     })();
     return () => { mounted = false; };
   }, []);
-
-  // Load latest + recent attempts
-  useEffect(() => {
-    let mounted = true;
-    (async () => {
-      try {
-        if (!authedUserId) {
-          if (mounted) {
-            setRecentAttempts([]);
-          }
-          return;
-        }
-
-        const res = await supabase
-          .from("study_practice_attempts")
-          .select(
-            `
-            id,set_id,created_at,updated_at,status,score,total_questions,
-            study_quiz_sets(id,title,course_code)
-          `
-          )
-          .eq("user_id", authedUserId)
-          .order("updated_at", { ascending: false })
-          .order("created_at", { ascending: false })
-          .limit(6);
-
-        if (!mounted) return;
-
-        if (res.error) {
-          setRecentAttempts([]);
-          return;
-        }
-
-        const rows = ((res.data as any[]) ?? []).filter(Boolean) as LatestAttempt[];
-        setRecentAttempts(rows.slice(0, 6));
-      } catch {
-        if (mounted) {
-          setRecentAttempts([]);
-        }
-      }
-    })();
-
-    return () => {
-      mounted = false;
-    };
-  }, [authedUserId]);
 
   // â"€â"€ Per-set attempt summaries â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€
   // Loaded whenever the visible set list changes. Gives each card personal
@@ -1559,11 +1493,6 @@ function PracticeHomeInner() {
     return sets;
   }, [viewParam, forYouSets, sets]);
 
-  const resumeAttempt = useMemo(
-    () => recentAttempts.find((attempt) => attempt.status === "in_progress" && attempt.set_id) ?? null,
-    [recentAttempts]
-  );
-
   const timedExamSet = useMemo(() => {
     const seen = new Set<string>();
     const candidates = [...visibleSets, ...forYouSets, ...sets].filter((set) => {
@@ -1574,8 +1503,6 @@ function PracticeHomeInner() {
 
     return candidates.find((set) => (set.time_limit_minutes ?? 0) > 0) ?? null;
   }, [visibleSets, forYouSets, sets]);
-
-  const showRecentEmpty = viewParam === "recent" && recentAttempts.length === 0;
 
   const attemptedSummaries = Object.values(setAttemptMap).filter((s) => s.bestPct !== null);
   const avgScore = attemptedSummaries.length
@@ -1709,7 +1636,7 @@ function PracticeHomeInner() {
         }
       />
 
-      {/* Tabs: For you / Recent / All */}
+      {/* Tabs: For you / All */}
       <div className="flex items-center justify-between gap-3">
         <MiniTabs value={viewParam} onChange={setView} />
       </div>
@@ -1867,72 +1794,7 @@ function PracticeHomeInner() {
         </div>
       ) : null}
 
-      {/* RECENT VIEW */}
-      {viewParam === "recent" ? (
-        recentAttempts.length === 0 ? (
-          <div className="pl-14">
-          <EmptyState
-            icon={<History className="h-5 w-5" />}
-            title="No recent activity"
-            description="Sets you've recently attempted will appear here."
-            action={
-              <Link
-                href="/study/library"
-                className={cn(
-                  "inline-flex items-center gap-2 rounded-2xl border border-border bg-secondary px-4 py-3 text-sm font-semibold text-foreground no-underline",
-                  "hover:opacity-90",
-                  "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
-                )}
-              >
-                <Flame className="h-4 w-4" />
-                Browse Materials
-              </Link>
-            }
-          />
-          </div>
-        ) : (
-          <div className="space-y-3">
-            {recentAttempts.map((a) => (
-              <Card key={a.id} className="w-full max-w-full overflow-hidden rounded-3xl p-4">
-                <div className="flex min-w-0 items-start justify-between gap-3">
-                  <div className="min-w-0">
-                    <p className="truncate text-base font-semibold text-foreground">
-                      {(a.study_quiz_sets?.title ?? "Practice set").trim() || "Practice set"}
-                    </p>
-                    <div className="mt-2 flex max-w-full flex-wrap items-center gap-2">
-                      {a.study_quiz_sets?.course_code ? (
-                        <span className="max-w-full truncate rounded-full border border-border bg-background px-2 py-0.5 text-[11px] font-semibold text-foreground">
-                          {String(a.study_quiz_sets.course_code).toUpperCase()}
-                        </span>
-                      ) : null}
-                      <span className="inline-flex items-center gap-1 rounded-full border border-border bg-background px-2 py-0.5 text-[11px] font-semibold text-muted-foreground">
-                        <Clock className="h-3.5 w-3.5" />
-                        {formatWhen(a.updated_at ?? a.created_at)}
-                      </span>
-                    </div>
-                  </div>
-
-                  {a.set_id ? (
-                    <button
-                      type="button"
-                      onClick={() => startSet(String(a.set_id))}
-                      className={cn(
-                        "inline-flex shrink-0 items-center gap-2 rounded-2xl border border-border bg-secondary px-4 py-2.5 text-sm font-semibold text-foreground",
-                        "hover:opacity-90",
-                        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
-                      )}
-                    >
-                      <Play className="h-4 w-4" />
-                      Open
-                    </button>
-                  ) : null}
-                </div>
-              </Card>
-            ))}
-          </div>
-        )
-      ) : (
-        <>
+      <>
           {/* RESULTS */}
           <div className="flex min-w-0 flex-col gap-3">
             {loading ? (
@@ -2010,8 +1872,7 @@ function PracticeHomeInner() {
               )}
             </div>
           ) : null}
-        </>
-      )}
+      </>
 
       {/* Filters drawer */}
       <Drawer
