@@ -1,7 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
 import {
   Calculator,
   ChevronRight,
@@ -113,9 +114,11 @@ function badgeClassName(badge: MoreBadge) {
 }
 
 export default function QuickMoreSheet({ open, onClose }: QuickMoreSheetProps) {
+  const router = useRouter();
   const dragStartY = useRef<number | null>(null);
   const [isDragging, setIsDragging] = useState(false);
   const [dragOffset, setDragOffset] = useState(0);
+  const [, startNavigation] = useTransition();
   const { userId } = useStudyPrefs();
   const badgeState = useMoreBadges(open);
 
@@ -134,6 +137,8 @@ export default function QuickMoreSheet({ open, onClose }: QuickMoreSheetProps) {
   useEffect(() => {
     if (!open) return;
 
+    ROW_DEFS.forEach((row) => router.prefetch(row.href));
+
     const prev = document.body.style.overflow;
     document.body.style.overflow = "hidden";
     const onKey = (event: KeyboardEvent) => {
@@ -145,7 +150,7 @@ export default function QuickMoreSheet({ open, onClose }: QuickMoreSheetProps) {
       document.body.style.overflow = prev;
       window.removeEventListener("keydown", onKey);
     };
-  }, [closeSheet, open]);
+  }, [closeSheet, open, router]);
 
   function handleTouchStart(event: React.TouchEvent) {
     dragStartY.current = event.touches[0].clientY;
@@ -252,7 +257,11 @@ export default function QuickMoreSheet({ open, onClose }: QuickMoreSheetProps) {
                       <Link
                         key={row.href}
                         href={row.href}
-                        onClick={() => {
+                        prefetch
+                        onTouchStart={() => router.prefetch(row.href)}
+                        onMouseEnter={() => router.prefetch(row.href)}
+                        onClick={(event) => {
+                          event.preventDefault();
                           track("study_home_more_item_tapped", {
                             item: row.key,
                             had_badge: Boolean(badge),
@@ -279,6 +288,9 @@ export default function QuickMoreSheet({ open, onClose }: QuickMoreSheetProps) {
                           }
 
                           closeSheet();
+                          startNavigation(() => {
+                            router.push(row.href);
+                          });
                         }}
                         className={cn(
                           "flex items-center gap-3.5 rounded-2xl border border-border/60 bg-background p-3.5 transition-all duration-150",
@@ -315,7 +327,9 @@ export default function QuickMoreSheet({ open, onClose }: QuickMoreSheetProps) {
                           </p>
                         </div>
 
-                        <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" />
+                        <ChevronRight
+                          className="h-4 w-4 shrink-0 text-muted-foreground"
+                        />
                       </Link>
                     );
                   })}
