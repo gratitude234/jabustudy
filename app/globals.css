@@ -194,6 +194,36 @@
   40%            { transform: scale(1);   opacity: 1; }
 }
 
+.splash-screen {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  display: none;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.6rem;
+  background: #F6F4FF;
+  opacity: 1;
+  pointer-events: auto;
+}
+
+@media (display-mode: standalone) {
+  .splash-screen.is-booting {
+    display: flex;
+  }
+}
+
+.splash-screen.is-visible {
+  display: flex;
+}
+
+.splash-screen.is-fading {
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.55s ease;
+}
+
 .splash-logo {
   animation: splash-pop 0.5s cubic-bezier(0.34, 1.56, 0.64, 1) both;
 }
@@ -230,6 +260,14 @@
 .splash-dots span:nth-child(1) { animation: splash-dot-pulse 1.2s 0.55s ease-in-out infinite; }
 .splash-dots span:nth-child(2) { animation: splash-dot-pulse 1.2s 0.7s  ease-in-out infinite; }
 .splash-dots span:nth-child(3) { animation: splash-dot-pulse 1.2s 0.85s ease-in-out infinite; }
+
+@media (prefers-reduced-motion: reduce) {
+  .splash-screen *,
+  .splash-screen.is-fading {
+    animation: none !important;
+    transition: none !important;
+  }
+}
 
 @keyframes shimmer {
   100% { transform: translateX(100%); }

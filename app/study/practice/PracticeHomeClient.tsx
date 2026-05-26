@@ -6,7 +6,6 @@ import Link from "next/link";
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { supabase } from "@/lib/supabase";
-import { getWhatsAppLink } from "@/lib/whatsapp";
 import StudyTabs from "../_components/StudyTabs";
 import { Card, EmptyState, SkeletonCard } from "../_components/StudyUI";
 import { StudyPrefsProvider, useStudyPrefs } from "../_components/StudyPrefsContext";
@@ -29,7 +28,6 @@ import {
   Flame,
   Layers,
   Loader2,
-  MessageCircle,
   Zap,
 } from "lucide-react";
 
@@ -43,21 +41,6 @@ const LEVELS = ["100", "200", "300", "400", "500"] as const;
 const SEMESTERS = ["1st", "2nd", "summer"] as const;
 const PRACTICE_LEVEL_STORAGE_KEY = "jabu:practiceFilter:level";
 const PRACTICE_SEMESTER_STORAGE_KEY = "jabu:practiceFilter:semester";
-const GRATITUDE_WHATSAPP_NUMBER = "07041022336";
-
-function practiceSetGratitudeLink(args: { department?: string | null; level?: number | null }) {
-  const department = args.department?.trim() ?? "";
-  const level = typeof args.level === "number" && Number.isFinite(args.level) ? `${args.level}L` : "";
-  const message = [
-    "Hello Gratitude, I want to send materials/past questions so they can be turned into practice sets.",
-    "",
-    "Course:",
-    `Department: ${department}`,
-    `Level: ${level}`,
-  ].join("\n");
-
-  return getWhatsAppLink(GRATITUDE_WHATSAPP_NUMBER, message);
-}
 
 function semesterParamToStoredValue(value: string) {
   const normalized = value.trim().toLowerCase();
@@ -1035,10 +1018,6 @@ function PracticeHomeInner() {
 
   const shouldDeferSetFetch =
     !filterStorageReady || (viewParam === "for_you" && !personalizedOff && prefsLoading);
-  const gratitudePracticeHref = practiceSetGratitudeLink({
-    department: contextPrefs?.department ?? null,
-    level: contextPrefs?.level ?? null,
-  });
 
   useEffect(() => setQ(qParam), [qParam]);
 
@@ -1711,30 +1690,6 @@ function PracticeHomeInner() {
         onQuickSession={handleQuickSession}
       />
 
-      <Card className="rounded-3xl border bg-background/85 p-4">
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <div className="min-w-0">
-            <p className="text-sm font-extrabold text-foreground">Help create more practice sets</p>
-            <p className="mt-1 text-sm leading-relaxed text-muted-foreground">
-              Have past questions, handouts, or notes? Send them to Gratitude so they can be turned into practice sets for your course.
-            </p>
-          </div>
-          <a
-            href={gratitudePracticeHref}
-            target="_blank"
-            rel="noopener noreferrer"
-            className={cn(
-              "inline-flex shrink-0 items-center justify-center gap-2 rounded-2xl bg-secondary px-4 py-3 text-sm font-semibold text-foreground no-underline",
-              "hover:opacity-90",
-              "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-card"
-            )}
-          >
-            <MessageCircle className="h-4 w-4" />
-            Send materials to Gratitude
-          </a>
-        </div>
-      </Card>
-
       {/* Course chips filter */}
       <CourseChipsBar
         courseCodes={courseCodes}
@@ -1997,36 +1952,21 @@ function PracticeHomeInner() {
                   }
                   description={
                     viewParam === "for_you"
-                      ? "For you shows practice sets matched to your department and level. Browse All sets or request content below."
-                      : "Check back soon, or request content for your course."
+                      ? "For you shows practice sets matched to your department and level. Browse all sets or check the material library."
+                      : "Check back soon, or browse the material library."
                   }
                   action={
-                    <div className="flex flex-wrap gap-2">
-                      <a
-                        href={gratitudePracticeHref}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className={cn(
-                          "inline-flex items-center gap-2 rounded-2xl bg-secondary px-4 py-3 text-sm font-semibold text-foreground no-underline",
-                          "hover:opacity-90",
-                          "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
-                        )}
-                      >
-                        <MessageCircle className="h-4 w-4" />
-                        Send materials to Gratitude
-                      </a>
-                      <Link
-                        href="/study/library"
-                        className={cn(
-                          "inline-flex items-center gap-2 rounded-2xl border border-border bg-background px-4 py-3 text-sm font-semibold text-foreground no-underline",
-                          "hover:bg-secondary/50",
-                          "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
-                        )}
-                      >
-                        <Flame className="h-4 w-4" />
-                        Browse Materials
-                      </Link>
-                    </div>
+                    <Link
+                      href="/study/library"
+                      className={cn(
+                        "inline-flex items-center gap-2 rounded-2xl border border-border bg-background px-4 py-3 text-sm font-semibold text-foreground no-underline",
+                        "hover:bg-secondary/50",
+                        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+                      )}
+                    >
+                      <Flame className="h-4 w-4" />
+                      Browse Materials
+                    </Link>
                   }
                 />
               </div>

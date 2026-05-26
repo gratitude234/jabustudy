@@ -3,20 +3,27 @@
 import { useEffect, useState } from "react";
 import Image from "next/image";
 
-type Phase = "hidden" | "visible" | "fading";
+type Phase = "boot" | "hidden" | "visible" | "fading";
 
 export default function SplashScreen() {
-  const [phase, setPhase] = useState<Phase>("hidden");
+  const [phase, setPhase] = useState<Phase>("boot");
 
   useEffect(() => {
+    /* eslint-disable react-hooks/set-state-in-effect */
     const isStandalone =
       window.matchMedia("(display-mode: standalone)").matches ||
       (window.navigator as { standalone?: boolean }).standalone === true;
 
-    if (!isStandalone) return;
+    if (!isStandalone) {
+      setPhase("hidden");
+      return;
+    }
 
     // Show once per session (each fresh PWA open gets a new session)
-    if (sessionStorage.getItem("js-splash")) return;
+    if (sessionStorage.getItem("js-splash")) {
+      setPhase("hidden");
+      return;
+    }
     sessionStorage.setItem("js-splash", "1");
 
     setPhase("visible");
@@ -28,6 +35,7 @@ export default function SplashScreen() {
       clearTimeout(t1);
       clearTimeout(t2);
     };
+    /* eslint-enable react-hooks/set-state-in-effect */
   }, []);
 
   if (phase === "hidden") return null;
@@ -35,20 +43,12 @@ export default function SplashScreen() {
   return (
     <div
       aria-hidden
-      style={{
-        position: "fixed",
-        inset: 0,
-        zIndex: 9999,
-        background: "#F6F4FF",
-        display: "flex",
-        flexDirection: "column",
-        alignItems: "center",
-        justifyContent: "center",
-        gap: "0.6rem",
-        opacity: phase === "fading" ? 0 : 1,
-        transition: phase === "fading" ? "opacity 0.55s ease" : undefined,
-        pointerEvents: "none",
-      }}
+      className={[
+        "splash-screen",
+        phase === "boot" ? "is-booting" : "",
+        phase === "visible" || phase === "fading" ? "is-visible" : "",
+        phase === "fading" ? "is-fading" : "",
+      ].filter(Boolean).join(" ")}
     >
       <div className="splash-logo">
         <Image
