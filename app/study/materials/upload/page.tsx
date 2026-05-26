@@ -157,9 +157,9 @@ const ACCEPT_STR = [
   "application/vnd.ms-excel",
 ].join(",");
 
-const ADMIN_WHATSAPP_LINK = getWhatsAppLink(
+const GRATITUDE_WHATSAPP_LINK = getWhatsAppLink(
   "07041022336",
-  "Hello admin, I have many images/phone photos for a study material. Please help convert them into a clean PDF before upload."
+  "Hello Gratitude, I have many images/phone photos for a study material. Please help convert them into a clean PDF before upload."
 );
 
 // ─── Utilities ────────────────────────────────────────────────────────────────
@@ -994,14 +994,14 @@ export default function UploadMaterialsPage() {
               </div>
 
               <div className="rounded-2xl border border-amber-300/40 bg-amber-50 px-3 py-2.5 text-xs leading-relaxed text-amber-900 dark:border-amber-700/40 dark:bg-amber-950/25 dark:text-amber-200">
-                Upload PDF, DOCX, or PPTX files for best results. If your material is made up of many images or phone photos, send it to an{" "}
+                Upload PDF, DOCX, or PPTX files for best results. If your material is made up of many images or phone photos, send it to{" "}
                 <a
-                  href={ADMIN_WHATSAPP_LINK}
+                  href={GRATITUDE_WHATSAPP_LINK}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="font-extrabold underline decoration-amber-500/60 underline-offset-2 hover:text-amber-700 dark:hover:text-amber-100"
                 >
-                  admin
+                  Gratitude
                 </a>{" "}
                 first so it can be converted into a clean PDF before upload.
               </div>

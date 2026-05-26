@@ -43,15 +43,20 @@ const LEVELS = ["100", "200", "300", "400", "500"] as const;
 const SEMESTERS = ["1st", "2nd", "summer"] as const;
 const PRACTICE_LEVEL_STORAGE_KEY = "jabu:practiceFilter:level";
 const PRACTICE_SEMESTER_STORAGE_KEY = "jabu:practiceFilter:semester";
-const ADMIN_WHATSAPP_NUMBER = "07041022336";
+const GRATITUDE_WHATSAPP_NUMBER = "07041022336";
 
-function practiceSetAdminLink(courseCode: string) {
-  const normalizedCourse = courseCode.trim().toUpperCase();
-  const message = normalizedCourse
-    ? `Hello admin, I need a practice set for ${normalizedCourse}. I have past questions/materials to send.`
-    : "Hello admin, I need help turning my past questions/materials into a practice set for my course.";
+function practiceSetGratitudeLink(args: { department?: string | null; level?: number | null }) {
+  const department = args.department?.trim() ?? "";
+  const level = typeof args.level === "number" && Number.isFinite(args.level) ? `${args.level}L` : "";
+  const message = [
+    "Hello Gratitude, I want to send materials/past questions so they can be turned into practice sets.",
+    "",
+    "Course:",
+    `Department: ${department}`,
+    `Level: ${level}`,
+  ].join("\n");
 
-  return getWhatsAppLink(ADMIN_WHATSAPP_NUMBER, message);
+  return getWhatsAppLink(GRATITUDE_WHATSAPP_NUMBER, message);
 }
 
 function semesterParamToStoredValue(value: string) {
@@ -1030,6 +1035,10 @@ function PracticeHomeInner() {
 
   const shouldDeferSetFetch =
     !filterStorageReady || (viewParam === "for_you" && !personalizedOff && prefsLoading);
+  const gratitudePracticeHref = practiceSetGratitudeLink({
+    department: contextPrefs?.department ?? null,
+    level: contextPrefs?.level ?? null,
+  });
 
   useEffect(() => setQ(qParam), [qParam]);
 
@@ -1702,6 +1711,30 @@ function PracticeHomeInner() {
         onQuickSession={handleQuickSession}
       />
 
+      <Card className="rounded-3xl border bg-background/85 p-4">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div className="min-w-0">
+            <p className="text-sm font-extrabold text-foreground">Help create more practice sets</p>
+            <p className="mt-1 text-sm leading-relaxed text-muted-foreground">
+              Have past questions, handouts, or notes? Send them to Gratitude so they can be turned into practice sets for your course.
+            </p>
+          </div>
+          <a
+            href={gratitudePracticeHref}
+            target="_blank"
+            rel="noopener noreferrer"
+            className={cn(
+              "inline-flex shrink-0 items-center justify-center gap-2 rounded-2xl bg-secondary px-4 py-3 text-sm font-semibold text-foreground no-underline",
+              "hover:opacity-90",
+              "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-card"
+            )}
+          >
+            <MessageCircle className="h-4 w-4" />
+            Send materials to Gratitude
+          </a>
+        </div>
+      </Card>
+
       {/* Course chips filter */}
       <CourseChipsBar
         courseCodes={courseCodes}
@@ -1970,7 +2003,7 @@ function PracticeHomeInner() {
                   action={
                     <div className="flex flex-wrap gap-2">
                       <a
-                        href={practiceSetAdminLink(courseParam)}
+                        href={gratitudePracticeHref}
                         target="_blank"
                         rel="noopener noreferrer"
                         className={cn(
@@ -1980,7 +2013,7 @@ function PracticeHomeInner() {
                         )}
                       >
                         <MessageCircle className="h-4 w-4" />
-                        {courseParam ? `Request ${courseParam.toUpperCase()} set` : "Contact admin"}
+                        Send materials to Gratitude
                       </a>
                       <Link
                         href="/study/library"
