@@ -485,6 +485,55 @@ export async function notifyRepsNewPendingMaterial({
 
 // â”€â”€â”€ Student-created course review â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
+/**
+ * Notify study admins after a material upload has been verified and made live.
+ * Admins use this alert to open/download the material and create practice sets.
+ */
+export async function notifyStudyAdminsNewMaterialUploaded({
+  materialId,
+  title,
+  courseCode,
+  uploaderEmail,
+}: {
+  materialId: string;
+  title: string;
+  courseCode: string | null;
+  uploaderEmail: string | null;
+}): Promise<void> {
+  try {
+    const admin = createSupabaseAdminClient();
+    const { data: admins } = await admin.from("study_admins").select("user_id");
+    const recipientIds = ((admins ?? []) as { user_id: string }[]).map((row) => row.user_id);
+    if (!recipientIds.length) return;
+
+    const shortTitle = title.length > 55 ? title.slice(0, 52).trimEnd() + "..." : title;
+    const prefix = courseCode ? `[${courseCode}] ` : "";
+    const uploaderHint = uploaderEmail ? ` from ${uploaderEmail.split("@")[0]}` : "";
+    const notifTitle = "New material uploaded";
+    const body = `${prefix}${shortTitle}${uploaderHint} is live. Download it to create practice questions.`;
+    const href = `/study/materials/${materialId}`;
+
+    await admin.from("notifications").insert(
+      recipientIds.map((uid) => ({
+        user_id: uid,
+        type: "study_material_uploaded_admin",
+        title: notifTitle,
+        body,
+        href,
+        is_read: false,
+      }))
+    );
+
+    void Promise.allSettled(
+      recipientIds.map((uid) =>
+        sendUserPushIfAllowed(uid, { title: notifTitle, body, href, tag: `admin-material-${materialId}` }, "materials")
+      )
+    );
+  } catch {
+    // notification failure must never block uploads
+  }
+}
+
 export async function notifyStudentCreatedCourse({
   courseId,
   courseCode,

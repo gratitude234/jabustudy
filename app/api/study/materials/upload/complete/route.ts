@@ -12,6 +12,7 @@ import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { triggerMaterialIndex } from "@/lib/studyMaterialIndexTrigger";
 import { sendUserPushIfAllowed } from "@/lib/webPush";
+import { notifyStudyAdminsNewMaterialUploaded } from "@/lib/studyNotify";
 
 export const dynamic = "force-dynamic";
 
@@ -102,25 +103,7 @@ export async function POST(req: Request) {
     let autoApprove = false;
 
     if (exists) {
-      const { data: repRow } = await admin
-        .from("study_reps")
-        .select("user_id")
-        .eq("user_id", uid)
-        .eq("active", true)
-        .maybeSingle();
-      const { data: adminRow } = await admin
-        .from("study_admins")
-        .select("user_id")
-        .eq("user_id", uid)
-        .maybeSingle();
-      const course = Array.isArray((row as any).study_courses)
-        ? (row as any).study_courses[0]
-        : (row as any).study_courses;
-      const studentCreatedCourseByUploader =
-        course?.created_from_upload === true &&
-        course?.created_by === uid &&
-        course?.course_review_status === "pending";
-      autoApprove = process.env.STUDY_AUTO_APPROVE_UPLOADS === "true" || Boolean(repRow || adminRow) || studentCreatedCourseByUploader;
+      autoApprove = true;
       patch.upload_status = "live";
       patch.approved = autoApprove;
       patch.approved_by = autoApprove ? uid : null;
@@ -154,13 +137,21 @@ export async function POST(req: Request) {
         body: JSON.stringify({ material_id }),
       }).catch(() => {});
 
-      // Confirm to the uploader that their material is live
+      // Notify admins first, then confirm to the uploader that the material is live.
       try {
         const { data: matRow } = await admin
           .from("study_materials")
-          .select("title, course_code")
+          .select("title, course_code, uploader_email")
           .eq("id", material_id)
           .maybeSingle();
+        if ((matRow as any)?.title) {
+          notifyStudyAdminsNewMaterialUploaded({
+            materialId: material_id,
+            title: String((matRow as any).title),
+            courseCode: (matRow as any).course_code ?? null,
+            uploaderEmail: (matRow as any).uploader_email ?? null,
+          }).catch(() => {});
+        }
         if ((matRow as any)?.title && uid) {
           const notifTitle = "Your material is now live ✅";
           const body = `"${(matRow as any).title}"${(matRow as any).course_code ? ` (${(matRow as any).course_code})` : ""} is available in the Study Hub.`;

@@ -1,6 +1,6 @@
 // app/api/study/materials/upload/route.ts
-// Creates a pending material row + returns a signed upload token for Supabase Storage.
-// Open to any authenticated student — uploads are queued as approved=false for rep/admin review.
+// Creates a material row + returns a signed upload token for Supabase Storage.
+// Open to any authenticated student. Completed uploads become visible immediately.
 //
 // Migration: add upload_status to study_materials
 // ALTER TABLE public.study_materials
@@ -10,7 +10,6 @@
 import { NextResponse } from "next/server";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
-import { notifyRepsNewPendingMaterial } from "@/lib/studyNotify";
 
 export const dynamic = "force-dynamic";
 
@@ -35,7 +34,7 @@ function safeFilename(name: string) {
 
 export async function POST(req: Request) {
   try {
-    // Any logged-in student may upload — materials land in the approval queue (approved=false)
+    // Any logged-in student may upload. Storage verification happens in /complete.
     const supabase = await createSupabaseServerClient();
     const { data: userData, error: authErr } = await supabase.auth.getUser();
     if (authErr || !userData?.user) return jsonError("Unauthorized", 401, "NO_SESSION");
@@ -89,26 +88,6 @@ export async function POST(req: Request) {
 
     const admin = createSupabaseAdminClient();
 
-    // Resolve whether the uploader is an active rep/librarian.
-    // Reps bypass the approval queue — their uploads are auto-approved.
-    const { data: repRow } = await admin
-      .from("study_reps")
-      .select("user_id, role, department_id, faculty_id")
-      .eq("user_id", userId)
-      .eq("active", true)
-      .maybeSingle();
-
-    const isRep = !!repRow;
-
-    // Also honour study_admins as auto-approvers
-    const { data: adminRow } = await admin
-      .from("study_admins")
-      .select("user_id")
-      .eq("user_id", userId)
-      .maybeSingle();
-
-    const baseAutoApprove = process.env.STUDY_AUTO_APPROVE_UPLOADS === "true" || isRep || !!adminRow;
-
     // 1) Verify course exists
     const { data: courseRow, error: courseErr } = await admin
       .from("study_courses")
@@ -119,11 +98,7 @@ export async function POST(req: Request) {
     if (courseErr) return jsonError(courseErr.message || "DB error", 500, "DB_ERROR");
     if (!courseRow?.id) return jsonError("Course not found", 404, "COURSE_NOT_FOUND");
 
-    const studentCreatedCourseByUploader =
-      (courseRow as any)?.created_from_upload === true &&
-      (courseRow as any)?.created_by === userId &&
-      (courseRow as any)?.course_review_status === "pending";
-    const autoApprove = baseAutoApprove || studentCreatedCourseByUploader;
+    const autoApprove = true;
 
     // 2) Duplicate check (authoritative)
     if (file_hash) {
@@ -146,7 +121,7 @@ export async function POST(req: Request) {
       }
     }
 
-    // 3) Create pending row (approved=false) with file_path that we will upload to.
+    // 3) Create an upload row with file_path that we will upload to.
     // We use the returned id as part of the path to guarantee uniqueness.
 
     const { data: inserted, error: insErr } = await admin
@@ -280,18 +255,6 @@ export async function POST(req: Request) {
 
     if (!token || !signedPath) {
       return jsonError("Signed upload response missing token/path", 500, "SIGN_UPLOAD_FAILED");
-    }
-
-    // For non-rep uploads: notify reps of the course's department so they
-    // can review from the study-admin panel. Fire-and-forget — never blocks.
-    if (!autoApprove && material_id) {
-      notifyRepsNewPendingMaterial({
-        materialId: material_id,
-        title,
-        courseCode: String((courseRow as any)?.course_code ?? ""),
-        departmentId: (courseRow as any)?.department_id ?? null,
-        uploaderEmail: uploader_email,
-      }).catch(() => {});
     }
 
     return NextResponse.json({

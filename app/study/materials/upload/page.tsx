@@ -853,7 +853,7 @@ export default function UploadMaterialsPage() {
       <div>
         <h1 className="font-[family-name:var(--font-bricolage)] text-lg font-medium text-foreground">Upload materials</h1>
         <p className="mt-1 text-sm text-muted-brand">
-          Anyone can contribute — uploads go to a review queue before going live.
+          Anyone can contribute. Materials go live after upload, and study admins are notified.
         </p>
       </div>
 
@@ -900,7 +900,7 @@ export default function UploadMaterialsPage() {
                   {role === "course_rep" && allowedLevels?.length
                     ? ` · ${allowedLevels.map((l) => `${l}L`).join(", ")}`
                     : " · All levels"}{" "}
-                  — uploads auto-approved
+                  - uploads go live immediately
                 </p>
               </div>
             </div>
@@ -1465,18 +1465,16 @@ export default function UploadMaterialsPage() {
                 })}
               </div>
 
-              {/* Review queue notice */}
+              {/* Live upload notice */}
               <div className="flex items-start gap-2.5 rounded-2xl bg-primary-light p-3">
                 <div className="mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-primary text-[9px] font-bold text-white">
                   i
                 </div>
                 <p className="text-xs leading-relaxed text-primary-text">
-                  Your upload goes to a review queue.{" "}
+                  Your material goes live after upload.{" "}
                   {selectedCourse?.created_from_upload && selectedCourse.course_review_status === "pending"
-                    ? "Because you added this course, your material goes live now while reps review the course details."
-                    : isRep
-                    ? "As a rep your uploads are auto-approved."
-                    : "You'll be notified when it's approved or if there's an issue."
+                    ? "Reps will still review the course details, and study admins are notified to create practice questions."
+                    : "Study admins are notified so they can create practice questions from it."
                   }
                 </p>
               </div>
@@ -1556,9 +1554,7 @@ export default function UploadMaterialsPage() {
                         isRep ? "text-primary-text dark:text-indigo-200" : "text-emerald-900 dark:text-emerald-200"
                       )}
                     >
-                      {isRep
-                        ? `${queue.length} file${queue.length !== 1 ? "s" : ""} are live`
-                        : `${queue.length} file${queue.length !== 1 ? "s" : ""} uploaded successfully`}
+                      {`${queue.length} file${queue.length !== 1 ? "s are" : " is"} live`}
                     </p>
                   </div>
 
@@ -1568,9 +1564,7 @@ export default function UploadMaterialsPage() {
                       isRep ? "text-primary/70 dark:text-indigo-300" : "text-emerald-800/80 dark:text-emerald-300"
                     )}
                   >
-                    {isRep
-                      ? "As a course rep, your uploads are auto-approved and visible to students immediately."
-                      : `Your material${queue.length !== 1 ? "s are" : " is"} in the review queue. You'll be notified once approved — usually within 24 hours.`}
+                    {`Your material${queue.length !== 1 ? "s are" : " is"} visible to students now. Study admins were notified so they can create practice questions from it.`}
                   </p>
 
                   <div className="flex flex-wrap gap-2">

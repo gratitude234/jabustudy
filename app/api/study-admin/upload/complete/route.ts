@@ -3,6 +3,7 @@ import { createSupabaseAdminClient } from "../../../../../lib/supabase/admin";
 import { requireStudyModeratorFromRequest } from "../../../../../lib/studyAdmin/requireStudyModeratorFromRequest";
 import { triggerMaterialIndex } from "../../../../../lib/studyMaterialIndexTrigger";
 import { sendUserPushIfAllowed } from "../../../../../lib/webPush";
+import { notifyStudyAdminsNewMaterialUploaded } from "../../../../../lib/studyNotify";
 
 export const dynamic = "force-dynamic";
 
@@ -20,7 +21,7 @@ export async function POST(req: Request) {
 
     const { data: matRow, error: fetchErr } = await admin
       .from("study_materials")
-      .select("file_path, title, course_code, uploader_id")
+      .select("file_path, title, course_code, uploader_id, uploader_email")
       .eq("id", material_id)
       .maybeSingle();
 
@@ -55,11 +56,20 @@ export async function POST(req: Request) {
       body: JSON.stringify({ material_id }),
     }).catch(() => {});
 
-    // Confirm to the rep that their upload is live
+    // Notify admins first, then confirm to the rep that their upload is live.
     try {
       const uploaderId = (matRow as any)?.uploader_id;
       const matTitle = (matRow as any)?.title;
       const courseCode = (matRow as any)?.course_code;
+      const uploaderEmail = (matRow as any)?.uploader_email;
+      if (matTitle) {
+        notifyStudyAdminsNewMaterialUploaded({
+          materialId: material_id,
+          title: String(matTitle),
+          courseCode: courseCode ?? null,
+          uploaderEmail: uploaderEmail ?? null,
+        }).catch(() => {});
+      }
       if (matTitle && uploaderId) {
         const notifTitle = "Your material is now live ✅";
         const body = `"${matTitle}"${courseCode ? ` (${courseCode})` : ""} is available in the Study Hub.`;
