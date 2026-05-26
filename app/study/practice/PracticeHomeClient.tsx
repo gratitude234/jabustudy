@@ -1804,7 +1804,7 @@ function PracticeHomeInner() {
                 ))}
               </>
             ) : visibleSets.length === 0 ? (
-              <div className="pl-14">
+              <div className="mx-auto w-full max-w-xl">
                 <EmptyState
                   icon={<BookOpen className="h-5 w-5" />}
                   title={
