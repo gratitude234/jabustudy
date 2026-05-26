@@ -6,10 +6,10 @@ import Link from "next/link";
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { supabase } from "@/lib/supabase";
+import { getWhatsAppLink } from "@/lib/whatsapp";
 import StudyTabs from "../_components/StudyTabs";
 import { Card, EmptyState, SkeletonCard } from "../_components/StudyUI";
 import { StudyPrefsProvider, useStudyPrefs } from "../_components/StudyPrefsContext";
-import { RequestCourseModal } from "../_components/RequestCourseModal";
 import {
   ArrowRight,
   BookOpen,
@@ -29,6 +29,7 @@ import {
   Flame,
   Layers,
   Loader2,
+  MessageCircle,
   Zap,
 } from "lucide-react";
 
@@ -42,6 +43,16 @@ const LEVELS = ["100", "200", "300", "400", "500"] as const;
 const SEMESTERS = ["1st", "2nd", "summer"] as const;
 const PRACTICE_LEVEL_STORAGE_KEY = "jabu:practiceFilter:level";
 const PRACTICE_SEMESTER_STORAGE_KEY = "jabu:practiceFilter:semester";
+const ADMIN_WHATSAPP_NUMBER = "07041022336";
+
+function practiceSetAdminLink(courseCode: string) {
+  const normalizedCourse = courseCode.trim().toUpperCase();
+  const message = normalizedCourse
+    ? `Hello admin, I need a practice set for ${normalizedCourse}. I have past questions/materials to send.`
+    : "Hello admin, I need help turning my past questions/materials into a practice set for my course.";
+
+  return getWhatsAppLink(ADMIN_WHATSAPP_NUMBER, message);
+}
 
 function semesterParamToStoredValue(value: string) {
   const normalized = value.trim().toLowerCase();
@@ -922,7 +933,6 @@ function PracticeHomeInner() {
   // Local state
   const [q, setQ] = useState(qParam);
   const [drawerOpen, setDrawerOpen] = useState(false);
-  const [requestModalOpen, setRequestModalOpen] = useState(false);
 
   // Preview sheet
   const [previewOpen, setPreviewOpen] = useState(false);
@@ -1959,19 +1969,19 @@ function PracticeHomeInner() {
                   }
                   action={
                     <div className="flex flex-wrap gap-2">
-                      {courseParam ? (
-                        <button
-                          type="button"
-                          onClick={() => setRequestModalOpen(true)}
-                          className={cn(
-                            "inline-flex items-center gap-2 rounded-2xl bg-secondary px-4 py-3 text-sm font-semibold text-foreground",
-                            "hover:opacity-90",
-                            "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
-                          )}
-                        >
-                          Request this course
-                        </button>
-                      ) : null}
+                      <a
+                        href={practiceSetAdminLink(courseParam)}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className={cn(
+                          "inline-flex items-center gap-2 rounded-2xl bg-secondary px-4 py-3 text-sm font-semibold text-foreground no-underline",
+                          "hover:opacity-90",
+                          "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+                        )}
+                      >
+                        <MessageCircle className="h-4 w-4" />
+                        {courseParam ? `Request ${courseParam.toUpperCase()} set` : "Contact admin"}
+                      </a>
                       <Link
                         href="/study/library"
                         className={cn(
@@ -2295,13 +2305,6 @@ function PracticeHomeInner() {
           <p className="text-sm text-muted-foreground">Nothing to preview.</p>
         )}
       </Drawer>
-
-      {/* Request course modal */}
-      <RequestCourseModal
-        open={requestModalOpen}
-        onClose={() => setRequestModalOpen(false)}
-        initialCourseCode={courseParam}
-      />
 
       {/* Toast */}
       {toast ? (
