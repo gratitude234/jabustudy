@@ -83,7 +83,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         {/* Flash-prevention: apply dark class before React hydrates */}
         <script
           dangerouslySetInnerHTML={{
-            __html: `(function(){var t=localStorage.getItem('jabustudy-theme');if(t==='dark')document.documentElement.classList.add('dark');})();`,
+            __html: `(function(){var d=document.documentElement;var t=localStorage.getItem('jabustudy-theme');if(t==='dark')d.classList.add('dark');try{if(sessionStorage.getItem('js-splash'))d.classList.add('js-splash-seen');}catch(e){}})();`,
           }}
         />
         <script

@@ -209,7 +209,7 @@
 }
 
 @media (display-mode: standalone) {
-  .splash-screen.is-booting {
+  html:not(.js-splash-seen) .splash-screen.is-booting {
     display: flex;
   }
 }
