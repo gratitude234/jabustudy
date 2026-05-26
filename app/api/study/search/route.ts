@@ -58,6 +58,7 @@ export async function GET(req: Request) {
         .select(
           "id,course_code,course_title,level,semester,faculty,department"
         )
+        .eq("status", "approved")
         .or(
           `course_code.ilike.${pat},course_title.ilike.${pat},department.ilike.${pat}`
         )

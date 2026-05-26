@@ -53,9 +53,17 @@ export async function POST(req: Request) {
     if (courseIds.length) {
       const { data: courseRows } = await admin
         .from("study_courses")
-        .select("id, course_code, department, department_id, faculty, faculty_id, level, semester")
+        .select("id, course_code, department, department_id, faculty, faculty_id, level, semester, status, course_review_status")
         .in("id", courseIds);
       for (const cr of courseRows ?? []) courseMap.set((cr as any).id, cr);
+    }
+
+    const removedCourse = [...courseMap.values()].find((cr) => cr?.status === "rejected" || cr?.course_review_status === "removed");
+    if (removedCourse) {
+      return NextResponse.json(
+        { ok: false, error: `Course ${removedCourse.course_code ?? ""} was removed. Restore or reassign it before approving materials.` },
+        { status: 409 }
+      );
     }
 
     const nowIso = new Date().toISOString();

@@ -19,6 +19,10 @@ type CourseRow = {
   faculty: string | null;
   faculty_id: string | null;
   status: string;
+  course_review_status: "pending" | "approved" | "removed";
+  created_from_upload: boolean;
+  reviewed_at: string | null;
+  review_note: string | null;
   created_at: string;
 };
 
@@ -65,6 +69,7 @@ export default function StudyAdminCoursesPage() {
   const [levelFilter, setLevelFilter] = useState("");
   const [semesterFilter, setSemesterFilter] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
+  const [reviewFilter, setReviewFilter] = useState("");
   const [summary, setSummary] = useState<SummaryResponse | null>(null);
 
   // Data
@@ -130,8 +135,10 @@ export default function StudyAdminCoursesPage() {
     const params = new URLSearchParams(window.location.search);
     const level = params.get("level");
     const semester = params.get("semester");
+    const review = params.get("review");
     if (level) setLevelFilter(level);
     if (semester) setSemesterFilter(semester);
+    if (review) setReviewFilter(review);
   }, []);
 
   // Update modal depts when faculty changes
@@ -166,6 +173,7 @@ export default function StudyAdminCoursesPage() {
       if (levelFilter) url.searchParams.set("level", levelFilter);
       if (semesterFilter) url.searchParams.set("semester", semesterFilter);
       if (statusFilter) url.searchParams.set("status", statusFilter);
+      if (reviewFilter) url.searchParams.set("review", reviewFilter);
       url.searchParams.set("page", String(page));
 
       const [res, summaryRes] = await Promise.all([
@@ -196,7 +204,7 @@ export default function StudyAdminCoursesPage() {
       setLoading(false);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [deptFilter, levelFilter, semesterFilter, statusFilter, page]);
+  }, [deptFilter, levelFilter, semesterFilter, statusFilter, reviewFilter, page]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -254,6 +262,31 @@ export default function StudyAdminCoursesPage() {
     });
     const json = await res.json();
     if (!res.ok || !json.ok) { setErr(json.message || "Deactivate failed"); return; }
+    await load();
+  }
+
+  async function reviewCourse(id: string, code: string, action: "approve" | "remove") {
+    const note = action === "remove"
+      ? window.prompt(`Why should ${code} be removed?`, "Incorrect or duplicate course")?.trim() || ""
+      : "";
+    if (action === "remove" && !note) return;
+
+    const token = await getToken();
+    if (!token) return;
+    const res = await fetch("/api/study-admin/courses", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+      body: JSON.stringify({
+        id,
+        review_action: action,
+        review_note: note || null,
+      }),
+    });
+    const json = await res.json() as { ok: boolean; message?: string };
+    if (!res.ok || !json.ok) {
+      setErr(json.message || `${action === "approve" ? "Approve" : "Remove"} failed`);
+      return;
+    }
     await load();
   }
 
@@ -672,6 +705,28 @@ export default function StudyAdminCoursesPage() {
           </div>
           <button onClick={load} className="h-9 rounded-2xl bg-black px-4 text-sm font-medium text-white">Refresh</button>
         </div>
+        <div className="mt-3 flex flex-wrap gap-2">
+          {[
+            { key: "", label: "All review states" },
+            { key: "pending", label: "Needs review" },
+            { key: "approved", label: "Reviewed" },
+            { key: "removed", label: "Removed" },
+          ].map((item) => (
+            <button
+              key={item.key || "all"}
+              type="button"
+              onClick={() => { setReviewFilter(item.key); setPage(1); }}
+              className={cn(
+                "rounded-2xl border px-3 py-1.5 text-xs font-semibold",
+                reviewFilter === item.key
+                  ? "border-violet-300 bg-violet-50 text-violet-800"
+                  : "border-zinc-200 bg-white text-zinc-600 hover:bg-zinc-50"
+              )}
+            >
+              {item.label}
+            </button>
+          ))}
+        </div>
       </div>
 
       {err && <div className="rounded-3xl border border-red-200 bg-red-50 p-4 text-sm text-red-700 dark:bg-red-950/40 dark:border-red-900 dark:text-red-400">{err}</div>}
@@ -695,6 +750,7 @@ export default function StudyAdminCoursesPage() {
                   <th className="px-4 py-3 font-medium">Semester</th>
                   <th className="px-4 py-3 font-medium">Department</th>
                   <th className="px-4 py-3 font-medium">Status</th>
+                  <th className="px-4 py-3 font-medium">Review</th>
                   <th className="px-4 py-3 font-medium">Actions</th>
                 </tr>
               </thead>
@@ -758,6 +814,19 @@ export default function StudyAdminCoursesPage() {
                       </span>
                     </td>
                     <td className="px-4 py-3">
+                      <span className={cn(
+                        "rounded-full px-2 py-0.5 text-xs font-medium",
+                        c.course_review_status === "pending" ? "bg-amber-50 text-amber-700" :
+                        c.course_review_status === "removed" ? "bg-red-50 text-red-700" :
+                        "bg-emerald-50 text-emerald-700"
+                      )}>
+                        {c.course_review_status === "pending" ? "Needs review" : c.course_review_status}
+                      </span>
+                      {c.created_from_upload ? (
+                        <p className="mt-1 text-[11px] text-zinc-500">Student-created</p>
+                      ) : null}
+                    </td>
+                    <td className="px-4 py-3">
                       <div className="flex items-center gap-2">
                         {editId === c.id ? (
                           <>
@@ -779,6 +848,24 @@ export default function StudyAdminCoursesPage() {
                           </>
                         ) : (
                           <>
+                            {c.course_review_status === "pending" && (
+                              <>
+                                <button
+                                  type="button"
+                                  onClick={() => reviewCourse(c.id, c.course_code, "approve")}
+                                  className="inline-flex h-7 items-center gap-1 rounded-xl border border-emerald-200 bg-emerald-50 px-3 text-xs text-emerald-700 hover:bg-emerald-100"
+                                >
+                                  <Check className="h-3 w-3" /> Approve
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => reviewCourse(c.id, c.course_code, "remove")}
+                                  className="inline-flex h-7 items-center gap-1 rounded-xl border border-red-200 bg-red-50 px-3 text-xs text-red-700 hover:bg-red-100"
+                                >
+                                  <X className="h-3 w-3" /> Remove
+                                </button>
+                              </>
+                            )}
                             <button
                               type="button"
                               onClick={() => { setEditId(c.id); setEditCode(c.course_code); setEditTitle(c.course_title ?? ""); setEditDeptId(c.department_id ?? ""); }}

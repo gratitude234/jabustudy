@@ -65,10 +65,14 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     if (courseId) {
       const { data: cr } = await admin
         .from("study_courses")
-        .select("course_code, department, department_id, faculty, faculty_id, level, semester")
+        .select("course_code, department, department_id, faculty, faculty_id, level, semester, status, course_review_status")
         .eq("id", courseId)
         .maybeSingle();
       courseRow = cr ?? null;
+    }
+
+    if (courseRow?.status === "rejected" || courseRow?.course_review_status === "removed") {
+      return NextResponse.json({ ok: false, error: "This course was removed. Restore or reassign it before approving materials." }, { status: 409 });
     }
 
     const nowIso = new Date().toISOString();

@@ -32,7 +32,6 @@ import {
   Calendar,
   Paperclip,
   RefreshCw,
-  Flag,
   File as FileIcon,
 } from "lucide-react";
 import { Card, EmptyState } from "../../_components/StudyUI";
@@ -54,6 +53,8 @@ type CourseRow = {
   course_code: string;
   course_title: string | null;
   semester: Semester;
+  course_review_status?: "pending" | "approved" | "removed";
+  created_from_upload?: boolean;
 };
 
 type RepMeResponse = {
@@ -86,7 +87,7 @@ type UploadInitResponse =
   | { ok: false; code?: string; message?: string; duplicate_of?: { id: string; title?: string; created_at?: string } | null };
 
 type CreateCourseResponse =
-  | { ok: true; course: CourseRow }
+  | { ok: true; course: CourseRow; reused?: boolean }
   | { ok: false; code?: string; error?: string };
 
 type ParsedMeta = {
@@ -291,6 +292,14 @@ export default function UploadMaterialsPage() {
   const [semester,    setSemester]    = useState<Semester>("first");
   const [description, setDescription] = useState("");
 
+  useEffect(() => {
+    if (!reqLevel) {
+      const lvls = Array.isArray(allowedLevels) ? allowedLevels : [];
+      setReqLevel(isRep && role === "course_rep" ? (lvls[0] ?? scopedLevel ?? 100) : (scopedLevel ?? 100));
+    }
+    if (!reqSemester) setReqSemester(semester);
+  }, [allowedLevels, isRep, reqLevel, reqSemester, role, scopedLevel, semester]);
+
   // Multi-file state
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [files,      setFiles]      = useState<FileEntry[]>([]);
@@ -412,6 +421,7 @@ export default function UploadMaterialsPage() {
         let query = supabase
           .from("study_courses")
           .select("id, faculty_id, department_id, level, course_code, course_title, semester")
+          .eq("status", "approved")
           .order("level")
           .order("course_code");
 
@@ -621,32 +631,9 @@ export default function UploadMaterialsPage() {
     if (dropped.length) addFiles(dropped);
   }
 
-  async function flagCourse() {
-    if (!q.trim()) return;
-    const code = normalizeCourseCode(q.trim());
-    setBanner(null);
-    try {
-      const res = await fetch("/api/study/course-requests/student", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ course_code: code, course_title: null, note: null }),
-      });
-      const data = await res.json();
-      if (data?.already_pending) {
-        setBanner({ type: "info", text: "Already flagged — check back soon." });
-      } else if (data?.ok) {
-        setBanner({ type: "success", text: "Flagged — your rep has been notified." });
-      } else {
-        setBanner({ type: "error", text: data?.error || "Failed to flag course." });
-      }
-    } catch (e: any) {
-      setBanner({ type: "error", text: e?.message || "Failed to flag." });
-    }
-  }
-
-  async function submitCreateCourse() {
+  async function submitCreateCourse(continueAfterCreate = false) {
     if (reqLoading) return;
-    const code = normalizeCourseCode(reqCode);
+    const code = normalizeCourseCode(reqCode || q.trim());
     if (!code) { setBanner({ type: "error", text: "Enter a course code." }); return; }
     if (!reqLevel) { setBanner({ type: "error", text: "Select a level." }); return; }
     if (isRep && role === "course_rep" && Array.isArray(allowedLevels) && allowedLevels.length) {
@@ -664,7 +651,8 @@ export default function UploadMaterialsPage() {
         return;
       }
 
-      const res = await fetch("/api/study-admin/courses", {
+      const endpoint = isRep ? "/api/study-admin/courses" : "/api/study/courses/from-upload";
+      const res = await fetch(endpoint, {
         method: "POST",
         headers: { "content-type": "application/json", Authorization: `Bearer ${token}` },
         body: JSON.stringify({
@@ -690,11 +678,23 @@ export default function UploadMaterialsPage() {
         setSelectedCourseId(created.id);
         setQ(created.course_code);
         saveRecentCourse(created.id);
+        setFiles((prev) => prev.map((f) => ({
+          ...f,
+          title: f.title || materialTitleSuggestion(created, f.materialType),
+        })));
       }
-      setBanner({ type: "success", text: "Course created — continue your upload below." });
+      setBanner({
+        type: "success",
+        text: (data as any)?.reused
+          ? "Course found — continue your upload below."
+          : isRep
+          ? "Course created — continue your upload below."
+          : "Course added — your upload will go live while reps review the course.",
+      });
       setShowCreateCourse(false);
       setReqCode("");
       setReqTitle("");
+      if (continueAfterCreate && created?.id) setStep(3);
     } catch (e: any) {
       setBanner({ type: "error", text: e?.message || "Failed to create course." });
     } finally {
@@ -1174,53 +1174,72 @@ export default function UploadMaterialsPage() {
                 <div className="rounded-2xl border border-border bg-background overflow-hidden">
                   {filteredCourses.length === 0 && q.trim() ? (
                     <div className="p-4">
-                      {isRep ? (
-                        <>
-                          <p className="text-sm font-medium text-foreground">No matching courses found</p>
-                          <p className="mt-1 text-xs text-muted-brand">
-                            Create the course (within your scope) and upload immediately.
-                          </p>
-                          <div className="mt-3 flex flex-wrap gap-2">
-                            <button
-                              type="button"
-                              onClick={() => openCreateCourse({ code: q })}
-                              className="rounded-2xl bg-primary px-3 py-2 text-xs font-medium text-white"
-                            >
-                              Create course
-                            </button>
-                            <Link
-                              href="/study/library"
-                              className="rounded-2xl border border-border bg-background px-3 py-2 text-xs font-medium text-foreground no-underline hover:bg-secondary/50"
-                            >
-                              Browse materials
-                            </Link>
-                          </div>
-                        </>
-                      ) : (
-                        <>
-                          <p className="text-sm font-medium text-foreground">
-                            {normalizeCourseCode(q)} isn't in the catalog yet.
-                          </p>
-                          <p className="mt-1 text-xs text-muted-brand">
-                            Your course rep can add it — tap below to flag it.
-                          </p>
-                          <div className="mt-3 flex flex-wrap gap-2">
-                            <button
-                              type="button"
-                              onClick={flagCourse}
-                              className="inline-flex items-center gap-1.5 rounded-2xl bg-primary px-3 py-2 text-xs font-medium text-white"
-                            >
-                              <Flag className="h-3.5 w-3.5" /> Flag this course →
-                            </button>
-                            <Link
-                              href="/study/library"
-                              className="rounded-2xl border border-border bg-background px-3 py-2 text-xs font-medium text-foreground no-underline hover:bg-secondary/50"
-                            >
-                              Browse materials
-                            </Link>
-                          </div>
-                        </>
-                      )}
+                      <p className="text-sm font-medium text-foreground">Course not listed?</p>
+                      <p className="mt-1 text-xs text-muted-brand">
+                        Add the course details and continue your upload. Students can see it immediately while reps review the course.
+                      </p>
+                      <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                        <label className="block space-y-1">
+                          <span className="text-[11px] font-medium text-muted-brand">Course code</span>
+                          <input
+                            value={reqCode || normalizeCourseCode(q)}
+                            onChange={(e) => setReqCode(e.target.value.toUpperCase())}
+                            onBlur={() => setReqCode((v) => normalizeCourseCode(v || q))}
+                            className="h-10 w-full rounded-2xl border border-border bg-background px-3 text-sm font-mono text-foreground outline-none"
+                          />
+                        </label>
+                        <label className="block space-y-1">
+                          <span className="text-[11px] font-medium text-muted-brand">Course title</span>
+                          <input
+                            value={reqTitle}
+                            onChange={(e) => setReqTitle(e.target.value)}
+                            placeholder="Optional"
+                            className="h-10 w-full rounded-2xl border border-border bg-background px-3 text-sm text-foreground outline-none"
+                          />
+                        </label>
+                        <label className="block space-y-1">
+                          <span className="text-[11px] font-medium text-muted-brand">Level</span>
+                          <select
+                            value={reqLevel || ""}
+                            onChange={(e) => setReqLevel(e.target.value ? Number(e.target.value) : 0)}
+                            className="h-10 w-full rounded-2xl border border-border bg-background px-3 text-sm text-foreground outline-none"
+                          >
+                            <option value="">Select level</option>
+                            {(isRep && role === "course_rep" && allowedLevels?.length ? allowedLevels : [100, 200, 300, 400, 500]).map((l) => (
+                              <option key={l} value={l}>{LEVEL_LABEL(l)}</option>
+                            ))}
+                          </select>
+                        </label>
+                        <label className="block space-y-1">
+                          <span className="text-[11px] font-medium text-muted-brand">Semester</span>
+                          <select
+                            value={reqSemester}
+                            onChange={(e) => setReqSemester(e.target.value as Semester)}
+                            className="h-10 w-full rounded-2xl border border-border bg-background px-3 text-sm text-foreground outline-none"
+                          >
+                            <option value="first">First</option>
+                            <option value="second">Second</option>
+                            <option value="summer">Summer</option>
+                          </select>
+                        </label>
+                      </div>
+                      <div className="mt-3 flex flex-wrap gap-2">
+                        <button
+                          type="button"
+                          disabled={reqLoading}
+                          onClick={() => submitCreateCourse(true)}
+                          className="inline-flex items-center gap-1.5 rounded-2xl bg-primary px-3 py-2 text-xs font-medium text-white disabled:opacity-60"
+                        >
+                          {reqLoading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Plus className="h-3.5 w-3.5" />}
+                          Continue with this course
+                        </button>
+                        <Link
+                          href="/study/library"
+                          className="rounded-2xl border border-border bg-background px-3 py-2 text-xs font-medium text-foreground no-underline hover:bg-secondary/50"
+                        >
+                          Browse materials
+                        </Link>
+                      </div>
                     </div>
                   ) : filteredCourses.length === 0 ? null : (
                     <div className="divide-y divide-border max-h-72 overflow-auto">
@@ -1453,7 +1472,9 @@ export default function UploadMaterialsPage() {
                 </div>
                 <p className="text-xs leading-relaxed text-primary-text">
                   Your upload goes to a review queue.{" "}
-                  {isRep
+                  {selectedCourse?.created_from_upload && selectedCourse.course_review_status === "pending"
+                    ? "Because you added this course, your material goes live now while reps review the course details."
+                    : isRep
                     ? "As a rep your uploads are auto-approved."
                     : "You'll be notified when it's approved or if there's an issue."
                   }
@@ -1784,7 +1805,7 @@ export default function UploadMaterialsPage() {
                     </button>
                     <button
                       type="button"
-                      onClick={submitCreateCourse}
+                      onClick={() => submitCreateCourse(false)}
                       disabled={reqLoading}
                       className={cn(
                         "inline-flex items-center justify-center rounded-2xl bg-primary px-4 py-2.5 text-sm font-medium text-white",

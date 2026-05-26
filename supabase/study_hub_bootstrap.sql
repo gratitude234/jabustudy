@@ -73,12 +73,20 @@ create table if not exists public.study_courses (
   created_by uuid references auth.users(id) on delete set null,
   approved_by uuid references auth.users(id) on delete set null,
   approved_at timestamptz,
+  course_review_status text not null default 'approved' check (course_review_status in ('pending', 'approved', 'removed')),
+  created_from_upload boolean not null default false,
+  reviewed_by uuid references auth.users(id) on delete set null,
+  reviewed_at timestamptz,
+  review_note text,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
 
 create unique index if not exists study_courses_unique_scope_idx
 on public.study_courses (department_id, level, semester, upper(replace(course_code, ' ', '')));
+
+create index if not exists study_courses_review_status_idx
+on public.study_courses (course_review_status, department_id, level, created_at desc);
 
 create table if not exists public.study_preferences (
   user_id uuid primary key references auth.users(id) on delete cascade,

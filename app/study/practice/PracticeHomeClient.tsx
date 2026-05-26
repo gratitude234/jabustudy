@@ -27,8 +27,6 @@ import {
   History,
   Flame,
   Layers,
-  Loader2,
-  Zap,
 } from "lucide-react";
 
 type SortKey = "newest" | "oldest";
@@ -455,37 +453,24 @@ function PracticeHeroV2({
   streak,
   avgScore,
   totalSessions,
-  quickLoading,
-  displayName,
   onReviewDue,
-  onQuickSession,
 }: {
   dueLoading: boolean;
   dueData: DuePracticeData | null;
   streak: number;
   avgScore: number | null;
   totalSessions: number;
-  quickLoading: boolean;
-  displayName: string | null;
   onReviewDue: (setId: string) => void;
-  onQuickSession: () => void;
 }) {
-  const hour = new Date().getHours();
-  const timeLabel = hour < 12 ? "morning" : hour < 17 ? "afternoon" : "evening";
-  const firstName = displayName?.split(" ")[0] ?? "there";
   const primaryDueSet = dueData?.sets?.[0] ?? null;
   const dueCount = dueData?.total ?? 0;
   const dueCourses = dueData?.sets?.slice(0, 2).map((s) => s.course_code ?? s.set_title).filter(Boolean).join(" / ") ?? null;
 
   return (
     <section className="overflow-hidden rounded-[26px] border border-border bg-card p-5 shadow-sm">
-      {/* Top row: greeting + streak */}
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
-          <p className="text-xs font-semibold text-muted-brand">
-            Good {timeLabel}, {firstName}
-          </p>
-          <h1 className="mt-0.5 font-[family-name:var(--font-bricolage)] text-[30px] font-extrabold leading-none tracking-tight text-foreground">
+          <h1 className="font-[family-name:var(--font-bricolage)] text-[30px] font-extrabold leading-none tracking-tight text-foreground">
             Practice
           </h1>
         </div>
@@ -525,52 +510,32 @@ function PracticeHeroV2({
         )}
       </div>
 
-      {/* CTAs */}
-      <div className="mt-4 flex flex-col gap-2">
-        {dueCount > 0 && (
-          <button
-            type="button"
-            onClick={primaryDueSet ? () => onReviewDue(primaryDueSet.set_id) : undefined}
-            disabled={!primaryDueSet || dueLoading}
-            className={cn(
-              "flex w-full items-center justify-between gap-3 rounded-[18px] bg-primary px-5 py-3.5 text-left transition",
-              "hover:opacity-90 disabled:opacity-60",
-              "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-card",
-              "shadow-[0_4px_18px_rgba(91,53,213,0.28)]"
-            )}
-          >
-            <div className="flex items-center gap-3">
-              <div className="grid h-9 w-9 shrink-0 place-items-center rounded-[11px] bg-white/20">
-                <CalendarClock className="h-4 w-4 text-white" />
-              </div>
-              <div>
-                <p className="text-sm font-extrabold text-white">Review {dueCount} due card{dueCount !== 1 ? "s" : ""}</p>
-                {dueCourses && (
-                  <p className="text-[11px] text-white/60">{dueCourses}</p>
-                )}
-              </div>
-            </div>
-            <ArrowRight className="h-4 w-4 shrink-0 text-white/80" />
-          </button>
-        )}
+      {dueCount > 0 && (
         <button
           type="button"
-          onClick={onQuickSession}
-          disabled={quickLoading}
+          onClick={primaryDueSet ? () => onReviewDue(primaryDueSet.set_id) : undefined}
+          disabled={!primaryDueSet || dueLoading}
           className={cn(
-            "flex w-full items-center justify-center gap-2 rounded-[18px] border border-border px-5 py-3 transition",
-            "hover:bg-secondary/60 disabled:opacity-60",
-            "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-card"
+            "mt-4 flex w-full items-center justify-between gap-3 rounded-[18px] bg-primary px-5 py-3.5 text-left transition",
+            "hover:opacity-90 disabled:opacity-60",
+            "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-card",
+            "shadow-[0_4px_18px_rgba(91,53,213,0.28)]"
           )}
         >
-          {quickLoading ? (
-            <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
-          ) : (
-            <Zap className="h-4 w-4 text-primary" />
-          )}
-          <span className="text-sm font-bold text-foreground">Quick session</span>
+          <div className="flex items-center gap-3">
+            <div className="grid h-9 w-9 shrink-0 place-items-center rounded-[11px] bg-white/20">
+              <CalendarClock className="h-4 w-4 text-white" />
+            </div>
+            <div>
+              <p className="text-sm font-extrabold text-white">Review {dueCount} due card{dueCount !== 1 ? "s" : ""}</p>
+              {dueCourses && (
+                <p className="text-[11px] text-white/60">{dueCourses}</p>
+              )}
+            </div>
+          </div>
+          <ArrowRight className="h-4 w-4 shrink-0 text-white/80" />
         </button>
-      </div>
+      )}
     </section>
   );
 }
@@ -876,7 +841,6 @@ function PracticeHomeInner() {
     loading: prefsLoading,
     isProfileComplete,
     userId: authedUserId,
-    displayName,
     courseCodes,
     prefs: contextPrefs,
   } = useStudyPrefs();
@@ -939,7 +903,6 @@ function PracticeHomeInner() {
   // Due Today (SRS)
   const [dueData, setDueData] = useState<DuePracticeData | null>(null);
   const [dueLoading, setDueLoading] = useState(true);
-  const [quickLoading, setQuickLoading] = useState(false);
 
   // User prefs â€" used to personalize the "For you" tab without requiring URL params
   const [userPrefs, setUserPrefs] = useState<{
@@ -965,14 +928,6 @@ function PracticeHomeInner() {
         : null
     );
   }, [contextPrefs, prefsLoading]);
-
-  // toast
-  const [toast, setToast] = useState<string | null>(null);
-  useEffect(() => {
-    if (!toast) return;
-    const t = window.setTimeout(() => setToast(null), 2600);
-    return () => window.clearTimeout(t);
-  }, [toast]);
 
   // Pagination
   const PAGE_SIZE = 12;
@@ -1523,60 +1478,6 @@ function PracticeHomeInner() {
     router.push(url);
   }
 
-  async function handleQuickSession() {
-    if (quickLoading) return;
-    setQuickLoading(true);
-    let navigated = false;
-    try {
-      const level = contextPrefs?.level ?? userPrefs?.level ?? null;
-      const semester = contextPrefs?.semester ?? userPrefs?.semester ?? null;
-      const semMap: Record<string, string> = { "1st": "first", "2nd": "second", summer: "summer" };
-      const normalizedSemester = semester
-        ? semMap[semester.trim()] ?? semester.trim().toLowerCase()
-        : null;
-
-      let query = supabase
-        .from("study_quiz_sets")
-        .select("id, title, questions_count, total_questions, level, semester")
-        .eq("published", true)
-        .eq("visibility", "public")
-        .gt("questions_count", 4);
-
-      if (typeof level === "number") query = query.eq("level", level);
-      if (normalizedSemester) query = query.eq("semester", normalizedSemester);
-      if (courseCodes.length > 0) query = query.in("course_code", courseCodes);
-
-      const { data: candidates } = await query.limit(20);
-      const preferred = ((candidates ?? []) as QuizSetRow[]).filter((row) => typeof row.id === "string");
-
-      if (preferred.length > 0) {
-        const pick = preferred[Math.floor(Math.random() * preferred.length)];
-        navigated = true;
-        startSet(pick.id, "study");
-        return;
-      }
-
-      const { data: fallback } = await supabase
-        .from("study_quiz_sets")
-        .select("id")
-        .eq("published", true)
-        .eq("visibility", "public")
-        .gt("questions_count", 4)
-        .limit(20);
-
-      const fallbackRows = ((fallback ?? []) as Array<{ id: string }>).filter((row) => typeof row.id === "string");
-      if (fallbackRows.length === 0) return;
-
-      const pick = fallbackRows[Math.floor(Math.random() * fallbackRows.length)];
-      navigated = true;
-      startSet(pick.id, "study");
-    } catch {
-      // non-fatal â€" button simply stops loading
-    } finally {
-      if (!navigated) setQuickLoading(false);
-    }
-  }
-
   return (
     // FIX: prevent any horizontal overflow across the whole page
     <div className="w-full max-w-full overflow-x-hidden space-y-4 pb-28 md:pb-6">
@@ -1593,28 +1494,13 @@ function PracticeHomeInner() {
         </Link>
       )}
 
-      {isProfileComplete && viewParam === "for_you" && !personalizedOff ? (
-        <div className="flex items-center justify-between gap-3 rounded-2xl border border-primary/20 bg-primary-light px-4 py-3 text-sm text-primary-text dark:border-primary/30 dark:bg-primary/10 dark:text-indigo-200">
-          <span>For You is scoped to your courses, level and semester.</span>
-          <Link
-            href={buildHref(pathname, { view: "all", personalized: "0" })}
-            className="shrink-0 text-xs font-bold underline underline-offset-2"
-          >
-            Browse all
-          </Link>
-        </div>
-      ) : null}
-
       <PracticeHeroV2
         dueLoading={dueLoading}
         dueData={dueData}
         streak={streak}
         avgScore={avgScore}
         totalSessions={totalSessions}
-        quickLoading={quickLoading}
-        displayName={displayName}
         onReviewDue={(setId) => router.push(`/study/practice/${setId}?mode=study&due=1`)}
-        onQuickSession={handleQuickSession}
       />
 
       {/* Course chips filter */}
@@ -2140,17 +2026,6 @@ function PracticeHomeInner() {
         )}
       </Drawer>
 
-      {/* Toast */}
-      {toast ? (
-        <div className="pointer-events-none fixed inset-x-0 bottom-24 z-50 flex justify-center px-4">
-          <div
-            role="status"
-            className="pointer-events-auto w-full max-w-sm rounded-2xl border border-border bg-card px-4 py-3 text-sm font-semibold text-foreground shadow-lg"
-          >
-            {toast}
-          </div>
-        </div>
-      ) : null}
     </div>
   );
 }

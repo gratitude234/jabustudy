@@ -107,17 +107,23 @@ export async function POST(req: Request) {
       .eq("user_id", userId)
       .maybeSingle();
 
-    const autoApprove = process.env.STUDY_AUTO_APPROVE_UPLOADS === "true" || isRep || !!adminRow;
+    const baseAutoApprove = process.env.STUDY_AUTO_APPROVE_UPLOADS === "true" || isRep || !!adminRow;
 
     // 1) Verify course exists
     const { data: courseRow, error: courseErr } = await admin
       .from("study_courses")
-      .select("id, faculty_id, department_id, level, semester, course_code, faculty, department")
+      .select("id, faculty_id, department_id, level, semester, course_code, faculty, department, created_by, created_from_upload, course_review_status")
       .eq("id", course_id)
       .maybeSingle();
 
     if (courseErr) return jsonError(courseErr.message || "DB error", 500, "DB_ERROR");
     if (!courseRow?.id) return jsonError("Course not found", 404, "COURSE_NOT_FOUND");
+
+    const studentCreatedCourseByUploader =
+      (courseRow as any)?.created_from_upload === true &&
+      (courseRow as any)?.created_by === userId &&
+      (courseRow as any)?.course_review_status === "pending";
+    const autoApprove = baseAutoApprove || studentCreatedCourseByUploader;
 
     // 2) Duplicate check (authoritative)
     if (file_hash) {
@@ -149,9 +155,9 @@ export async function POST(req: Request) {
         course_id,
         title,
         session,
-        approved: false,
-        approved_by: null,
-        approved_at: null,
+        approved: autoApprove,
+        approved_by: autoApprove ? userId : null,
+        approved_at: autoApprove ? new Date().toISOString() : null,
         upload_status: "pending_upload",
         material_type,
         downloads: 0,
@@ -189,9 +195,9 @@ export async function POST(req: Request) {
           course_id,
           title,
           session,
-          approved: false,
-          approved_by: null,
-          approved_at: null,
+          approved: autoApprove,
+          approved_by: autoApprove ? userId : null,
+          approved_at: autoApprove ? new Date().toISOString() : null,
           upload_status: "pending_upload",
           uploader_id: userId,
           uploader_email: uploader_email,

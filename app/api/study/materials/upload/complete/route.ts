@@ -83,7 +83,7 @@ export async function POST(req: Request) {
     // Ensure the caller is the uploader
     const { data: row, error: rowErr } = await admin
       .from("study_materials")
-      .select("id, uploader_id, file_path, description")
+      .select("id, uploader_id, file_path, description, course_id, study_courses:course_id(created_by, created_from_upload, course_review_status)")
       .eq("id", material_id)
       .maybeSingle();
 
@@ -113,7 +113,14 @@ export async function POST(req: Request) {
         .select("user_id")
         .eq("user_id", uid)
         .maybeSingle();
-      autoApprove = process.env.STUDY_AUTO_APPROVE_UPLOADS === "true" || Boolean(repRow || adminRow);
+      const course = Array.isArray((row as any).study_courses)
+        ? (row as any).study_courses[0]
+        : (row as any).study_courses;
+      const studentCreatedCourseByUploader =
+        course?.created_from_upload === true &&
+        course?.created_by === uid &&
+        course?.course_review_status === "pending";
+      autoApprove = process.env.STUDY_AUTO_APPROVE_UPLOADS === "true" || Boolean(repRow || adminRow) || studentCreatedCourseByUploader;
       patch.upload_status = "live";
       patch.approved = autoApprove;
       patch.approved_by = autoApprove ? uid : null;

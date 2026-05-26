@@ -482,3 +482,120 @@ export async function notifyRepsNewPendingMaterial({
     // notification failure must never block uploads
   }
 }
+
+// â”€â”€â”€ Student-created course review â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+
+export async function notifyStudentCreatedCourse({
+  courseId,
+  courseCode,
+  courseTitle,
+  departmentId,
+  level,
+  creatorEmail,
+}: {
+  courseId: string;
+  courseCode: string;
+  courseTitle: string | null;
+  departmentId: string | null;
+  level: number | null;
+  creatorEmail: string | null;
+}): Promise<void> {
+  try {
+    const admin = createSupabaseAdminClient();
+
+    let repQuery = admin
+      .from("study_reps")
+      .select("user_id, role, levels")
+      .eq("active", true);
+    if (departmentId) repQuery = repQuery.eq("department_id", departmentId);
+
+    const [{ data: reps }, { data: admins }] = await Promise.all([
+      repQuery,
+      admin.from("study_admins").select("user_id"),
+    ]);
+
+    const recipientIds = new Set<string>();
+    for (const rep of (reps ?? []) as { user_id: string; role: string; levels: number[] | null }[]) {
+      if (rep.role === "dept_librarian") {
+        recipientIds.add(rep.user_id);
+        continue;
+      }
+      if (!level || !Array.isArray(rep.levels) || rep.levels.includes(level)) {
+        recipientIds.add(rep.user_id);
+      }
+    }
+    for (const adminRow of (admins ?? []) as { user_id: string }[]) recipientIds.add(adminRow.user_id);
+    if (recipientIds.size === 0) return;
+
+    const label = `${courseCode}${courseTitle ? ` - ${courseTitle}` : ""}`;
+    const creator = creatorEmail ? ` by ${creatorEmail.split("@")[0]}` : "";
+    const title = "New course needs review";
+    const body = `${label}${creator} was created during upload.`;
+    const href = "/study-admin/courses?review=pending";
+
+    await admin.from("notifications").insert(
+      [...recipientIds].map((uid) => ({
+        user_id: uid,
+        type: "study_course_pending_review",
+        title,
+        body,
+        href,
+        is_read: false,
+      }))
+    );
+
+    void Promise.allSettled(
+      [...recipientIds].map((uid) =>
+        sendUserPushIfAllowed(uid, { title, body, href, tag: `course-review-${courseId}` }, "rep_alerts")
+      )
+    );
+  } catch {
+    // notification failure must never block course creation
+  }
+}
+
+export async function notifyStudyAdminsCourseReviewAction({
+  courseId,
+  courseCode,
+  action,
+  actorEmail,
+  note,
+}: {
+  courseId: string;
+  courseCode: string;
+  action: "approved" | "removed";
+  actorEmail: string | null;
+  note: string | null;
+}): Promise<void> {
+  try {
+    const admin = createSupabaseAdminClient();
+    const { data: admins } = await admin.from("study_admins").select("user_id");
+    const recipientIds = ((admins ?? []) as { user_id: string }[]).map((row) => row.user_id);
+    if (!recipientIds.length) return;
+
+    const verb = action === "approved" ? "approved" : "removed";
+    const title = `Course ${verb} by course rep`;
+    const actor = actorEmail ? ` by ${actorEmail.split("@")[0]}` : "";
+    const body = `${courseCode} was ${verb}${actor}${note ? `: ${note}` : "."}`;
+    const href = "/study-admin/courses?review=all";
+
+    await admin.from("notifications").insert(
+      recipientIds.map((uid) => ({
+        user_id: uid,
+        type: "study_course_review_action",
+        title,
+        body,
+        href,
+        is_read: false,
+      }))
+    );
+
+    void Promise.allSettled(
+      recipientIds.map((uid) =>
+        sendUserPushIfAllowed(uid, { title, body, href, tag: `course-review-action-${courseId}-${action}` }, "rep_alerts")
+      )
+    );
+  } catch {
+    // notification failure must never block review actions
+  }
+}

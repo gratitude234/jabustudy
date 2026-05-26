@@ -3,6 +3,7 @@ import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { requireStudyModeratorFromRequest } from "@/lib/studyAdmin/requireStudyModeratorFromRequest";
 import { isWithinScope } from "@/lib/studyAdmin/scope";
 import type { StudyModeratorScope } from "@/lib/studyAdmin/requireStudyModerator";
+import { notifyStudyAdminsCourseReviewAction } from "@/lib/studyNotify";
 
 export const dynamic = "force-dynamic";
 
@@ -17,6 +18,12 @@ type CourseRow = {
   faculty: string | null;
   faculty_id: string | null;
   status: string;
+  course_review_status: string;
+  created_from_upload: boolean;
+  created_by: string | null;
+  reviewed_by: string | null;
+  reviewed_at: string | null;
+  review_note: string | null;
   created_at: string;
 };
 
@@ -157,6 +164,7 @@ export async function GET(req: Request) {
     const deptId = url.searchParams.get("dept_id") || "";
     const level = url.searchParams.get("level") || "";
     const status = url.searchParams.get("status") || "";
+    const review = url.searchParams.get("review") || "";
     const semester = normalizeSemester(url.searchParams.get("semester"));
     const page = Math.max(1, Number(url.searchParams.get("page") || 1));
     const limit = 50;
@@ -166,7 +174,7 @@ export async function GET(req: Request) {
 
     let query = admin
       .from("study_courses")
-      .select("id, course_code, course_title, level, semester, department, department_id, faculty, faculty_id, status, created_at", { count: "exact" })
+      .select("id, course_code, course_title, level, semester, department, department_id, faculty, faculty_id, status, course_review_status, created_from_upload, created_by, reviewed_by, reviewed_at, review_note, created_at", { count: "exact" })
       .order("created_at", { ascending: false })
       .range(offset, offset + limit - 1);
 
@@ -175,6 +183,9 @@ export async function GET(req: Request) {
     if (level) query = query.eq("level", Number(level));
     if (semester) query = query.eq("semester", semester);
     if (status) query = query.eq("status", status);
+    if (review === "pending" || review === "approved" || review === "removed") {
+      query = query.eq("course_review_status", review);
+    }
 
     const { data, error, count } = await query;
     if (error) throw error;
@@ -272,9 +283,13 @@ export async function POST(req: Request) {
         department: dept.departmentName,
         department_id: dept.departmentId,
         status: "approved",
+        course_review_status: "approved",
+        created_from_upload: false,
         created_by: userId,
         approved_by: userId,
         approved_at: now,
+        reviewed_by: userId,
+        reviewed_at: now,
         updated_at: now,
       });
     }
@@ -295,7 +310,7 @@ export async function POST(req: Request) {
     const { data, error } = await admin
       .from("study_courses")
       .insert(toInsert)
-      .select("id, course_code, course_title, level, semester, department, department_id, faculty, faculty_id, status, created_at");
+      .select("id, course_code, course_title, level, semester, department, department_id, faculty, faculty_id, status, course_review_status, created_from_upload, created_by, reviewed_by, reviewed_at, review_note, created_at");
 
     if (error) throw error;
 
@@ -372,7 +387,7 @@ export async function DELETE(req: Request) {
 
 export async function PATCH(req: Request) {
   try {
-    const { scope } = await requireStudyModeratorFromRequest(req);
+    const { scope, userId } = await requireStudyModeratorFromRequest(req);
     const body = await req.json().catch(() => ({}));
 
     if (!body?.id) return jsonError("id required", 400, "MISSING_ID");
@@ -380,17 +395,40 @@ export async function PATCH(req: Request) {
     const admin = createSupabaseAdminClient();
     const { data: existing, error: existingErr } = await admin
       .from("study_courses")
-      .select("id, course_code, level, semester, faculty_id, department_id")
+      .select("id, course_code, level, semester, faculty_id, department_id, course_review_status")
       .eq("id", body.id)
       .maybeSingle();
     if (existingErr) throw existingErr;
     if (!existing?.id) return jsonError("Course not found", 404, "NOT_FOUND");
     if (!isWithinScope(scope, existing as any)) return jsonError("Forbidden", 403, "OUT_OF_SCOPE");
 
-    const updates: Record<string, unknown> = { updated_at: new Date().toISOString() };
+    const nowIso = new Date().toISOString();
+    const updates: Record<string, unknown> = { updated_at: nowIso };
     if (body.course_code !== undefined) updates.course_code = normalizeCode(body.course_code);
     if (body.course_title !== undefined) updates.course_title = body.course_title?.trim() ?? null;
     if (body.deactivate) updates.status = "rejected";
+
+    const reviewAction =
+      body.review_action === "approve" || body.review_action === "remove"
+        ? body.review_action
+        : null;
+    const reviewNote =
+      typeof body.review_note === "string" && body.review_note.trim()
+        ? body.review_note.trim().slice(0, 500)
+        : null;
+    if (reviewAction === "approve") {
+      updates.status = "approved";
+      updates.course_review_status = "approved";
+      updates.reviewed_by = userId;
+      updates.reviewed_at = nowIso;
+      updates.review_note = reviewNote;
+    } else if (reviewAction === "remove") {
+      updates.status = "rejected";
+      updates.course_review_status = "removed";
+      updates.reviewed_by = userId;
+      updates.reviewed_at = nowIso;
+      updates.review_note = reviewNote;
+    }
 
     if (body.department_id !== undefined) {
       const nextDepartmentId = String(body.department_id ?? "").trim();
@@ -439,6 +477,37 @@ export async function PATCH(req: Request) {
         .update(materialUpdates)
         .eq("course_id", body.id);
       if (matErr) throw matErr;
+    }
+
+    if (reviewAction === "remove") {
+      const hiddenNote = reviewNote || "Course removed by course rep.";
+      const { error: matHideErr } = await admin
+        .from("study_materials")
+        .update({
+          approved: false,
+          approved_by: null,
+          approved_at: null,
+          rejection_reason: hiddenNote,
+          updated_at: nowIso,
+        })
+        .eq("course_id", body.id);
+      if (matHideErr) throw matHideErr;
+    }
+
+    if (reviewAction) {
+      let actorEmail: string | null = null;
+      try {
+        const { data: actor } = await admin.auth.admin.getUserById(userId);
+        actorEmail = actor?.user?.email ?? null;
+      } catch {}
+      const finalCode = String(updates.course_code ?? (existing as any).course_code);
+      notifyStudyAdminsCourseReviewAction({
+        courseId: String(body.id),
+        courseCode: finalCode,
+        action: reviewAction === "approve" ? "approved" : "removed",
+        actorEmail,
+        note: reviewNote,
+      }).catch(() => {});
     }
 
     return NextResponse.json({ ok: true });

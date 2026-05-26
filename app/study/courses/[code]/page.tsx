@@ -229,6 +229,7 @@ export default function CourseHubPage() {
         .from("study_courses")
         .select("id,course_code,course_title,level,department_id,study_departments:department_id(id,name,faculty_id,study_faculties:faculty_id(id,name))")
         .eq("course_code", code)
+        .eq("status", "approved")
         .maybeSingle();
 
       if (!mounted) return;
