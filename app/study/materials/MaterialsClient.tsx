@@ -76,6 +76,7 @@ type MaterialRow = {
   material_type?: string | null;
   featured?: boolean | null;
   verified?: boolean | null;
+  is_first_course_upload?: boolean;
   ai_summary?: string | null;
 
   study_courses?: {
@@ -511,6 +512,11 @@ function MaterialCard({
               </span>
               {isPopular && (
                 <span className="inline-flex items-center gap-1 rounded-full border border-amber-300/50 bg-amber-50 px-2 py-0.5 text-[10px] font-semibold text-amber-800 dark:border-amber-700/40 dark:bg-amber-950/30 dark:text-amber-300">Popular</span>
+              )}
+              {m.is_first_course_upload && courseCode && (
+                <span className="inline-flex items-center gap-1 rounded-full border border-primary/25 bg-primary-light px-2 py-0.5 text-[10px] font-semibold text-primary-text">
+                  <Star className="h-3 w-3" /> First helper for {courseCode}
+                </span>
               )}
               {isVerified && (
                 <span className="inline-flex items-center gap-1 rounded-full border border-teal-300/50 bg-teal-50 px-2 py-0.5 text-[10px] font-semibold text-teal-800 dark:border-teal-700/40 dark:bg-teal-950/30 dark:text-teal-300">

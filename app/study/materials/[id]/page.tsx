@@ -4,6 +4,7 @@ import { notFound } from "next/navigation";
 import type { Metadata } from "next";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { fallbackPublicUploader, getPublicUploaderMap } from "@/lib/studyUploaderDisplay";
+import { attachFirstCourseUploadFlags } from "@/lib/studyContribution";
 import MaterialDetailClient from "./MaterialDetailClient";
 
 type Props = { params: Promise<{ id: string }>; searchParams: Promise<{ from?: string }> };
@@ -19,7 +20,7 @@ const getMaterial = cache(async (id: string) => {
       `id, title, description, material_type, session,
        approved, downloads, up_votes, down_votes,
        file_url, file_path, ai_summary,
-       verified, featured, created_at, uploader_id,
+       verified, featured, created_at, uploader_id, course_id,
        study_courses (
          id, course_code, course_title,
          level, semester, faculty, department
@@ -36,7 +37,8 @@ const getMaterial = cache(async (id: string) => {
     ? uploaderMap[(data as any).uploader_id] ?? fallbackPublicUploader()
     : fallbackPublicUploader();
 
-  return { ...data, uploader };
+  const [withFirstFlag] = await attachFirstCourseUploadFlags([data as any]);
+  return { ...withFirstFlag, uploader };
 });
 
 // ─── Dynamic metadata for sharing ────────────────────────────────────────────
@@ -89,7 +91,7 @@ export default async function MaterialDetailPage({ params, searchParams }: Props
     courseId
       ? supabase
           .from("study_materials")
-          .select("id,title,material_type,downloads,up_votes,file_path,created_at,study_courses:course_id(course_code)")
+          .select("id,title,material_type,downloads,up_votes,file_path,created_at,course_id,study_courses:course_id(course_code)")
           .eq("approved", true)
           .eq("upload_status", "live")
           .eq("course_id", courseId)
@@ -108,7 +110,7 @@ export default async function MaterialDetailPage({ params, searchParams }: Props
       : Promise.resolve({ data: null }),
   ]);
 
-  const relatedMaterials = (relatedResult.data ?? []) as any[];
+  const relatedMaterials = await attachFirstCourseUploadFlags((relatedResult.data ?? []) as any[]);
   const initialSaved = !!savedResult.data;
 
   return (

@@ -13,6 +13,7 @@ import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { triggerMaterialIndex } from "@/lib/studyMaterialIndexTrigger";
 import { sendUserPushIfAllowed } from "@/lib/webPush";
 import { notifyStudyAdminsNewMaterialUploaded } from "@/lib/studyNotify";
+import { notifyFirstCourseUploadIfNeeded } from "@/lib/studyContribution";
 
 export const dynamic = "force-dynamic";
 
@@ -167,6 +168,7 @@ export async function POST(req: Request) {
           void sendUserPushIfAllowed(uid, { title: notifTitle, body, href, tag: `mat-live-${material_id}` }, 'materials');
         }
       } catch { /* non-critical */ }
+      void notifyFirstCourseUploadIfNeeded(material_id, admin);
     }
 
     return NextResponse.json({ ok: true, verified_in_storage: exists });

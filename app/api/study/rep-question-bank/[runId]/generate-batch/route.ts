@@ -15,6 +15,7 @@ import {
   recordBlockedAiUsage,
   withAiUsageContext,
 } from "@/lib/aiUsage";
+import { notifyPracticePoweredImpactIfMilestone } from "@/lib/studyContribution";
 
 type BankRunRow = {
   status?: string | null;
@@ -289,6 +290,7 @@ export async function POST(
     ]);
 
     await markRunReadyIfCovered(runId, String(bankRun.quiz_set_id));
+    void notifyPracticePoweredImpactIfMilestone(materialId, adminSupabase);
 
     return NextResponse.json({
       ok: true,

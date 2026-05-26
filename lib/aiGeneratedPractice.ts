@@ -6,6 +6,7 @@ import {
   truncateText,
 } from "@/lib/extractMaterialContent";
 import { adminSupabase } from "@/lib/supabase/admin";
+import { notifyPracticePoweredImpactIfMilestone } from "@/lib/studyContribution";
 import {
   assertQuestionsNotDuplicateForCourse,
   type DuplicateGateError,
@@ -729,6 +730,10 @@ export async function saveGeneratedPracticeSet(args: SaveGeneratedPracticeArgs):
     await adminSupabase.from("study_quiz_questions").delete().eq("set_id", quizSetId);
     await adminSupabase.from("study_quiz_sets").delete().eq("id", quizSetId);
     throw Object.assign(new Error("Failed to save questions. Please try again."), { status: 500, code: "OPTION_INSERT_FAILED" });
+  }
+
+  if (!isDraft) {
+    void notifyPracticePoweredImpactIfMilestone(args.materialId, adminSupabase);
   }
 
   return {

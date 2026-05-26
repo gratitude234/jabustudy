@@ -4,6 +4,7 @@ import { requireStudyModeratorFromRequest } from "../../../../../lib/studyAdmin/
 import { isWithinScope } from "../../../../../lib/studyAdmin/scope";
 import { notifyBulkMaterialsApproved } from "../../../../../lib/studyAdmin/notifyUploader";
 import { triggerMaterialIndex } from "../../../../../lib/studyMaterialIndexTrigger";
+import { notifyFirstCourseUploadIfNeeded } from "@/lib/studyContribution";
 
 export const dynamic = "force-dynamic";
 
@@ -118,6 +119,7 @@ export async function POST(req: Request) {
           uploader_id: r.uploader_id ? String(r.uploader_id) : null,
         }))
       );
+      void Promise.allSettled((notifyRows as any[]).map((r) => notifyFirstCourseUploadIfNeeded(String(r.id), admin)));
     }
 
     // Fire dept notifications + AI summary per approved material — fire-and-forget

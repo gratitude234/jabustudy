@@ -10,6 +10,7 @@ import {
   ExternalLink,
   Loader2,
   ShieldCheck,
+  Star,
   XCircle,
 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
@@ -68,6 +69,7 @@ type ContributionStats = {
   rejectedBrokenUploads: number;
   studentsHelped: number;
   coursesHelped: number;
+  firstCourseUploads: number;
   practiceSetsPowered: number;
   practiceQuestionsPowered: number;
 };
@@ -77,6 +79,7 @@ type TopContributionMaterial = {
   title: string | null;
   downloads: number;
   practiceQuestionsPowered: number;
+  isFirstCourseUpload?: boolean;
   course: CourseMini | null;
 };
 
@@ -93,6 +96,7 @@ const EMPTY_CONTRIBUTION_STATS: ContributionStats = {
   rejectedBrokenUploads: 0,
   studentsHelped: 0,
   coursesHelped: 0,
+  firstCourseUploads: 0,
   practiceSetsPowered: 0,
   practiceQuestionsPowered: 0,
 };
@@ -402,6 +406,11 @@ export default function MyUploadsPage() {
                         <span className="mt-0.5 block text-xs text-muted-brand">
                           {code} · helped {material.downloads.toLocaleString("en-NG")} student{material.downloads === 1 ? "" : "s"} · {material.practiceQuestionsPowered.toLocaleString("en-NG")} questions powered
                         </span>
+                        {material.isFirstCourseUpload ? (
+                          <span className="mt-2 inline-flex items-center gap-1 rounded-full border border-primary/25 bg-primary-light px-2 py-0.5 text-[10px] font-bold text-primary-text">
+                            <Star className="h-3 w-3" /> First helper for {code}
+                          </span>
+                        ) : null}
                       </span>
                       <ExternalLink className="h-3.5 w-3.5 shrink-0 text-primary" />
                     </Link>

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { getFirstCourseMaterialIdSet } from "@/lib/studyContribution";
 
 export const dynamic = "force-dynamic";
 
@@ -67,7 +68,10 @@ export async function GET() {
 
     const approvedLiveRows = rows.filter((row) => row.approved === true && row.upload_status === "live");
     const materialIds = rows.map((row) => row.id).filter(Boolean);
-    const approvedLiveIds = approvedLiveRows.map((row) => row.id).filter(Boolean);
+    const firstCourseUploadIds = await getFirstCourseMaterialIdSet(
+      approvedLiveRows.map((row) => row.course_id),
+      admin
+    );
 
     let practiceSetsPowered = 0;
     let practiceQuestionsPowered = 0;
@@ -111,6 +115,7 @@ export async function GET() {
       rejectedBrokenUploads: rows.filter(isRejectedOrBroken).length,
       studentsHelped: approvedLiveRows.reduce((sum, row) => sum + (row.downloads ?? 0), 0),
       coursesHelped: new Set(approvedLiveRows.map((row) => row.course_id).filter(Boolean)).size,
+      firstCourseUploads: approvedLiveRows.filter((row) => firstCourseUploadIds.has(row.id)).length,
       practiceSetsPowered,
       practiceQuestionsPowered,
     };
@@ -120,6 +125,7 @@ export async function GET() {
       title: row.title,
       downloads: row.downloads ?? 0,
       practiceQuestionsPowered: questionCounts.get(row.id) ?? 0,
+      isFirstCourseUpload: firstCourseUploadIds.has(row.id),
       course: row.study_courses
         ? {
             course_code: row.study_courses.course_code,

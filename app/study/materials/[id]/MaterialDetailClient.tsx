@@ -217,6 +217,8 @@ type Material = {
   featured: boolean | null;
   created_at: string | null;
   uploader_id: string | null;
+  course_id?: string | null;
+  is_first_course_upload?: boolean;
   uploader?: {
     displayName: string;
     initials: string;
@@ -1630,14 +1632,15 @@ export default function MaterialDetailClient({
     variant = "default",
   }: {
     children: React.ReactNode;
-    variant?: "default" | "verified" | "featured";
+    variant?: "default" | "verified" | "featured" | "first";
   }) => (
     <span
       className={cn(
         "inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-[11px] font-bold text-white",
         variant === "default" && "border-white/20 bg-white/10",
         variant === "verified" && "border-green-300/30 bg-green-400/20",
-        variant === "featured" && "border-amber-300/30 bg-amber-400/20"
+        variant === "featured" && "border-amber-300/30 bg-amber-400/20",
+        variant === "first" && "border-amber-200/40 bg-amber-300/20"
       )}
     >
       {children}
@@ -1723,6 +1726,11 @@ export default function MaterialDetailClient({
                 {m.featured && (
                   <HeroBadge variant="featured">
                     <Star className="h-3 w-3" /> Featured
+                  </HeroBadge>
+                )}
+                {m.is_first_course_upload && course?.course_code && (
+                  <HeroBadge variant="first">
+                    <Star className="h-3 w-3" /> First helper for {course.course_code}
                   </HeroBadge>
                 )}
               </div>

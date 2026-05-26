@@ -31,6 +31,7 @@ import {
   recordBlockedAiUsage,
   withAiUsageContext,
 } from "@/lib/aiUsage";
+import { notifyPracticePoweredImpactIfMilestone } from "@/lib/studyContribution";
 
 const DEFAULT_QUESTION_COUNT = 10;
 const MAX_QUESTION_COUNT = 15;
@@ -438,6 +439,12 @@ export async function POST(req: NextRequest) {
     await admin.from("study_quiz_sets").delete().eq("id", quizSet.id);
     return NextResponse.json({ error: "Failed to save options." }, { status: 500 });
   }
+
+  void Promise.allSettled(
+    [...new Set(finalQuestions.map((q) => q.sourceMaterialId).filter(Boolean))].map((materialId) =>
+      notifyPracticePoweredImpactIfMilestone(materialId, admin)
+    )
+  );
 
   return NextResponse.json({ setId: quizSet.id, sources, cached: false, ai: aiMeta });
 }
