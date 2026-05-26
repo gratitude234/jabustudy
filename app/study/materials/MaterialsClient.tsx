@@ -25,7 +25,6 @@ import { getAuthedUserId, toggleSaved } from "@/lib/studySaved";
 import { cn, formatWhen, normalizeQuery, safeSearchTerm, buildHref, asInt, clamp } from "@/lib/utils";
 import StudyTabs from "../_components/StudyTabs";
 import { Card, EmptyState, SkeletonCard } from "../_components/StudyUI";
-import { RequestCourseModal } from "../_components/RequestCourseModal";
 
 type SortKey = "newest" | "oldest" | "downloads_desc" | "downloads_asc";
 
@@ -661,9 +660,6 @@ export default function MaterialsClient() {
   const [previewUrl, setPreviewUrl] = useState<string>("");
   const [previewTitle, setPreviewTitle] = useState<string>("");
   const [previewKind, setPreviewKind] = useState<"pdf" | "image" | "other">("other");
-
-  // Request course modal
-  const [requestModalOpen, setRequestModalOpen] = useState(false);
 
   // Effective scope:
   // - mine=1 => always mine
@@ -1832,40 +1828,25 @@ export default function MaterialsClient() {
               }
               description={
                 courseParam
-                  ? "Help us grow — request it and we’ll notify you when content is available."
+                  ? "Upload the first material for this course and help your classmates find it faster."
                   : (levelParam || deptParam)
                   ? "Try adjusting your filters, or upload the first one."
                   : (prefsLoaded && !!scopeDept)
-                  ? "Nothing here yet. Request a course and we’ll notify you when materials are uploaded."
+                  ? "Nothing here yet. Upload the first material for your department."
                   : "Be the first to upload study materials for your department."
               }
               action={
-                <div className="flex flex-wrap gap-2">
-                  {(courseParam || (prefsLoaded && !!scopeDept)) ? (
-                    <button
-                      type="button"
-                      onClick={() => setRequestModalOpen(true)}
-                      className={cn(
-                        "inline-flex items-center gap-2 rounded-2xl bg-secondary px-4 py-3 text-sm font-semibold text-foreground",
-                        "hover:opacity-90",
-                        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
-                      )}
-                    >
-                      {courseParam ? "Request this course" : "Request a course →"}
-                    </button>
-                  ) : null}
-                  <Link
-                    href="/study/materials/upload"
-                    className={cn(
-                      "inline-flex items-center gap-2 rounded-2xl border border-border bg-background px-4 py-3 text-sm font-semibold text-foreground no-underline",
-                      "hover:bg-secondary/50",
-                      "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
-                    )}
-                  >
-                    <UploadCloud className="h-4 w-4" />
-                    Upload a material
-                  </Link>
-                </div>
+                <Link
+                  href="/study/materials/upload"
+                  className={cn(
+                    "inline-flex items-center gap-2 rounded-2xl border border-border bg-background px-4 py-3 text-sm font-semibold text-foreground no-underline",
+                    "hover:bg-secondary/50",
+                    "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+                  )}
+                >
+                  <UploadCloud className="h-4 w-4" />
+                  Upload a material
+                </Link>
               }
             />
           </div>
@@ -2078,13 +2059,6 @@ export default function MaterialsClient() {
         title={previewTitle}
         url={previewUrl}
         kind={previewKind}
-      />
-
-      {/* Request course modal */}
-      <RequestCourseModal
-        open={requestModalOpen}
-        onClose={() => setRequestModalOpen(false)}
-        initialCourseCode={courseParam}
       />
 
       {/* Toast */}
