@@ -4,10 +4,11 @@
 
 import { cn } from "@/lib/utils";
 import Link from "next/link";
-import { ArrowLeft, BookOpen, Flame, Medal, ShieldCheck, Trophy, Users } from "lucide-react";
+import { ArrowLeft, Flame, Medal, ShieldCheck, Trophy, Users } from "lucide-react";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { PointsBreakdown } from "./PointsBreakdown";
 import { HowPointsWork } from "./HowPointsWork";
+import { LeaderboardFilters } from "./LeaderboardFilters";
 
 // 5-min revalidation — swap for MATERIALIZED VIEW + pg_cron when user base grows.
 export const revalidate = 300;
@@ -45,6 +46,8 @@ type StudyPreferenceScopeRow = {
   level: number | null;
   semester: string | null;
   session: string | null;
+  department: string | null;
+  faculty: string | null;
 };
 
 type RepMetaRow = {
@@ -63,15 +66,21 @@ type CourseOption = {
   course_title: string | null;
 };
 
-async function getLeaderboardEntryState() {
+type LeaderboardViewerContext = {
+  currentUserId: string | null;
+  profileComplete: boolean;
+  userPrefs: UserPrefs | null;
+};
+
+async function getLeaderboardViewerContext(): Promise<LeaderboardViewerContext> {
   const supabase = await createSupabaseServerClient();
   const { data: authData } = await supabase.auth.getUser();
   const currentUserId = authData?.user?.id ?? null;
-  if (!currentUserId) return { currentUserId, profileComplete: false };
+  if (!currentUserId) return { currentUserId, profileComplete: false, userPrefs: null };
 
   const { data } = await supabase
     .from("study_preferences")
-    .select("faculty_id,department_id,level,semester,session")
+    .select("department_id, faculty_id, level, semester, session, department, faculty")
     .eq("user_id", currentUserId)
     .maybeSingle();
 
@@ -84,7 +93,20 @@ async function getLeaderboardEntryState() {
       row?.session
   );
 
-  return { currentUserId, profileComplete };
+  return {
+    currentUserId,
+    profileComplete,
+    userPrefs: row
+      ? {
+          department_id: row.department_id,
+          faculty_id: row.faculty_id,
+          level: row.level,
+          semester: row.semester,
+          department: row.department,
+          faculty: row.faculty,
+        }
+      : null,
+  };
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -132,7 +154,12 @@ function normalizeCourseCode(code: string | null | undefined) {
   return (code ?? "").replace(/\s+/g, "").toUpperCase();
 }
 
-async function fetchLeaderboard(scope: Scope, period: Period, requestedCourseCode: string | null): Promise<{
+async function fetchLeaderboard(
+  scope: Scope,
+  period: Period,
+  requestedCourseCode: string | null,
+  viewerContext: LeaderboardViewerContext
+): Promise<{
   rows: LeaderRow[];
   viewMissing: boolean;
   currentUserId: string | null;
@@ -147,20 +174,7 @@ async function fetchLeaderboard(scope: Scope, period: Period, requestedCourseCod
   repRoleMap: Map<string, string>;
 }> {
   const supabase = await createSupabaseServerClient();
-
-  const { data: authData } = await supabase.auth.getUser();
-  const currentUserId = authData?.user?.id ?? null;
-
-  // Fetch user prefs (needed for academic scope labels and filtering)
-  let userPrefs: UserPrefs | null = null;
-  if (currentUserId) {
-    const { data } = await supabase
-      .from("study_preferences")
-      .select("department_id, faculty_id, level, semester, department, faculty")
-      .eq("user_id", currentUserId)
-      .maybeSingle();
-    if (data) userPrefs = data as UserPrefs;
-  }
+  const { currentUserId, userPrefs } = viewerContext;
 
   let courseOptions: CourseOption[] = [];
   if (userPrefs?.department_id && userPrefs.level && userPrefs.semester) {
@@ -325,161 +339,6 @@ function leaderboardHref(period: Period, scope: Scope, courseCode?: string | nul
   const params = new URLSearchParams({ period, scope });
   if (scope === "course" && courseCode) params.set("course", courseCode);
   return `/study/leaderboard?${params.toString()}`;
-}
-
-function PeriodTabs({
-  period,
-  scope,
-  courseCode,
-}: {
-  period: Period;
-  scope: Scope;
-  courseCode: string | null;
-}) {
-  const tabs: Array<{ key: Period; label: string }> = [
-    { key: "week", label: "Week" },
-    { key: "month", label: "Month" },
-    { key: "semester", label: "Semester" },
-    { key: "session", label: "Session" },
-    { key: "all", label: "All-time" },
-  ];
-
-  return (
-    <nav className="flex items-center gap-2 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden" aria-label="Leaderboard period">
-      {tabs.map((t) => {
-        const active = period === t.key;
-        return (
-          <Link
-            key={t.key}
-            href={leaderboardHref(t.key, scope, courseCode)}
-            aria-current={active ? "page" : undefined}
-            className={cn(
-              "shrink-0 rounded-full border px-3 py-1.5 text-xs font-semibold transition",
-              "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/70 focus-visible:ring-offset-2 focus-visible:ring-offset-primary",
-              active
-                ? "border-white bg-white text-primary-text"
-                : "border-white/25 bg-white/10 text-white/70 hover:bg-white/20 hover:text-white"
-            )}
-          >
-            {t.label}
-          </Link>
-        );
-      })}
-    </nav>
-  );
-}
-
-function ScopeTabs({
-  scope,
-  period,
-  userPrefs,
-  courseCode,
-  hasCourses,
-}: {
-  scope: Scope;
-  period: Period;
-  userPrefs: UserPrefs | null;
-  courseCode: string | null;
-  hasCourses: boolean;
-}) {
-  const tabs: Array<{ key: Scope; label: string; disabled?: boolean }> = [
-    { key: "all", label: "All JABU" },
-    {
-      key: "faculty",
-      label: userPrefs?.faculty ?? "My faculty",
-      disabled: !userPrefs?.faculty_id,
-    },
-    {
-      key: "dept",
-      label: departmentLabel(userPrefs?.department, "My dept"),
-      disabled: !userPrefs?.department_id,
-    },
-    {
-      key: "level",
-      label: userPrefs?.level ? `${userPrefs.level}L` : "My level",
-      disabled: !userPrefs?.level,
-    },
-    {
-      key: "course",
-      label: courseCode ?? "Course",
-      disabled: !hasCourses && !courseCode,
-    },
-  ];
-
-  return (
-    <nav className="flex flex-wrap items-center gap-2" aria-label="Leaderboard scope">
-      {tabs.map((t) => {
-        const active = scope === t.key;
-        const href = leaderboardHref(period, t.key, t.key === "course" ? courseCode : null);
-        if (t.disabled) {
-          return (
-            <span
-              key={t.key}
-              aria-disabled="true"
-              className="max-w-[11rem] truncate rounded-full border border-white/15 bg-white/5 px-3 py-1.5 text-xs font-semibold text-white/35 sm:max-w-none"
-            >
-              {t.label}
-            </span>
-          );
-        }
-
-        return (
-          <Link
-            key={t.key}
-            href={href}
-            aria-current={active ? "page" : undefined}
-            className={cn(
-              "max-w-[11rem] truncate rounded-full border px-3 py-1.5 text-xs font-semibold transition sm:max-w-none",
-              "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/70 focus-visible:ring-offset-2 focus-visible:ring-offset-primary",
-              active
-                ? "border-white bg-white text-primary-text"
-                : "border-white/25 bg-white/10 text-white/70 hover:bg-white/20 hover:text-white"
-            )}
-          >
-            {t.label}
-          </Link>
-        );
-      })}
-    </nav>
-  );
-}
-
-function CourseTabs({
-  period,
-  activeCourseCode,
-  courses,
-}: {
-  period: Period;
-  activeCourseCode: string | null;
-  courses: CourseOption[];
-}) {
-  if (courses.length === 0) return null;
-
-  return (
-    <nav className="flex items-center gap-2 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden" aria-label="Course leaderboard">
-      {courses.map((course) => {
-        const active = normalizeCourseCode(activeCourseCode) === normalizeCourseCode(course.course_code);
-        return (
-          <Link
-            key={course.id}
-            href={leaderboardHref(period, "course", course.course_code)}
-            title={course.course_title ?? course.course_code}
-            aria-current={active ? "page" : undefined}
-            className={cn(
-              "inline-flex shrink-0 items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-semibold transition",
-              "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/70 focus-visible:ring-offset-2 focus-visible:ring-offset-primary",
-              active
-                ? "border-white bg-white text-primary-text"
-                : "border-white/25 bg-white/10 text-white/70 hover:bg-white/20 hover:text-white"
-            )}
-          >
-            <BookOpen className="h-3 w-3" aria-hidden="true" />
-            {course.course_code}
-          </Link>
-        );
-      })}
-    </nav>
-  );
 }
 
 function LeaderboardStats({
@@ -777,7 +636,7 @@ export default async function LeaderboardPage({
   searchParams?: Promise<{ scope?: string; period?: string; course?: string }>;
 }) {
   const resolvedSearchParams = await searchParams;
-  const entryState = await getLeaderboardEntryState();
+  const viewerContext = await getLeaderboardViewerContext();
   const rawScope = (resolvedSearchParams?.scope ?? "").toLowerCase();
   const rawPeriod = (resolvedSearchParams?.period ?? "").toLowerCase();
   const rawCourse = (resolvedSearchParams?.course ?? "").trim();
@@ -792,7 +651,7 @@ export default async function LeaderboardPage({
       ? "all"
       : rawScope === "faculty" || rawScope === "dept" || rawScope === "level" || rawScope === "course" || rawScope === "all"
         ? rawScope
-        : entryState.profileComplete
+        : viewerContext.profileComplete
           ? "dept"
           : "all";
 
@@ -811,7 +670,7 @@ export default async function LeaderboardPage({
   let repRoleMap = new Map<string, string>();
 
   try {
-    const result = await fetchLeaderboard(scope, period, rawCourse || null);
+    const result = await fetchLeaderboard(scope, period, rawCourse || null, viewerContext);
     rows = result.rows;
     viewMissing = result.viewMissing;
     currentUserId = result.currentUserId;
@@ -887,23 +746,14 @@ export default async function LeaderboardPage({
           />
 
           {/* Filter chips */}
-          <div className="mt-4 space-y-2">
-            <PeriodTabs period={period} scope={scope} courseCode={selectedCourseCode} />
-            <ScopeTabs
-              scope={scope}
-              period={period}
-              userPrefs={userPrefs}
-              courseCode={selectedCourseCode}
-              hasCourses={courseOptions.length > 0}
-            />
-            {scope === "course" && (
-              <CourseTabs
-                period={period}
-                activeCourseCode={selectedCourseCode}
-                courses={courseOptions}
-              />
-            )}
-          </div>
+          <LeaderboardFilters
+            period={period}
+            scope={scope}
+            userPrefs={userPrefs}
+            courseCode={selectedCourseCode}
+            hasCourses={courseOptions.length > 0}
+            courses={courseOptions}
+          />
         </div>
 
         {/* Error / viewMissing banners */}

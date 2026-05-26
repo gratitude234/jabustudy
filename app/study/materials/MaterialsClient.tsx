@@ -1255,6 +1255,8 @@ export default function MaterialsClient() {
   const activeTypeLabel = MATERIAL_TYPES.find((t) => t.key === typeParam)?.label ?? "All";
 
   const courseChips = useMemo(() => {
+    if (!prefsLoaded) return [];
+
     if (hasFastLanePrefs && fastLaneCourses.length > 0) {
       return fastLaneCourses.slice(0, 8).map((course) => ({
         id: course.id,
@@ -1288,7 +1290,7 @@ export default function MaterialsClient() {
     return Array.from(map.values())
       .sort((a, b) => a.code.localeCompare(b.code))
       .slice(0, 8);
-  }, [courses, fastLaneCourses, hasFastLanePrefs, scopeDept, scopeDeptId, scopeLevel, scopeSemesterDb]);
+  }, [courses, fastLaneCourses, hasFastLanePrefs, prefsLoaded, scopeDept, scopeDeptId, scopeLevel, scopeSemesterDb]);
 
   async function onPreviewMaterial(m: MaterialRow) {
     const res = await fetch(`/api/study/materials/${m.id}/download?preview=1`);
@@ -1478,7 +1480,7 @@ export default function MaterialsClient() {
         )}
       </Card>
 
-      {fastLaneLoading || courseChips.length > 0 ? (
+      {prefsLoaded && (fastLaneLoading || courseChips.length > 0) ? (
         <div className="space-y-2">
           <div className="flex items-center justify-between gap-3">
             <p className="text-sm font-extrabold text-foreground">
