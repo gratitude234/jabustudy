@@ -841,12 +841,14 @@ export default function PracticeMaterialClient({
   // ── Render ───────────────────────────────────────────────────────────────────
 
   const creditCost = generationTrust?.credits.cost ?? Math.ceil(config.count / 5);
-  const dailyRemaining = generationTrust?.dailyLimit.remaining ?? 4;
+  const monthlyFreeRemaining = generationTrust?.dailyLimit.remaining ?? 3;
   const hasMatchingDraft = Boolean(matchingDraft?.setId);
-  const canGenerate = hasMatchingDraft || ((generationTrust?.credits.canAfford ?? credits >= creditCost) && dailyRemaining > 0);
+  const canGenerate = hasMatchingDraft || (generationTrust?.credits.canAfford ?? credits >= creditCost);
   const generationAvailabilityCopy = hasMatchingDraft
     ? "Saved draft ready - no credits charged"
-    : `${creditCost} credit${creditCost === 1 ? "" : "s"} - ${dailyRemaining} generation${dailyRemaining === 1 ? "" : "s"} left today`;
+    : monthlyFreeRemaining > 0
+      ? `${monthlyFreeRemaining} free AI generation${monthlyFreeRemaining === 1 ? "" : "s"} left this month`
+      : `${creditCost} credit${creditCost === 1 ? "" : "s"} needed`;
 
   const currentQ = batchQuestions[currentIndex];
   const isMcq = currentQ?.question_type === "mcq";
@@ -874,9 +876,9 @@ export default function PracticeMaterialClient({
           />
         </div>
       </div>
-      <button type="button" className="shrink-0 rounded-xl border border-primary bg-primary-light px-3 py-1.5 text-xs font-bold text-primary">
+      <Link href="/study/billing" className="shrink-0 rounded-xl border border-primary bg-primary-light px-3 py-1.5 text-xs font-bold text-primary no-underline">
         + Get more
-      </button>
+      </Link>
     </div>
   );
 
@@ -895,12 +897,12 @@ export default function PracticeMaterialClient({
           hasMatchingDraft ? "border-primary/25 bg-primary-light text-primary-text" : "border-amber-300 bg-amber-50 text-amber-800 dark:bg-amber-950/40 dark:border-amber-900 dark:text-amber-400"
         )}>
           <span className="font-semibold">{generationAvailabilityCopy}</span>
-          <span className="font-extrabold">{hasMatchingDraft ? "Free" : `${credits} left`}</span>
+          <span className="font-extrabold">{hasMatchingDraft || monthlyFreeRemaining > 0 ? "Free" : `${credits} left`}</span>
         </div>
 
         {error && <p className="text-center text-xs text-red-500">{error}</p>}
-        {!hasMatchingDraft && dailyRemaining <= 0 && (
-          <p className="text-center text-xs font-semibold text-amber-700">Daily generation limit reached.</p>
+        {!hasMatchingDraft && monthlyFreeRemaining <= 0 && !(generationTrust?.credits.canAfford ?? credits >= creditCost) && (
+          <p className="text-center text-xs font-semibold text-amber-700">Free AI generations used. Buy credits or upgrade.</p>
         )}
         {!hasMatchingDraft && !(generationTrust?.credits.canAfford ?? credits >= creditCost) && (
           <p className="text-center text-xs font-semibold text-amber-700">

@@ -16,6 +16,14 @@ type SubmitPointSummary = {
   writtenPointsAwarded: number;
 };
 
+type PracticeAccessSummary = {
+  limit: number | null;
+  used: number;
+  remaining: number | null;
+  activityDate: string;
+  plus?: { active: boolean; activeUntil: string | null; planKey: string | null };
+};
+
 type QuestionType = "mcq" | "short_answer" | "theory";
 
 function questionTypeOf(q: Pick<QuizQuestion, "question_type"> | null | undefined): QuestionType {
@@ -162,6 +170,7 @@ export function usePracticeEngine({
   const [finalizing, setFinalizing] = useState(false);
   const finalizedRef = useRef(false);
   const [submitPoints, setSubmitPoints] = useState<SubmitPointSummary | null>(null);
+  const [practiceAccess, setPracticeAccess] = useState<PracticeAccessSummary | null>(null);
 
   // Review
   const [reviewTab, setReviewTab] = useState<ReviewTab>("all");
@@ -266,6 +275,7 @@ export function usePracticeEngine({
       setSubmitted(false);
       setFinalizing(false);
       setSubmitPoints(null);
+      setPracticeAccess(null);
       finalizedRef.current = false;
       setIdx(0);
       setAnswers({});
@@ -320,6 +330,15 @@ export function usePracticeEngine({
 
         const user = authRes.data?.user ?? null;
         userIdRef.current = user?.id ?? null;
+
+        if (user) {
+          void fetch("/api/billing/me", { cache: "no-store" })
+            .then((res) => res.ok ? res.json() : null)
+            .then((data) => {
+              if (!cancelled && data?.ok && data.practice) setPracticeAccess(data.practice);
+            })
+            .catch(() => {});
+        }
 
         if (setRes.error) throw setRes.error;
         if (!setRes.data) throw new Error("Practice set not found");
@@ -859,6 +878,7 @@ export function usePracticeEngine({
     stats,
     finalizing,
     submitPoints,
+    practiceAccess,
     weakSummary,
 
     // actions

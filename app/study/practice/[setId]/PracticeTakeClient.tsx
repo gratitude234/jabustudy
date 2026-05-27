@@ -364,6 +364,7 @@ export default function PracticeTakeClient() {
     reviewItems,
     finalizing,
     submitPoints,
+    practiceAccess,
     weakSummary,
     choose,
     writeAnswer,
@@ -610,6 +611,7 @@ export default function PracticeTakeClient() {
 
   function handleSubmitClick() {
     if (submitted) return;
+    if (practiceLimitBlocksSubmit) return;
     const unanswered = stats.total - stats.answered;
     if (unanswered > 0 && !pendingSubmit) {
       setPendingSubmit(true);
@@ -860,6 +862,11 @@ if (err || !meta) {
     if (item.isWrong || item.isUnanswered) return true;
     return false;
   }).length;
+  const practiceLimitBlocksSubmit =
+    !submitted &&
+    practiceAccess?.limit !== null &&
+    typeof practiceAccess?.remaining === "number" &&
+    questions.length > practiceAccess.remaining;
 
   return (
     <div className="pb-32 md:pb-6">
@@ -1012,6 +1019,29 @@ if (err || !meta) {
                 )}
                 Keep in library
               </button>
+            ) : null}
+          </div>
+        </div>
+      ) : null}
+
+      {practiceAccess?.limit !== null && typeof practiceAccess?.remaining === "number" ? (
+        <div
+          className={cn(
+            "mt-4 rounded-2xl border px-4 py-3",
+            practiceLimitBlocksSubmit
+              ? "border-amber-300 bg-amber-50 text-amber-900"
+              : "border-border bg-card text-muted-foreground"
+          )}
+        >
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+            <p className="text-sm font-semibold">
+              {practiceAccess.remaining} of {practiceAccess.limit} free practice questions left today.
+              {practiceLimitBlocksSubmit ? " This set is larger than your remaining free allowance." : ""}
+            </p>
+            {practiceLimitBlocksSubmit ? (
+              <Link href="/study/billing" className="text-sm font-extrabold text-primary no-underline hover:underline">
+                Upgrade to continue
+              </Link>
             ) : null}
           </div>
         </div>
@@ -1900,10 +1930,13 @@ if (err || !meta) {
               <button
                 type="button"
                 onClick={handleSubmitClick}
+                disabled={practiceLimitBlocksSubmit}
                 className={cn(
                   "inline-flex h-12 flex-1 items-center justify-center gap-2 rounded-2xl text-sm font-extrabold transition active:scale-[0.98]",
                   "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-                  learningMode
+                  practiceLimitBlocksSubmit
+                    ? "cursor-not-allowed bg-secondary text-muted-foreground opacity-60"
+                    : learningMode
                     ? "bg-[#5B35D5] text-white hover:bg-[#4526B8]"
                     : "bg-secondary text-foreground hover:opacity-90"
                 )}

@@ -934,12 +934,11 @@ export default function MaterialDetailClient({
     generationStatusLoading ? "Checking availability..."
       : generatingMore ? "Generating..."
         : generationTrust?.credits && !generationTrust.credits.canAfford ? "Not enough credits"
-          : generationTrust?.dailyLimit && generationTrust.dailyLimit.remaining <= 0 ? "Daily limit reached"
-            : null;
+          : null;
   const dailyLimitLabel = generationTrust?.dailyLimit
     ? generationTrust.dailyLimit.remaining <= 0
-      ? `Daily limit reached (${generationTrust.dailyLimit.used}/${generationTrust.dailyLimit.limit} used)`
-      : `Daily: ${generationTrust.dailyLimit.remaining} left today`
+      ? `Free AI used (${generationTrust.dailyLimit.used}/${generationTrust.dailyLimit.limit} this month)`
+      : `Free AI: ${generationTrust.dailyLimit.remaining} left this month`
     : null;
 
   function signInForWorkspace() {
@@ -1397,11 +1396,6 @@ export default function MaterialDetailClient({
 
     if (generationTrust?.credits && !generationTrust.credits.canAfford) {
       showToast("Not enough credits to generate questions.");
-      return;
-    }
-
-    if (generationTrust?.dailyLimit && generationTrust.dailyLimit.remaining <= 0) {
-      showToast("Daily question generation limit reached.");
       return;
     }
 

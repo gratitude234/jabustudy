@@ -10,7 +10,7 @@ import {
 import type { StudyGenerationIntent } from "@/lib/studyQuestionGeneration";
 
 const MAX_QUESTION_COUNT = 20;
-const DEFAULT_CREDIT_BALANCE = 20;
+const DEFAULT_CREDIT_BALANCE = 0;
 const DAILY_WINDOW_MS = 24 * 60 * 60 * 1000;
 
 type QuestionFormat = "mcq" | "mixed" | "written";

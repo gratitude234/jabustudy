@@ -12,6 +12,7 @@ const links = [
   { href: "/study/library", label: "Library" },
   { href: "/study/practice", label: "Practice" },
   { href: "/study/questions", label: "Q&A" },
+  { href: "/study/billing", label: "Plus" },
 ];
 
 function buildNextUrl(pathname: string, sp: URLSearchParams, nextQ: string) {

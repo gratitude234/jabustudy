@@ -21,9 +21,7 @@ import {
   selectReusablePoolQuestions,
 } from "@/lib/studyQuestionPool";
 import {
-  aiRateLimitMessage,
   recordAiUsageEvent,
-  recordBlockedAiUsage,
   withAiUsageContext,
   type AiUsageContext,
   type AiUsageStatus,
@@ -33,10 +31,10 @@ import {
   ensureStudyCreditBalance,
   generationReceipt,
   getActiveGenerationDrafts,
-  getQuestionGenerationLimit,
   normalizeQuestionGenerationRequest,
   spendStudyCredits,
 } from "@/lib/aiQuestionGenerationTrust";
+import { getAiGenerationAccess, recordFreeAiGeneration } from "@/lib/studyBilling";
 
 const QUESTION_GEN_TEXT_CHARS = 24_000;
 const AI_QUESTION_TIMEOUT_MS =
@@ -718,25 +716,18 @@ async function handleGenerateQuestionsRequest(req: NextRequest) {
       reusedPool: pooledCount > 0,
     },
   };
-  if (aiQuestionCount > 0) {
-    const limit = await getQuestionGenerationLimit(user.id);
-    if (!limit.allowed) {
-      await recordBlockedAiUsage(usageContext, "Daily question generation limit reached.");
-      return NextResponse.json(
-        { error: aiRateLimitMessage(limit), code: "AI_RATE_LIMITED", chargeStatus: "not_charged" },
-        { status: 429, headers: { "Retry-After": String(limit.retryAfterSeconds) } }
-      );
-    }
-  }
+  const generationAccess = await getAiGenerationAccess(user.id, estimatedAiCreditCost);
 
   // ── Credits check ─────────────────────────────────────────────────────────
-  const currentBalance = await ensureStudyCreditBalance(user.id);
-  if (currentBalance < estimatedAiCreditCost) {
+  const currentBalance = generationAccess.credits.balance;
+  if (aiQuestionCount > 0 && !generationAccess.allowed) {
     return NextResponse.json(
       {
         ok: false,
-        code: "INSUFFICIENT_CREDITS",
-        message: "Not enough credits to generate questions",
+        code: generationAccess.freeAi.remaining <= 0 ? "AI_LIMIT_REACHED" : "INSUFFICIENT_CREDITS",
+        message: generationAccess.freeAi.remaining <= 0
+          ? "You have used your free AI generations for this month. Upgrade or buy credits to continue."
+          : "Not enough credits to generate questions",
         chargeStatus: "not_charged",
       },
       { status: 402 }
@@ -884,7 +875,23 @@ Return ONLY a valid JSON object with no markdown, no backticks, no preamble:
 
         const savedGeneratedCount = Math.max(0, draft?.generatedCount ?? chargeableCount);
         const finalCreditCost = savedGeneratedCount > 0 ? Math.max(1, Math.ceil(savedGeneratedCount / 5)) : 0;
-        if (finalCreditCost > 0) {
+        if (finalCreditCost > 0 && generationAccess.chargeMode === "free_monthly") {
+          emitStatus("Confirming free monthly generation.", "free-ai-allowance");
+          try {
+            await recordFreeAiGeneration(user.id, {
+              materialId,
+              savedCount,
+              generatedCount: savedGeneratedCount,
+              creditEquivalent: finalCreditCost,
+            });
+          } catch (freeError) {
+            if (draft?.setId) await discardDraftSet(draft.setId);
+            throw Object.assign(
+              new Error("Your free AI generations are used up. No credits charged."),
+              { code: "AI_LIMIT_REACHED", cause: freeError }
+            );
+          }
+        } else if (finalCreditCost > 0) {
           emitStatus("Confirming credits.", "charge-credits");
           const spend = await spendStudyCredits({ userId: user.id, cost: finalCreditCost });
           if (!spend.ok) {
@@ -897,11 +904,13 @@ Return ONLY a valid JSON object with no markdown, no backticks, no preamble:
 
           creditsRemaining = spend.balance;
         }
-        const receiptMessage = generationReceipt({
-          savedCount,
-          creditCost: finalCreditCost,
-          creditsRemaining,
-        });
+        const receiptMessage = generationAccess.chargeMode === "free_monthly" && finalCreditCost > 0
+          ? `${savedCount} question${savedCount === 1 ? "" : "s"} saved - free monthly AI generation used - ${creditsRemaining} credits left.`
+          : generationReceipt({
+            savedCount,
+            creditCost: finalCreditCost,
+            creditsRemaining,
+          });
 
         if (draft?.poolQuestionIds?.length) {
           await markPoolQuestionsSeen({
@@ -919,7 +928,8 @@ Return ONLY a valid JSON object with no markdown, no backticks, no preamble:
                 generation_config: buildGenerationConfig(ai, {
                   estimatedCost: estimatedAiCreditCost,
                   cost: finalCreditCost,
-                  charged: finalCreditCost > 0,
+                  charged: finalCreditCost > 0 && generationAccess.chargeMode !== "free_monthly",
+                  chargeMode: finalCreditCost > 0 ? generationAccess.chargeMode : "none",
                   chargedAt: new Date().toISOString(),
                   balanceAfter: creditsRemaining,
                   receiptMessage,

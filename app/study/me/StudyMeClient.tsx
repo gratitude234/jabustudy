@@ -10,6 +10,7 @@ import {
   Bell,
   BellOff,
   BookOpen,
+  Banknote,
   Calculator,
   ClipboardList,
   FileText,
@@ -589,6 +590,13 @@ function StudyMeInner() {
             desc="CGPA, targets and semester planning"
             icon={<Calculator className="h-4 w-4" />}
             tone="green"
+          />
+          <ToolRow
+            href="/study/billing"
+            title="JabuStudy Plus & Credits"
+            desc="Manage plan, daily limits and AI credits"
+            icon={<Banknote className="h-4 w-4" />}
+            tone="study"
           />
           <ToolRow
             href="/study/questions"

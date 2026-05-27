@@ -4,6 +4,7 @@ import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { awardCappedStudyPoints, STUDY_POINT_RULES } from "@/lib/studyPoints";
 import { notifyStreakMilestone, notifyPracticePerfectScore } from "@/lib/studyNotify";
+import { getPracticeAccess } from "@/lib/studyBilling";
 
 type SubmitBody = {
   answers?: Record<string, string>;
@@ -198,6 +199,24 @@ export async function POST(
   const orderedQuestions = requestedIds.length > 0
     ? requestedIds.map((id) => questions.find((q) => q.id === id)).filter(Boolean) as QuestionRow[]
     : questions;
+
+  const practiceAccess = await getPracticeAccess(user.id, orderedQuestions.length);
+  if (!practiceAccess.allowed) {
+    return NextResponse.json(
+      {
+        ok: false,
+        code: "PRACTICE_LIMIT_REACHED",
+        message: "You've used today's free practice questions. Upgrade to keep practicing.",
+        practice: {
+          limit: practiceAccess.limit,
+          used: practiceAccess.used,
+          remaining: practiceAccess.remaining,
+          activityDate: practiceAccess.activityDate,
+        },
+      },
+      { status: 402 }
+    );
+  }
 
   const scoredQuestions = orderedQuestions.filter((q) => !isWrittenQuestion(q));
   const writtenQuestions = orderedQuestions.filter(isWrittenQuestion);

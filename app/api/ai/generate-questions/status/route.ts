@@ -3,11 +3,10 @@ export const runtime = "nodejs";
 import { NextRequest, NextResponse } from "next/server";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import {
-  ensureStudyCreditBalance,
   getActiveGenerationDrafts,
-  getQuestionGenerationLimit,
   normalizeQuestionGenerationRequest,
 } from "@/lib/aiQuestionGenerationTrust";
+import { getAiGenerationAccess } from "@/lib/studyBilling";
 
 export async function GET(req: NextRequest) {
   const supabase = await createSupabaseServerClient();
@@ -30,9 +29,8 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ ok: false, message: "Missing materialId" }, { status: 400 });
   }
 
-  const [balance, limit, drafts] = await Promise.all([
-    ensureStudyCreditBalance(user.id),
-    getQuestionGenerationLimit(user.id),
+  const [access, drafts] = await Promise.all([
+    getAiGenerationAccess(user.id, requestConfig.creditCost),
     getActiveGenerationDrafts({
       userId: user.id,
       materialId: requestConfig.materialId,
@@ -40,20 +38,22 @@ export async function GET(req: NextRequest) {
     }),
   ]);
 
-  const remaining = Math.max(0, limit.limit - limit.used);
+  const remaining = access.freeAi.remaining;
 
   return NextResponse.json({
     ok: true,
     credits: {
-      balance,
+      balance: access.credits.balance,
       cost: requestConfig.creditCost,
-      canAfford: balance >= requestConfig.creditCost,
+      canAfford: access.credits.canAfford,
     },
+    plus: access.plus,
+    freeAi: access.freeAi,
     dailyLimit: {
-      limit: limit.limit,
-      used: limit.used,
+      limit: access.freeAi.limit,
+      used: access.freeAi.used,
       remaining,
-      retryAfterSeconds: limit.retryAfterSeconds,
+      retryAfterSeconds: 0,
     },
     matchingDraft: drafts.matchingDraft,
     latestDraft: drafts.latestDraft,
