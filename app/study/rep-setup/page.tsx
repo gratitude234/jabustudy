@@ -52,6 +52,13 @@ function RepSetupInner() {
   const [completing, setCompleting] = useState(false);
   const [completeError, setCompleteError] = useState<string | null>(null);
   const [confirmOpen, setConfirmOpen] = useState(false);
+  const [done, setDone] = useState(false);
+
+  useEffect(() => {
+    if (!done) return;
+    const t = setTimeout(() => router.replace("/study"), 2000);
+    return () => clearTimeout(t);
+  }, [done, router]);
 
   const [addStates, setAddStates] = useState<Record<number, AddState>>({});
 
@@ -121,7 +128,7 @@ function RepSetupInner() {
       return;
     }
 
-    router.replace("/study");
+    setDone(true);
   }
 
   // ── Derived ─────────────────────────────────────────────────────────────────
@@ -146,7 +153,7 @@ function RepSetupInner() {
   }
 
   return (
-    <div className="mx-auto w-full max-w-2xl px-4 py-6 pb-32 md:pb-12">
+    <div className="mx-auto w-full max-w-2xl px-4 py-6 pb-8">
 
       {/* ── Header ── */}
       <div className="mb-6">
@@ -265,57 +272,76 @@ function RepSetupInner() {
       {/* ── Confirmation drawer ── */}
       <Drawer
         open={confirmOpen}
-        onClose={() => !completing && setConfirmOpen(false)}
-        title="Ready to finish?"
+        onClose={() => !completing && !done && setConfirmOpen(false)}
+        title={done ? "Setup complete!" : "Ready to finish?"}
         footer={
-          <div className="flex gap-3">
-            <button
-              onClick={() => setConfirmOpen(false)}
-              disabled={completing}
-              className="flex-1 rounded-2xl border border-border bg-background py-3 text-sm font-medium text-foreground hover:bg-secondary transition-colors"
-            >
-              Go back
-            </button>
-            <button
-              onClick={handleConfirmedComplete}
-              disabled={completing}
-              className="flex-1 flex items-center justify-center gap-2 rounded-2xl bg-primary py-3 text-sm font-semibold text-primary-foreground hover:opacity-90 transition-opacity"
-            >
-              {completing ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
-              {completing ? "Finishing…" : "Yes, finish setup"}
-            </button>
-          </div>
+          done ? (
+            <div className="flex items-center justify-center gap-2 rounded-2xl bg-emerald-50 py-3 text-sm font-semibold text-emerald-700 dark:bg-emerald-950/20 dark:text-emerald-400">
+              <CheckCircle2 className="h-4 w-4" />
+              You&apos;re all set! Taking you to Study Hub…
+            </div>
+          ) : (
+            <div className="flex gap-3">
+              <button
+                onClick={() => setConfirmOpen(false)}
+                disabled={completing}
+                className="flex-1 rounded-2xl border border-border bg-background py-3 text-sm font-medium text-foreground hover:bg-secondary transition-colors"
+              >
+                Go back
+              </button>
+              <button
+                onClick={handleConfirmedComplete}
+                disabled={completing}
+                className="flex-1 flex items-center justify-center gap-2 rounded-2xl bg-primary py-3 text-sm font-semibold text-primary-foreground hover:opacity-90 transition-opacity"
+              >
+                {completing ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
+                {completing ? "Finishing…" : "Yes, finish setup"}
+              </button>
+            </div>
+          )
         }
       >
-        <div className="space-y-4">
-          <p className="text-sm text-muted-foreground">
-            Once you finish, your classmates can start uploading materials and practising. Here's what you've set up:
-          </p>
+        {done ? (
+          <div className="flex flex-col items-center gap-3 py-4 text-center">
+            <div className="grid h-14 w-14 place-items-center rounded-2xl bg-emerald-100 dark:bg-emerald-950/40">
+              <CheckCircle2 className="h-7 w-7 text-emerald-600 dark:text-emerald-400" />
+            </div>
+            <p className="text-base font-bold text-foreground">Your department is ready!</p>
+            <p className="max-w-xs text-sm text-muted-foreground">
+              Classmates can now discover courses and upload materials for your department.
+            </p>
+          </div>
+        ) : (
+          <div className="space-y-4">
+            <p className="text-sm text-muted-foreground">
+              Once you finish, your classmates can start uploading materials and practising. Here&apos;s what you&apos;ve set up:
+            </p>
 
-          {levels.map((lvl) => {
-            const lvlCourses = coursesByLevel[lvl] ?? [];
-            return (
-              <div key={lvl}>
-                <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                  {lvl} Level — {lvlCourses.length} course{lvlCourses.length === 1 ? "" : "s"}
-                </p>
-                <div className="space-y-1.5">
-                  {lvlCourses.map((c) => (
-                    <div key={c.id} className="flex items-center gap-3 rounded-xl bg-muted/60 px-3 py-2.5">
-                      <span className="rounded-lg bg-primary/10 px-2 py-0.5 font-mono text-xs font-semibold text-primary shrink-0">
-                        {c.course_code}
-                      </span>
-                      <span className="flex-1 truncate text-xs text-foreground">{c.course_title ?? "—"}</span>
-                      <span className="shrink-0 rounded-full bg-muted px-2 py-0.5 text-[10px] capitalize text-muted-foreground">
-                        {c.semester}
-                      </span>
-                    </div>
-                  ))}
+            {levels.map((lvl) => {
+              const lvlCourses = coursesByLevel[lvl] ?? [];
+              return (
+                <div key={lvl}>
+                  <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                    {lvl} Level — {lvlCourses.length} course{lvlCourses.length === 1 ? "" : "s"}
+                  </p>
+                  <div className="space-y-1.5">
+                    {lvlCourses.map((c) => (
+                      <div key={c.id} className="flex items-center gap-3 rounded-xl bg-muted/60 px-3 py-2.5">
+                        <span className="rounded-lg bg-primary/10 px-2 py-0.5 font-mono text-xs font-semibold text-primary shrink-0">
+                          {c.course_code}
+                        </span>
+                        <span className="flex-1 truncate text-xs text-foreground">{c.course_title ?? "—"}</span>
+                        <span className="shrink-0 rounded-full bg-muted px-2 py-0.5 text-[10px] capitalize text-muted-foreground">
+                          {c.semester}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
                 </div>
-              </div>
-            );
-          })}
-        </div>
+              );
+            })}
+          </div>
+        )}
       </Drawer>
     </div>
   );

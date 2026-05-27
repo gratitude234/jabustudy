@@ -2,6 +2,7 @@
 import { NextResponse } from "next/server";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
+import { notifyAdminsNewRepApplication } from "@/lib/studyNotify";
 
 type Role = "course_rep" | "dept_librarian";
 
@@ -106,6 +107,8 @@ export async function POST(req: Request) {
     ? body.photo_url
     : null;
 
+  const note = typeof body?.note === "string" && body.note.trim() ? body.note.trim() : null;
+
   const insertPayload: Record<string, any> = {
     user_id,
     faculty_id,
@@ -113,6 +116,7 @@ export async function POST(req: Request) {
     role,
     status: "pending",
     photo_url,
+    note,
   };
 
   // For course_rep, keep legacy level too (for old UIs/DB)
@@ -134,6 +138,8 @@ export async function POST(req: Request) {
   if (createErr) {
     return jsonError(createErr.message || "Could not submit application", 500, "CREATE_FAILED");
   }
+
+  void notifyAdminsNewRepApplication({ applicantId: user_id, role });
 
   return NextResponse.json({ ok: true, application: created });
 }

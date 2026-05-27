@@ -22,7 +22,6 @@ export async function GET(req: Request) {
         [
           "id",
           "created_at",
-          "updated_at",
           "faculty",
           "department",
           "faculty_id",

@@ -68,7 +68,7 @@ export function Drawer({ open, onClose, title, children, footer }: DrawerProps) 
     <div
       aria-hidden={!open}
       className={cn(
-        "fixed inset-0 z-50 transition-opacity duration-200",
+        "fixed inset-0 z-[60] transition-opacity duration-200",
         open ? "opacity-100 pointer-events-auto" : "opacity-0 pointer-events-none"
       )}
     >

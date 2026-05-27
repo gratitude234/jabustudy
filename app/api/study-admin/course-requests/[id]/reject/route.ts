@@ -63,7 +63,6 @@ export async function POST(
       .update({
         status: "rejected",
         admin_note: note || null,
-        updated_at: new Date().toISOString(),
       })
       .eq("id", id);
     if (error) throw error;

@@ -74,7 +74,7 @@ export async function GET() {
   // 2) Otherwise, return latest application (any status)
   const { data: appRow, error: appErr } = await admin
     .from("study_rep_applications")
-    .select("id, created_at, status, role, faculty_id, department_id, level, levels, decision_reason, note")
+    .select("id, created_at, status, role, faculty_id, department_id, level, levels, decision_reason, note, photo_url")
     .eq("user_id", user_id)
     .order("created_at", { ascending: false })
     .limit(1)
@@ -126,6 +126,7 @@ export async function GET() {
       levels: (appRow as any)?.levels ?? null,
       decision_reason: (appRow as any)?.decision_reason ?? null,
       note: (appRow as any)?.note ?? null,
+      photo_url: (appRow as any)?.photo_url ?? null,
     },
   });
 }

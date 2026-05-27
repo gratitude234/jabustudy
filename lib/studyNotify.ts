@@ -677,3 +677,41 @@ export async function notifyAdminsNewBillingSubmission(args: {
     // fire-and-forget — billing state is already persisted
   }
 }
+
+// ─── New rep application submitted ────────────────────────────────────────────
+
+export async function notifyAdminsNewRepApplication(opts: {
+  applicantId: string;
+  role: "course_rep" | "dept_librarian";
+}): Promise<void> {
+  try {
+    const admin = createSupabaseAdminClient();
+    const { data: admins } = await admin.from("study_admins").select("user_id");
+    const ids = ((admins ?? []) as { user_id: string }[]).map((r) => r.user_id);
+    if (!ids.length) return;
+
+    const roleLabel = opts.role === "dept_librarian" ? "Dept Librarian" : "Course Rep";
+    const title = "New rep application";
+    const body = `A ${roleLabel} application is awaiting review.`;
+    const href = "/study-admin/rep-applications";
+
+    await admin.from("notifications").insert(
+      ids.map((uid) => ({
+        user_id: uid,
+        type: "study_rep_app_new",
+        title,
+        body,
+        href,
+        is_read: false,
+      }))
+    );
+
+    void Promise.allSettled(
+      ids.map((uid) =>
+        sendUserPushIfAllowed(uid, { title, body, href, tag: `rep-app-${opts.applicantId}` }, "materials")
+      )
+    );
+  } catch {
+    // fire-and-forget — application is already persisted
+  }
+}

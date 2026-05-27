@@ -36,6 +36,7 @@ type RepApplication = {
   note: string | null;
   admin_note: string | null;
   decision_reason?: string | null;
+  photo_url?: string | null;
 };
 
 type ActiveRepRow = {
@@ -129,7 +130,7 @@ export default function StudyAdminRepApplicationsPage() {
   const router = useRouter();
   const [status, setStatus] = useState<"pending" | "approved" | "rejected" | "all">("pending");
   const [q, setQ] = useState("");
-  const [adminNote, setAdminNote] = useState("");
+  const [noteMap, setNoteMap] = useState<Record<string, string>>({});
   const [rejectId, setRejectId] = useState<string | null>(null);
   const [rejectReason, setRejectReason] = useState("");
   const [loading, setLoading] = useState(true);
@@ -242,7 +243,7 @@ export default function StudyAdminRepApplicationsPage() {
     }));
   }
 
-  async function approve(id: string) {
+  async function approve(id: string, note: string) {
     if (!id) {
       setErr("Missing application id. Please refresh the page and try again.");
       return;
@@ -256,11 +257,11 @@ export default function StudyAdminRepApplicationsPage() {
       const res = await fetch(`/api/study-admin/rep-applications/${appId}/approve`, {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ admin_note: adminNote.trim() || null }),
+        body: JSON.stringify({ admin_note: note.trim() || null }),
       });
       const json = await res.json();
       if (!res.ok || !json.ok) throw new Error(json.error || "Approve failed");
-      setAdminNote("");
+      setNoteMap((p) => { const next = { ...p }; delete next[id]; return next; });
       await load();
     } catch (e) {
       setErr(e instanceof Error ? e.message : "Approve failed");
@@ -269,7 +270,7 @@ export default function StudyAdminRepApplicationsPage() {
     }
   }
 
-  async function reject(id: string) {
+  async function reject(id: string, note: string) {
     if (!id) {
       setErr("Missing application id. Please refresh the page and try again.");
       return;
@@ -284,13 +285,13 @@ export default function StudyAdminRepApplicationsPage() {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
         body: JSON.stringify({
-          admin_note: adminNote.trim() || null,
+          admin_note: note.trim() || null,
           decision_reason: rejectReason.trim(),
         }),
       });
       const json = await res.json();
       if (!res.ok || !json.ok) throw new Error(json.error || "Reject failed");
-      setAdminNote("");
+      setNoteMap((p) => { const next = { ...p }; delete next[id]; return next; });
       setRejectId(null);
       setRejectReason("");
       await load();
@@ -367,18 +368,6 @@ export default function StudyAdminRepApplicationsPage() {
         </div>
 
         <div className="mt-4 grid gap-3">
-          <div className="rounded-3xl border bg-zinc-50 p-4 dark:border-zinc-800 dark:bg-zinc-950/30">
-            <div className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">Optional admin note</div>
-            <div className="mt-1 text-xs text-zinc-600 dark:text-zinc-400">
-              Saved on the application when you approve or reject.
-            </div>
-            <input
-              className="mt-3 h-11 w-full rounded-2xl border bg-white px-3 text-sm dark:border-zinc-800 dark:bg-zinc-950 dark:text-zinc-100"
-              placeholder="e.g. Approved (verified class rep)"
-              value={adminNote}
-              onChange={(e) => setAdminNote(e.target.value)}
-            />
-          </div>
 
           {loading ? (
             <div className="rounded-3xl border p-6 text-sm text-zinc-600 dark:border-zinc-800 dark:text-zinc-400">
@@ -475,10 +464,10 @@ export default function StudyAdminRepApplicationsPage() {
                     </div>
 
                     {it.status === "pending" ? (
-                      <div className="flex items-center gap-2">
+                      <div className="flex shrink-0 items-center gap-2">
                         <button
                           onClick={() => {
-                            void approve(it.id);
+                            void approve(it.id, noteMap[it.id] ?? "");
                           }}
                           disabled={busyId === it.id}
                           className="inline-flex items-center gap-2 rounded-2xl bg-emerald-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-60"
@@ -509,8 +498,40 @@ export default function StudyAdminRepApplicationsPage() {
                     ) : null}
                   </div>
 
+                  {it.status === "pending" ? (
+                    <textarea
+                      placeholder="Optional admin note (saved when you approve or reject)…"
+                      value={noteMap[it.id] ?? ""}
+                      onChange={(e) => setNoteMap((p) => ({ ...p, [it.id]: e.target.value }))}
+                      rows={2}
+                      className="mt-3 w-full resize-none rounded-2xl border bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground/60 dark:border-zinc-700"
+                    />
+                  ) : null}
+
                   {isExpanded ? (
-                    <div className="mt-4 rounded-3xl border bg-zinc-50 p-4 dark:border-zinc-800 dark:bg-zinc-950/30">
+                    <div className="mt-4 space-y-3 rounded-3xl border bg-zinc-50 p-4 dark:border-zinc-800 dark:bg-zinc-950/30">
+                      {it.photo_url ? (
+                        <div>
+                          <p className="mb-2 text-xs font-semibold text-zinc-600 dark:text-zinc-400">
+                            Verification photo
+                          </p>
+                          <img
+                            src={it.photo_url}
+                            alt="Applicant verification photo"
+                            className="max-h-64 w-auto rounded-2xl border object-contain dark:border-zinc-800"
+                          />
+                        </div>
+                      ) : (
+                        <p className="text-xs text-zinc-500 dark:text-zinc-500">No photo provided</p>
+                      )}
+                      {it.note ? (
+                        <div className="rounded-2xl border bg-white p-3 dark:border-zinc-700 dark:bg-zinc-900">
+                          <p className="mb-1 text-xs font-semibold text-zinc-600 dark:text-zinc-400">
+                            Applicant note
+                          </p>
+                          <p className="text-sm text-zinc-900 dark:text-zinc-100">"{it.note}"</p>
+                        </div>
+                      ) : null}
                       <div className="flex flex-wrap items-center gap-4 text-xs text-muted-foreground">
                         <span>{engagementMap[it.id] ?? 0} practice days on platform</span>
                         <span>
@@ -545,7 +566,7 @@ export default function StudyAdminRepApplicationsPage() {
                       <div className="mt-3 flex flex-wrap items-center gap-2">
                         <button
                           onClick={() => {
-                            void reject(it.id);
+                            void reject(it.id, noteMap[it.id] ?? "");
                           }}
                           disabled={busyId === it.id || !rejectReason.trim()}
                           className="inline-flex items-center gap-2 rounded-2xl bg-red-700 px-4 py-2 text-sm font-semibold text-white disabled:opacity-60"

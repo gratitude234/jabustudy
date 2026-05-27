@@ -15,7 +15,6 @@ import {
   Info,
   GraduationCap,
   Clock,
-  Upload,
   ChevronLeft,
   Camera,
   X,
@@ -64,6 +63,8 @@ export default function ApplyRepPage() {
   const [meStatus, setMeStatus]                   = useState<MeStatus>("not_applied");
   const [meScope, setMeScope]                     = useState<{ faculty_id: string | null; department_id: string | null; levels: number[] | null } | null>(null);
   const [meDecisionReason, setMeDecisionReason]   = useState<string | null>(null);
+  const [meCreatedAt, setMeCreatedAt]             = useState<string | null>(null);
+  const [meHasPhoto, setMeHasPhoto]               = useState<boolean | null>(null);
 
   const deptsForFaculty = useMemo(
     () => (!facultyId ? depts : depts.filter((d) => d.faculty_id === facultyId)),
@@ -102,6 +103,8 @@ export default function ApplyRepPage() {
           setMeStatus(meRes.status ?? "not_applied");
           setMeScope(meRes.scope ?? null);
           setMeDecisionReason(meRes?.application?.decision_reason ?? meRes?.application?.note ?? null);
+          setMeCreatedAt(meRes?.application?.created_at ?? null);
+          setMeHasPhoto(meRes?.application?.photo_url != null ? true : meRes?.application?.photo_url === null ? false : null);
 
           if (meRes?.scope?.faculty_id)    setFacultyId(meRes.scope.faculty_id);
           if (meRes?.scope?.department_id) setDeptId(meRes.scope.department_id);
@@ -147,8 +150,10 @@ export default function ApplyRepPage() {
     }
   }
 
-  function selectLevel(l: number) {
-    setLevels([l]);
+  function toggleLevel(l: number) {
+    setLevels((prev) =>
+      prev.includes(l) ? prev.filter((x) => x !== l) : [...prev, l].sort((a, b) => a - b)
+    );
   }
 
   async function submit() {
@@ -179,6 +184,8 @@ export default function ApplyRepPage() {
         setMeStatus(me.status ?? "pending");
         setMeScope(me.scope ?? null);
         setMeDecisionReason(me?.application?.decision_reason ?? null);
+        setMeCreatedAt(me?.application?.created_at ?? null);
+        setMeHasPhoto(me?.application?.photo_url != null ? true : false);
       }
     } catch (e: any) {
       setError(e?.message ?? "Failed");
@@ -197,7 +204,7 @@ export default function ApplyRepPage() {
   }
 
   // ── Status screens ───────────────────────────────────────────────────────────
-  if (meStatus === "pending")  return <StatusScreen status="pending"  meScope={meScope} />;
+  if (meStatus === "pending")  return <StatusScreen status="pending"  meScope={meScope} createdAt={meCreatedAt} hasPhoto={meHasPhoto} />;
   if (meStatus === "approved") return <StatusScreen status="approved" meScope={meScope} />;
   if (meStatus === "rejected") return (
     <StatusScreen
@@ -341,9 +348,12 @@ export default function ApplyRepPage() {
             </select>
           </div>
 
-          {/* Level — single-select (course rep covers one level) */}
+          {/* Level — multi-select toggle */}
           <div>
-            <label className="mb-1.5 block text-xs font-semibold text-foreground">Your level</label>
+            <label className="mb-1.5 block text-xs font-semibold text-foreground">Your level(s)</label>
+            <p className="mb-2 text-xs text-muted-foreground">
+              Select all levels you represent — you&apos;ll set up courses and manage materials for each.
+            </p>
             <div className="flex flex-wrap gap-2">
               {LEVELS.map((l) => {
                 const active = levels.includes(l);
@@ -351,7 +361,7 @@ export default function ApplyRepPage() {
                   <button
                     key={l}
                     type="button"
-                    onClick={() => selectLevel(l)}
+                    onClick={() => toggleLevel(l)}
                     className={cn(
                       "rounded-full border px-4 py-1.5 text-xs font-extrabold transition",
                       "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#5B35D5]/50 focus-visible:ring-offset-2",
@@ -455,16 +465,25 @@ export default function ApplyRepPage() {
   );
 }
 
+// ── Helpers ────────────────────────────────────────────────────────────────────
+function daysWaiting(iso: string) {
+  return Math.max(0, Math.floor((Date.now() - new Date(iso).getTime()) / 86_400_000));
+}
+
 // ── Status screen ──────────────────────────────────────────────────────────────
 function StatusScreen({
   status,
   meScope,
   decisionReason,
+  createdAt,
+  hasPhoto,
   onReapply,
 }: {
   status: "pending" | "approved" | "rejected";
   meScope: { faculty_id: string | null; department_id: string | null; levels: number[] | null } | null;
   decisionReason?: string | null;
+  createdAt?: string | null;
+  hasPhoto?: boolean | null;
   onReapply?: () => void;
 }) {
   const scopeLine = Array.isArray(meScope?.levels) && meScope.levels.length
@@ -518,6 +537,11 @@ function StatusScreen({
               {config.badge}
             </div>
             <p className="mt-1 text-sm text-muted-foreground">{config.body}</p>
+            {status === "pending" && createdAt && (
+              <p className="mt-1.5 text-xs text-muted-foreground">
+                Submitted {daysWaiting(createdAt) === 0 ? "today" : `${daysWaiting(createdAt)} day${daysWaiting(createdAt) === 1 ? "" : "s"} ago`}
+              </p>
+            )}
           </div>
         </div>
 
@@ -527,6 +551,12 @@ function StatusScreen({
               <span className="text-muted-foreground">Level(s)</span>
               <span className="font-extrabold text-foreground">{scopeLine}</span>
             </div>
+          </div>
+        )}
+
+        {status === "pending" && hasPhoto === false && (
+          <div className="mt-3 rounded-2xl border border-amber-300/60 bg-amber-50/80 px-3 py-2.5 text-xs text-amber-800 dark:border-amber-700/40 dark:bg-amber-950/20 dark:text-amber-300">
+            <span className="font-extrabold">Tip: </span>Adding a verification photo helps the admin confirm your identity and can speed up review. Contact your study admin if you&apos;d like to update your application.
           </div>
         )}
 
@@ -547,7 +577,7 @@ function StatusScreen({
               "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#5B35D5] focus-visible:ring-offset-2"
             )}
           >
-            <Upload className="h-4 w-4" /> Set up department courses
+            <GraduationCap className="h-4 w-4" /> Set up department courses
           </Link>
         )}
         {status === "rejected" && onReapply && (
@@ -563,16 +593,18 @@ function StatusScreen({
             Apply again <ArrowRight className="h-4 w-4" />
           </button>
         )}
-        <Link
-          href="/study"
-          className={cn(
-            "flex items-center justify-center gap-2 rounded-2xl border border-border bg-card px-4 py-3",
-            "text-sm font-semibold text-foreground hover:bg-secondary/40 transition",
-            "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-          )}
-        >
-          Back to Study Hub
-        </Link>
+        {status !== "approved" && (
+          <Link
+            href="/study"
+            className={cn(
+              "flex items-center justify-center gap-2 rounded-2xl border border-border bg-card px-4 py-3",
+              "text-sm font-semibold text-foreground hover:bg-secondary/40 transition",
+              "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+            )}
+          >
+            Back to Study Hub
+          </Link>
+        )}
       </div>
     </div>
   );

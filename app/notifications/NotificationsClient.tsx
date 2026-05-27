@@ -142,6 +142,13 @@ function getTypeConfig(type: string): TypeConfig {
         iconColor: "text-amber-600 dark:text-amber-400",
         accent: "border-l-amber-400",
       };
+    case "study_rep_app_new":
+      return {
+        icon: <UserCheck className="h-4 w-4" />,
+        bg: "bg-violet-50 dark:bg-violet-950/30",
+        iconColor: "text-violet-600 dark:text-violet-400",
+        accent: "border-l-violet-400",
+      };
     case "rep_approved":
       return {
         icon: <UserCheck className="h-4 w-4" />,
@@ -310,7 +317,7 @@ export default function NotificationsClient() {
       <div className="flex items-center justify-between gap-3">
         <div className="flex items-center gap-3">
           <Link
-            href="/"
+            href="/study"
             className="grid h-10 w-10 place-items-center rounded-full border bg-white hover:bg-zinc-50"
             aria-label="Back"
           >

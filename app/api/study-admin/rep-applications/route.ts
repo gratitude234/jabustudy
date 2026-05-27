@@ -44,7 +44,7 @@ export async function GET(req: Request) {
   let query = admin
     .from("study_rep_applications")
     .select(
-      "id, created_at, status, role, faculty_id, department_id, level, levels, note, admin_note, decision_reason, user_id",
+      "id, created_at, status, role, faculty_id, department_id, level, levels, note, admin_note, decision_reason, user_id, photo_url",
       { count: "exact" }
     )
     .order("created_at", { ascending: false });
@@ -97,6 +97,7 @@ export async function GET(req: Request) {
       note: row.note ?? null,
       admin_note: row.admin_note ?? null,
       decision_reason: row.decision_reason ?? null,
+      photo_url: row.photo_url ?? null,
       all_levels: role === "dept_librarian",
     };
   });
