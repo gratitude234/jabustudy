@@ -171,6 +171,7 @@ export function usePracticeEngine({
   const finalizedRef = useRef(false);
   const [submitPoints, setSubmitPoints] = useState<SubmitPointSummary | null>(null);
   const [practiceAccess, setPracticeAccess] = useState<PracticeAccessSummary | null>(null);
+  const [submitErr, setSubmitErr] = useState<string | null>(null);
 
   // Review
   const [reviewTab, setReviewTab] = useState<ReviewTab>("all");
@@ -272,6 +273,7 @@ export function usePracticeEngine({
     async function run() {
       setLoading(true);
       setErr(null);
+      setSubmitErr(null);
       setSubmitted(false);
       setFinalizing(false);
       setSubmitPoints(null);
@@ -713,6 +715,7 @@ export function usePracticeEngine({
     setSubmitted(false);
     setReviewTab("all");
     setSubmitPoints(null);
+    setSubmitErr(null);
     finalizedRef.current = false;
     setAttemptId(retryAttemptId);
     initialAttemptRef.current = retryAttemptId;
@@ -726,6 +729,7 @@ export function usePracticeEngine({
     if (finalizedRef.current) return;
     finalizedRef.current = true;
 
+    setSubmitErr(null);
     setFinalizing(true);
 
     try {
@@ -765,6 +769,7 @@ export function usePracticeEngine({
             pointsAwarded?: number;
             practicePointsAwarded?: number;
             writtenPointsAwarded?: number;
+            practice?: PracticeAccessSummary;
             weakSummary?: Array<{
               questionId: string;
               prompt: string;
@@ -775,6 +780,15 @@ export function usePracticeEngine({
             }>;
           }
         | null;
+
+      // 402 = daily limit hit (stale practiceAccess on client) — feed fresh
+      // limit data back so the pre-quiz gate renders instead of an error page.
+      if (res.status === 402 && json?.practice) {
+        setPracticeAccess(json.practice);
+        setSubmitted(false);
+        finalizedRef.current = false;
+        return;
+      }
 
       if (!res.ok || !json?.ok) {
         throw new Error(json?.message || "Could not submit this attempt.");
@@ -802,7 +816,7 @@ export function usePracticeEngine({
         // ignore
       }
     } catch (error) {
-      setErr(error instanceof Error ? error.message : "Could not submit this attempt.");
+      setSubmitErr(error instanceof Error ? error.message : "Could not submit this attempt.");
       setSubmitted(false);
       finalizedRef.current = false;
     } finally {
@@ -878,6 +892,7 @@ export function usePracticeEngine({
     stats,
     finalizing,
     submitPoints,
+    submitErr,
     practiceAccess,
     weakSummary,
 

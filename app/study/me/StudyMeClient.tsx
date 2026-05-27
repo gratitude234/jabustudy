@@ -401,6 +401,7 @@ function StudyMeInner() {
   const [countsLoading, setCountsLoading] = useState(false);
   const [loggingOut, setLoggingOut] = useState(false);
   const [logoutError, setLogoutError] = useState<string | null>(null);
+  const [plusActive, setPlusActive] = useState<boolean | null>(null);
 
   useEffect(() => {
     if (!userId) return;
@@ -449,6 +450,14 @@ function StudyMeInner() {
     return () => {
       cancelled = true;
     };
+  }, [userId]);
+
+  useEffect(() => {
+    if (!userId) return;
+    fetch("/api/billing/me", { cache: "no-store" })
+      .then((r) => r.ok ? r.json() : null)
+      .then((data) => { if (data?.ok) setPlusActive(data.plus?.active === true); })
+      .catch(() => {});
   }, [userId]);
 
   const profileSummary = useMemo(() => {
@@ -615,6 +624,7 @@ function StudyMeInner() {
             desc="Manage plan, daily limits and AI credits"
             icon={<Banknote className="h-4 w-4" />}
             tone="study"
+            badge={plusActive === true ? "Plus ✓" : undefined}
           />
           <ToolRow
             href="/study/questions"

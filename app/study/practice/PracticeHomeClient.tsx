@@ -10,6 +10,7 @@ import StudyTabs from "../_components/StudyTabs";
 import { Card, EmptyState, SkeletonCard } from "../_components/StudyUI";
 import { StudyPrefsProvider, useStudyPrefs } from "../_components/StudyPrefsContext";
 import {
+  AlertTriangle,
   ArrowRight,
   BookOpen,
   CalendarClock,
@@ -20,6 +21,7 @@ import {
   Search,
   SlidersHorizontal,
   Sparkles,
+  Star,
   X,
   SortAsc,
   SortDesc,
@@ -900,6 +902,19 @@ function PracticeHomeInner() {
     getPracticeStreak().then(({ streak: s }) => setStreak(s)).catch(() => {});
   }, [authedUserId]);
 
+  // Billing / plan status — drives the quota/Plus bar
+  const [billingStatus, setBillingStatus] = useState<{
+    plus: { active: boolean; planKey: string | null; activeUntil: string | null };
+    practice: { limit: number | null; used: number; remaining: number | null };
+  } | null>(null);
+  useEffect(() => {
+    if (!authedUserId) return;
+    fetch("/api/billing/me", { cache: "no-store" })
+      .then((r) => r.ok ? r.json() : null)
+      .then((data) => { if (data?.ok) setBillingStatus(data); })
+      .catch(() => {});
+  }, [authedUserId]);
+
   // Due Today (SRS)
   const [dueData, setDueData] = useState<DuePracticeData | null>(null);
   const [dueLoading, setDueLoading] = useState(true);
@@ -1502,6 +1517,50 @@ function PracticeHomeInner() {
         totalSessions={totalSessions}
         onReviewDue={(setId) => router.push(`/study/practice/${setId}?mode=study&due=1`)}
       />
+
+      {/* Plan / quota status bar */}
+      {billingStatus && (
+        billingStatus.plus.active ? (
+          <div className="flex items-center gap-2 rounded-2xl border border-[#5B35D5]/20 bg-[#EEEDFE] px-4 py-2.5 dark:border-[#5B35D5]/30 dark:bg-[#5B35D5]/10">
+            <Star className="h-4 w-4 shrink-0 text-[#5B35D5] dark:text-indigo-300" />
+            <p className="text-sm font-extrabold text-[#3B24A8] dark:text-indigo-300">
+              Plus active — unlimited practice
+            </p>
+          </div>
+        ) : billingStatus.practice.limit !== null && (billingStatus.practice.remaining ?? 0) <= 0 ? (
+          <div className="overflow-hidden rounded-2xl border border-amber-300/60 bg-amber-50 dark:border-amber-700/40 dark:bg-amber-950/20">
+            <div className="flex items-center justify-between gap-3 px-4 py-3">
+              <div className="flex items-center gap-2">
+                <AlertTriangle className="h-4 w-4 shrink-0 text-amber-600 dark:text-amber-400" />
+                <p className="text-sm font-extrabold text-amber-900 dark:text-amber-200">Daily limit reached</p>
+              </div>
+              <Link
+                href="/study/billing"
+                className="rounded-xl bg-primary px-3 py-1.5 text-xs font-extrabold text-white no-underline hover:opacity-90"
+              >
+                Upgrade to Plus
+              </Link>
+            </div>
+          </div>
+        ) : billingStatus.practice.limit !== null ? (
+          <div className="rounded-2xl border border-border bg-card px-4 py-3">
+            <div className="flex items-center justify-between gap-2">
+              <p className="text-xs font-semibold text-muted-foreground">
+                {billingStatus.practice.used} of {billingStatus.practice.limit} free questions used today
+              </p>
+              <Link href="/study/billing" className="text-xs font-extrabold text-[#5B35D5] hover:underline dark:text-indigo-300">
+                Upgrade
+              </Link>
+            </div>
+            <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-secondary">
+              <div
+                className="h-full rounded-full bg-amber-500 transition-all"
+                style={{ width: `${Math.min(100, Math.round((billingStatus.practice.used / billingStatus.practice.limit) * 100))}%` }}
+              />
+            </div>
+          </div>
+        ) : null
+      )}
 
       {/* Course chips filter */}
       <CourseChipsBar

@@ -28,8 +28,6 @@ type QuestionRow = {
 
 type ActivityRow = {
   attempts_count: number | null;
-  questions_answered: number | null;
-  correct_answers: number | null;
 };
 
 type WeakQuestionRow = {
@@ -303,22 +301,18 @@ export async function POST(
   const activityDate = watDateFromIso(submittedIso);
   const { data: existingActivity } = await admin
     .from("study_daily_activity")
-    .select("attempts_count,questions_answered,correct_answers")
+    .select("attempts_count")
     .eq("user_id", user.id)
     .eq("activity_date", activityDate)
     .maybeSingle() as { data: ActivityRow | null; error: unknown };
 
-  await admin.from("study_daily_activity").upsert(
-    {
-      user_id: user.id,
-      activity_date: activityDate,
-      attempts_count: Number(existingActivity?.attempts_count ?? 0) + 1,
-      questions_answered: Number(existingActivity?.questions_answered ?? 0) + scoredQuestions.length,
-      correct_answers: Number(existingActivity?.correct_answers ?? 0) + correct,
-      updated_at: submittedIso,
-    },
-    { onConflict: "user_id,activity_date" }
-  );
+  await admin.rpc("increment_study_daily_activity", {
+    p_user_id: user.id,
+    p_activity_date: activityDate,
+    p_questions_answered: orderedQuestions.length,
+    p_correct_answers: correct,
+    p_updated_at: submittedIso,
+  });
 
   // Streak milestone — only check on the first submission of a given day
   if (!existingActivity || (existingActivity.attempts_count ?? 0) === 0) {

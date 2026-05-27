@@ -364,6 +364,7 @@ export default function PracticeTakeClient() {
     reviewItems,
     finalizing,
     submitPoints,
+    submitErr,
     practiceAccess,
     weakSummary,
     choose,
@@ -391,6 +392,7 @@ export default function PracticeTakeClient() {
   const [studyHintOpen, setStudyHintOpen] = useState<Record<string, boolean>>({});
   const [draftKept, setDraftKept] = useState(false);
   const [keepDraftState, setKeepDraftState] = useState<KeepDraftState>({ status: "idle" });
+  const [practiceLimitDismissed, setPracticeLimitDismissed] = useState(false);
 
   // Review answer filtering + collapse state
   const [reviewFilter, setReviewFilter] = useState<"all" | "wrong" | "correct">("all");
@@ -868,6 +870,74 @@ if (err || !meta) {
     typeof practiceAccess?.remaining === "number" &&
     questions.length > practiceAccess.remaining;
 
+  if (practiceLimitBlocksSubmit && !practiceLimitDismissed) {
+    return (
+      <div className="pb-32 md:pb-6">
+        <div className="sticky top-0 z-20 -mx-4 bg-background/85 px-4 pb-3 pt-2 backdrop-blur border-b border-border md:-mx-6 md:px-6">
+          <button
+            type="button"
+            onClick={() => router.back()}
+            className="inline-flex items-center gap-2 rounded-2xl border border-border bg-background px-3 py-2 text-sm font-extrabold text-foreground hover:bg-secondary/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          >
+            <ArrowLeft className="h-4 w-4" /> Back
+          </button>
+        </div>
+
+        <div className="mt-6 space-y-4">
+          <div className="overflow-hidden rounded-3xl border border-amber-300/60 bg-amber-50 dark:border-amber-700/40 dark:bg-amber-950/20">
+            <div className="px-5 py-5">
+              <div className="flex items-start gap-3">
+                <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-amber-500/15 text-amber-600 dark:text-amber-400">
+                  <AlertTriangle className="h-5 w-5" />
+                </span>
+                <div>
+                  <p className="text-base font-extrabold text-amber-900 dark:text-amber-200">
+                    Not enough free questions left today
+                  </p>
+                  <p className="mt-1 text-sm text-amber-800 dark:text-amber-300">
+                    This set has <strong>{questions.length} questions</strong> but you only have{" "}
+                    <strong>
+                      {practiceAccess!.remaining} free question{practiceAccess!.remaining !== 1 ? "s" : ""}
+                    </strong>{" "}
+                    remaining today. Your limit resets at midnight (WAT).
+                  </p>
+                </div>
+              </div>
+            </div>
+            <div className="space-y-2 border-t border-amber-200/60 bg-amber-100/50 px-5 py-4 dark:border-amber-800/40 dark:bg-amber-950/40">
+              <Link
+                href="/study/billing"
+                className="flex w-full items-center justify-center gap-2 rounded-2xl bg-primary px-4 py-3 text-sm font-extrabold text-white no-underline transition hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
+              >
+                <Star className="h-4 w-4" /> Upgrade to Plus — unlimited practice
+              </Link>
+              <button
+                type="button"
+                onClick={() => setPracticeLimitDismissed(true)}
+                className="flex w-full items-center justify-center rounded-2xl border border-amber-300/60 bg-background/80 px-4 py-2.5 text-sm font-semibold text-amber-900 transition hover:bg-amber-50 dark:border-amber-700/40 dark:bg-amber-950/20 dark:text-amber-300 focus-visible:outline-none"
+              >
+                Practice anyway (can&apos;t submit)
+              </button>
+            </div>
+          </div>
+
+          <div className="rounded-2xl border border-border bg-card px-4 py-3">
+            <p className="text-sm font-extrabold text-foreground">Today&apos;s free allowance</p>
+            <p className="mt-0.5 text-xs text-muted-foreground">
+              {practiceAccess!.used} used · {practiceAccess!.remaining} remaining · {practiceAccess!.limit} total
+            </p>
+            <div className="mt-2 h-2 w-full overflow-hidden rounded-full bg-secondary">
+              <div
+                className="h-full rounded-full bg-amber-500 transition-all"
+                style={{ width: `${Math.min(100, Math.round((practiceAccess!.used / practiceAccess!.limit!) * 100))}%` }}
+              />
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="pb-32 md:pb-6">
       <GuidedSourceModal
@@ -887,12 +957,7 @@ if (err || !meta) {
           <button
             type="button"
             onClick={() => router.back()}
-            className={cn(
-              "inline-flex items-center gap-2 rounded-2xl border border-border bg-background px-3 py-2 text-sm font-extrabold text-foreground",
-              "hover:bg-secondary/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
-              submitted ? "opacity-60" : ""
-            )}
-            disabled={submitted}
+            className="inline-flex items-center gap-2 rounded-2xl border border-border bg-background px-3 py-2 text-sm font-extrabold text-foreground hover:bg-secondary/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
           >
             <ArrowLeft className="h-4 w-4" /> Back
           </button>
@@ -1585,6 +1650,21 @@ if (err || !meta) {
       ) : (
         /* Question */
         <div className="mt-4 space-y-3">
+          {submitErr && (
+            <div className="rounded-2xl border border-rose-300/50 bg-rose-50 px-4 py-3 dark:border-rose-800/40 dark:bg-rose-950/20">
+              <p className="text-sm font-semibold text-rose-900 dark:text-rose-200">
+                Submission failed — {submitErr}
+              </p>
+              <button
+                type="button"
+                onClick={handleSubmitClick}
+                className="mt-2 rounded-xl bg-rose-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-rose-700"
+              >
+                Try again
+              </button>
+            </div>
+          )}
+
           {pendingSubmit && (
             <div className="rounded-2xl border border-amber-300/50 bg-amber-50 px-4 py-3 dark:border-amber-700/40 dark:bg-amber-950/20">
               <p className="text-sm font-semibold text-amber-900 dark:text-amber-200">
