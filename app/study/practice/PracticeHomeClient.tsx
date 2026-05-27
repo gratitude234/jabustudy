@@ -1498,8 +1498,8 @@ function PracticeHomeInner() {
     <div className="w-full max-w-full overflow-x-hidden space-y-4 pb-28 md:pb-6">
       <StudyTabs />
 
-      {/* M-7: Onboarding nudge */}
-      {!isProfileComplete && (
+      {/* M-7: Onboarding nudge — only render once prefs have loaded to avoid flash */}
+      {!prefsLoading && !isProfileComplete && (
         <Link
           href="/study/onboarding"
           className="flex items-center justify-between gap-3 rounded-2xl border border-primary/20 bg-primary-light px-4 py-3 text-sm font-semibold text-primary-text no-underline hover:bg-primary/10 dark:border-primary/30 dark:bg-primary/10 dark:text-indigo-200"
@@ -1518,9 +1518,10 @@ function PracticeHomeInner() {
         onReviewDue={(setId) => router.push(`/study/practice/${setId}?mode=study&due=1`)}
       />
 
-      {/* Plan / quota status bar */}
-      {billingStatus && (
-        billingStatus.plus.active ? (
+      {/* Plan / quota status bar — skeleton holds space while fetch is in flight */}
+      {billingStatus === null ? (
+        <div className="h-[52px] animate-pulse rounded-2xl bg-muted" />
+      ) : billingStatus.plus.active ? (
           <div className="flex items-center gap-2 rounded-2xl border border-[#5B35D5]/20 bg-[#EEEDFE] px-4 py-2.5 dark:border-[#5B35D5]/30 dark:bg-[#5B35D5]/10">
             <Star className="h-4 w-4 shrink-0 text-[#5B35D5] dark:text-indigo-300" />
             <p className="text-sm font-extrabold text-[#3B24A8] dark:text-indigo-300">
@@ -1560,7 +1561,7 @@ function PracticeHomeInner() {
             </div>
           </div>
         ) : null
-      )}
+      }
 
       {/* Course chips filter */}
       <CourseChipsBar
