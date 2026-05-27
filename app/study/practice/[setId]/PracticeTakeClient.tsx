@@ -1089,28 +1089,6 @@ if (err || !meta) {
         </div>
       ) : null}
 
-      {practiceAccess?.limit !== null && typeof practiceAccess?.remaining === "number" ? (
-        <div
-          className={cn(
-            "mt-4 rounded-2xl border px-4 py-3",
-            practiceLimitBlocksSubmit
-              ? "border-amber-300 bg-amber-50 text-amber-900"
-              : "border-border bg-card text-muted-foreground"
-          )}
-        >
-          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-            <p className="text-sm font-semibold">
-              {practiceAccess.remaining} of {practiceAccess.limit} free practice questions left today.
-              {practiceLimitBlocksSubmit ? " This set is larger than your remaining free allowance." : ""}
-            </p>
-            {practiceLimitBlocksSubmit ? (
-              <Link href="/study/billing" className="text-sm font-extrabold text-primary no-underline hover:underline">
-                Upgrade to continue
-              </Link>
-            ) : null}
-          </div>
-        </div>
-      ) : null}
 
       {questions.length === 0 ? (
         <div className="mt-4">
