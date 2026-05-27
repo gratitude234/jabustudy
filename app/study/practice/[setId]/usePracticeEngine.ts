@@ -139,6 +139,7 @@ export function usePracticeEngine({
 
   const [meta, setMeta] = useState<QuizSet | null>(null);
   const [questions, setQuestions] = useState<QuizQuestion[]>([]);
+  const [originalQuestionCount, setOriginalQuestionCount] = useState<number | null>(null);
   const [optionsByQ, setOptionsByQ] = useState<Record<string, QuizOption[]>>({});
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState<string | null>(null);
@@ -278,6 +279,7 @@ export function usePracticeEngine({
       setFinalizing(false);
       setSubmitPoints(null);
       setPracticeAccess(null);
+      setOriginalQuestionCount(null);
       finalizedRef.current = false;
       setIdx(0);
       setAnswers({});
@@ -323,23 +325,22 @@ export function usePracticeEngine({
               .maybeSingle()
           : Promise.resolve({ data: null, error: null });
 
-        const [authRes, setRes, qRes, attValidateRes] = await Promise.all([
+        const [authRes, setRes, qRes, attValidateRes, billingRes] = await Promise.all([
           supabase.auth.getUser(),
           setReq,
           qReq,
           attValidateReq,
+          fetch("/api/billing/me", { cache: "no-store" })
+            .then((r) => r.ok ? r.json() : null)
+            .catch(() => null),
         ]);
 
         const user = authRes.data?.user ?? null;
         userIdRef.current = user?.id ?? null;
 
-        if (user) {
-          void fetch("/api/billing/me", { cache: "no-store" })
-            .then((res) => res.ok ? res.json() : null)
-            .then((data) => {
-              if (!cancelled && data?.ok && data.practice) setPracticeAccess(data.practice);
-            })
-            .catch(() => {});
+        const billingData = billingRes?.ok ? billingRes : null;
+        if (!cancelled && billingData?.practice) {
+          setPracticeAccess(billingData.practice);
         }
 
         if (setRes.error) throw setRes.error;
@@ -502,8 +503,26 @@ export function usePracticeEngine({
         }
 
         if (cancelled) return;
+
+        // Cap questions to the user's remaining free quota.
+        // Skip for due-mode sessions (SRS review of specific weak questions).
+        // Skip when remaining = 0 — the gate handles that case instead of an empty quiz.
+        let finalQuestions = cleanQData;
+        const practiceRemaining = billingData?.practice?.remaining;
+        const practiceLimit = billingData?.practice?.limit;
+        if (
+          !isDueMode &&
+          practiceLimit !== null && practiceLimit !== undefined &&
+          typeof practiceRemaining === "number" &&
+          practiceRemaining > 0 &&
+          cleanQData.length > practiceRemaining
+        ) {
+          finalQuestions = cleanQData.slice(0, practiceRemaining);
+        }
+
         setMeta(setRes.data as any);
-        setQuestions(cleanQData);
+        setOriginalQuestionCount(cleanQData.length);
+        setQuestions(finalQuestions);
         setOptionsByQ(grouped);
         setAttemptId(effectiveAttemptId);
 
@@ -894,6 +913,7 @@ export function usePracticeEngine({
     submitPoints,
     submitErr,
     practiceAccess,
+    originalQuestionCount,
     weakSummary,
 
     // actions

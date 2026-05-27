@@ -3,7 +3,7 @@ import "server-only";
 import { randomBytes } from "node:crypto";
 import { adminSupabase } from "@/lib/supabase/admin";
 
-export const FREE_DAILY_PRACTICE_LIMIT = 25;
+export const FREE_DAILY_PRACTICE_LIMIT = 40;
 export const FREE_MONTHLY_AI_GENERATIONS = 3;
 export const RECEIPT_BUCKET =
   process.env.JABUSTUDY_PAYMENT_RECEIPT_BUCKET || process.env.JABU_PAYMENT_RECEIPT_BUCKET || "payment-receipts";

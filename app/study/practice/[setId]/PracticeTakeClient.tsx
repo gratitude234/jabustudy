@@ -366,6 +366,7 @@ export default function PracticeTakeClient() {
     submitPoints,
     submitErr,
     practiceAccess,
+    originalQuestionCount,
     weakSummary,
     choose,
     writeAnswer,
@@ -392,7 +393,6 @@ export default function PracticeTakeClient() {
   const [studyHintOpen, setStudyHintOpen] = useState<Record<string, boolean>>({});
   const [draftKept, setDraftKept] = useState(false);
   const [keepDraftState, setKeepDraftState] = useState<KeepDraftState>({ status: "idle" });
-  const [practiceLimitDismissed, setPracticeLimitDismissed] = useState(false);
 
   // Review answer filtering + collapse state
   const [reviewFilter, setReviewFilter] = useState<"all" | "wrong" | "correct">("all");
@@ -613,7 +613,6 @@ export default function PracticeTakeClient() {
 
   function handleSubmitClick() {
     if (submitted) return;
-    if (practiceLimitBlocksSubmit) return;
     const unanswered = stats.total - stats.answered;
     if (unanswered > 0 && !pendingSubmit) {
       setPendingSubmit(true);
@@ -864,13 +863,13 @@ if (err || !meta) {
     if (item.isWrong || item.isUnanswered) return true;
     return false;
   }).length;
-  const practiceLimitBlocksSubmit =
+  const practiceQuotaExhausted =
     !submitted &&
     practiceAccess?.limit !== null &&
     typeof practiceAccess?.remaining === "number" &&
-    questions.length > practiceAccess.remaining;
+    practiceAccess.remaining === 0;
 
-  if (practiceLimitBlocksSubmit && !practiceLimitDismissed) {
+  if (practiceQuotaExhausted) {
     return (
       <div className="pb-32 md:pb-6">
         <div className="sticky top-0 z-20 -mx-4 bg-background/85 px-4 pb-3 pt-2 backdrop-blur border-b border-border md:-mx-6 md:px-6">
@@ -892,45 +891,31 @@ if (err || !meta) {
                 </span>
                 <div>
                   <p className="text-base font-extrabold text-amber-900 dark:text-amber-200">
-                    Not enough free questions left today
+                    You&apos;ve used all {practiceAccess!.limit} free questions today
                   </p>
                   <p className="mt-1 text-sm text-amber-800 dark:text-amber-300">
-                    This set has <strong>{questions.length} questions</strong> but you only have{" "}
-                    <strong>
-                      {practiceAccess!.remaining} free question{practiceAccess!.remaining !== 1 ? "s" : ""}
-                    </strong>{" "}
-                    remaining today. Your limit resets at midnight (WAT).
+                    Your free allowance resets at midnight (WAT). Upgrade to Plus for unlimited practice.
                   </p>
                 </div>
               </div>
             </div>
-            <div className="space-y-2 border-t border-amber-200/60 bg-amber-100/50 px-5 py-4 dark:border-amber-800/40 dark:bg-amber-950/40">
+            <div className="border-t border-amber-200/60 bg-amber-100/50 px-5 py-4 dark:border-amber-800/40 dark:bg-amber-950/40">
               <Link
                 href="/study/billing"
                 className="flex w-full items-center justify-center gap-2 rounded-2xl bg-primary px-4 py-3 text-sm font-extrabold text-white no-underline transition hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
               >
                 <Star className="h-4 w-4" /> Upgrade to Plus — unlimited practice
               </Link>
-              <button
-                type="button"
-                onClick={() => setPracticeLimitDismissed(true)}
-                className="flex w-full items-center justify-center rounded-2xl border border-amber-300/60 bg-background/80 px-4 py-2.5 text-sm font-semibold text-amber-900 transition hover:bg-amber-50 dark:border-amber-700/40 dark:bg-amber-950/20 dark:text-amber-300 focus-visible:outline-none"
-              >
-                Practice anyway (can&apos;t submit)
-              </button>
             </div>
           </div>
 
           <div className="rounded-2xl border border-border bg-card px-4 py-3">
             <p className="text-sm font-extrabold text-foreground">Today&apos;s free allowance</p>
             <p className="mt-0.5 text-xs text-muted-foreground">
-              {practiceAccess!.used} used · {practiceAccess!.remaining} remaining · {practiceAccess!.limit} total
+              {practiceAccess!.used} used · 0 remaining · {practiceAccess!.limit} total
             </p>
             <div className="mt-2 h-2 w-full overflow-hidden rounded-full bg-secondary">
-              <div
-                className="h-full rounded-full bg-amber-500 transition-all"
-                style={{ width: `${Math.min(100, Math.round((practiceAccess!.used / practiceAccess!.limit!) * 100))}%` }}
-              />
+              <div className="h-full w-full rounded-full bg-amber-500" />
             </div>
           </div>
         </div>
@@ -1667,6 +1652,25 @@ if (err || !meta) {
             </div>
           )}
 
+          {!submitted &&
+           originalQuestionCount !== null &&
+           questions.length < originalQuestionCount && (
+            <div className="rounded-2xl border border-[#5B35D5]/20 bg-[#EEEDFE] px-4 py-3 dark:border-[#5B35D5]/30 dark:bg-[#5B35D5]/10">
+              <div className="flex items-center justify-between gap-2">
+                <p className="text-sm font-semibold text-[#3B24A8] dark:text-indigo-300">
+                  Showing {questions.length} of {originalQuestionCount} questions
+                  — {questions.length} free question{questions.length !== 1 ? "s" : ""} remaining today.
+                </p>
+                <Link
+                  href="/study/billing"
+                  className="shrink-0 text-xs font-extrabold text-[#5B35D5] hover:underline dark:text-indigo-300 no-underline"
+                >
+                  Upgrade
+                </Link>
+              </div>
+            </div>
+          )}
+
           <Card className="rounded-3xl">
             <p className="whitespace-pre-wrap text-base font-extrabold leading-snug text-foreground">
               {normalize(String(current?.prompt ?? ""))}
@@ -1988,13 +1992,10 @@ if (err || !meta) {
               <button
                 type="button"
                 onClick={handleSubmitClick}
-                disabled={practiceLimitBlocksSubmit}
                 className={cn(
                   "inline-flex h-12 flex-1 items-center justify-center gap-2 rounded-2xl text-sm font-extrabold transition active:scale-[0.98]",
                   "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-                  practiceLimitBlocksSubmit
-                    ? "cursor-not-allowed bg-secondary text-muted-foreground opacity-60"
-                    : learningMode
+                  learningMode
                     ? "bg-[#5B35D5] text-white hover:bg-[#4526B8]"
                     : "bg-secondary text-foreground hover:opacity-90"
                 )}
