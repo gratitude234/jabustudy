@@ -6,6 +6,7 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import {
   ArrowRight,
+  Hash,
   Search,
   X,
   UploadCloud,
@@ -26,7 +27,7 @@ import { cn, formatWhen, normalizeQuery, safeSearchTerm, buildHref, asInt, clamp
 import StudyTabs from "../_components/StudyTabs";
 import { Card, EmptyState, SkeletonCard } from "../_components/StudyUI";
 
-type SortKey = "newest" | "oldest" | "downloads_desc" | "downloads_asc";
+type SortKey = "newest" | "oldest" | "downloads_desc";
 
 type MaterialTypeKey =
   | "all"
@@ -120,7 +121,6 @@ const SORTS: Array<{ key: SortKey; label: string; icon: React.ReactNode }> = [
   { key: "newest", label: "Newest", icon: <SortDesc className="h-4 w-4" /> },
   { key: "oldest", label: "Oldest", icon: <SortAsc className="h-4 w-4" /> },
   { key: "downloads_desc", label: "Most downloaded", icon: <SortDesc className="h-4 w-4" /> },
-  { key: "downloads_asc", label: "Least downloaded", icon: <SortAsc className="h-4 w-4" /> },
 ];
 
 function Chip({
@@ -1210,7 +1210,7 @@ export default function MaterialsClient() {
         faculty_id: draftFacultyId || null,
         dept: draftDept || null,
         dept_id: draftDeptId || null,
-        course: draftCourse || null,
+        course: draftCourse.trim().toUpperCase() || null,
         session: draftSession.trim() || null,
         type: draftType !== "all" ? draftType : null,
         sort: draftSort !== "newest" ? draftSort : null,
@@ -2032,64 +2032,34 @@ export default function MaterialsClient() {
           />
         </div>
 
-        <div className="mt-3 grid gap-2 sm:grid-cols-2">
+        <div className="mt-3 grid gap-2">
           <ToggleRow label="My materials only" desc="Use your Study Hub profile scope" checked={draftMine} onChange={setDraftMine} />
-          <ToggleRow label="Verified only" desc="Show only verified materials" checked={draftVerified} onChange={setDraftVerified} />
-          <ToggleRow label="Featured only" desc="Show highlighted materials" checked={draftFeatured} onChange={setDraftFeatured} />
         </div>
 
-        <div className="mt-3 grid gap-2">
-          <TextRow
-            label="Session / Year"
-            value={draftSession}
-            onChange={setDraftSession}
-            placeholder="e.g., 2022/2023"
-            hint="Optional. Useful for past questions."
-          />
-        </div>
-
-        <div className="mt-3 grid gap-2">
-          <SelectRow
-            label="Faculty"
-            value={draftFacultyId}
-            onChange={(v) => {
-              setDraftFacultyId(v);
-              const found = courses.find((c) => c.faculty_id === v);
-              setDraftFaculty(found ? found.faculty : "");
-              setDraftDeptId("");
-              setDraftDept("");
-              setDraftCourse("");
-            }}
-            placeholder={optionsLoading ? "Loading…" : "All faculties"}
-            options={facultyOptions}
-          />
-
-          <SelectRow
-            label="Department"
-            value={draftDeptId}
-            onChange={(v) => {
-              setDraftDeptId(v);
-              const found = courses.find((c) => c.department_id === v);
-              setDraftDept(found ? found.department : "");
-              setDraftCourse("");
-            }}
-            placeholder={optionsLoading ? "Loading…" : draftFacultyId ? "All depts in faculty" : "All departments"}
-            options={deptOptions}
-          />
-
-          <SelectRow
-            label="Course"
-            value={draftCourse}
-            onChange={setDraftCourse}
-            placeholder={optionsLoading ? "Loading…" : "All courses"}
-            options={courseOptions}
-          />
-        </div>
-
-        <div className="mt-3 rounded-2xl border border-border bg-muted/40 p-3">
-          <p className="text-xs text-muted-brand">
-            Filters apply when you tap <span className="font-semibold">Apply</span>. Search updates automatically.
-          </p>
+        <div className="mt-3 rounded-3xl border border-border bg-background p-3">
+          <p className="text-sm font-semibold text-foreground">Course</p>
+          <div className="mt-2 flex items-center gap-2 rounded-2xl border border-border bg-background px-3 py-2">
+            <Hash className="h-4 w-4 text-muted-brand" />
+            <input
+              value={draftCourse}
+              onChange={(e) => setDraftCourse(e.target.value)}
+              placeholder="e.g., GST101 or ANA204"
+              className="w-full bg-transparent text-sm text-foreground outline-none placeholder:text-muted-brand"
+            />
+            {draftCourse ? (
+              <button
+                type="button"
+                onClick={() => setDraftCourse("")}
+                className={cn(
+                  "grid h-9 w-9 place-items-center rounded-xl border border-border bg-background hover:bg-secondary/50",
+                  "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+                )}
+                aria-label="Clear course"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            ) : null}
+          </div>
         </div>
       </Drawer>
 

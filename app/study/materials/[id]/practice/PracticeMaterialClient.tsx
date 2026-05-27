@@ -337,6 +337,10 @@ export default function PracticeMaterialClient({
   const [batchSaved, setBatchSaved] = useState(false);
   const [moreConfig, setMoreConfig] = useState<SessionConfig>(DEFAULT_CONFIG);
 
+  // Master set (accumulated answered questions for this material)
+  const [masterSetId, setMasterSetId] = useState<string | null>(null);
+  const [masterSetCount, setMasterSetCount] = useState<number>(0);
+
   // All covered question prompts across batches (for coveredQuestions param)
   const coveredQuestionsRef = useRef<string[]>([]);
   const generationInFlightRef = useRef(false);
@@ -361,6 +365,22 @@ export default function PracticeMaterialClient({
     }
     return () => { document.body.removeAttribute("data-hide-nav"); };
   }, [mode]);
+
+  useEffect(() => {
+    void supabase
+      .from("study_quiz_sets")
+      .select("id, questions_count")
+      .eq("created_by", userId)
+      .eq("source_material_id", m.id)
+      .eq("draft_status", "master")
+      .maybeSingle()
+      .then(({ data }) => {
+        if (data?.id) {
+          setMasterSetId(String(data.id));
+          setMasterSetCount(data.questions_count ?? 0);
+        }
+      });
+  }, [userId, m.id]);
 
   useEffect(() => {
     let cancelled = false;
@@ -724,11 +744,16 @@ export default function PracticeMaterialClient({
 
     if (!batchSaved) {
       try {
-        await fetch(`/api/study/material-sessions/${m.id}`, {
+        const patchRes = await fetch(`/api/study/material-sessions/${m.id}`, {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ action: "append_batch", batch: batchRecord }),
         });
+        const patchJson = patchRes.ok ? await patchRes.json().catch(() => null) : null;
+        if (patchJson?.masterSetId) {
+          setMasterSetId(String(patchJson.masterSetId));
+          if (typeof patchJson.masterSetCount === "number") setMasterSetCount(patchJson.masterSetCount);
+        }
         setBatchSaved(true);
         setSession((s) =>
           s
@@ -824,6 +849,7 @@ export default function PracticeMaterialClient({
         });
       } catch { /* non-critical */ }
     }
+
     try {
       await fetch(`/api/study/material-sessions/${m.id}`, {
         method: "PATCH",
@@ -1502,6 +1528,15 @@ export default function PracticeMaterialClient({
             >
               Finish session
             </button>
+            {masterSetId && (
+              <Link
+                href={`/study/practice/${masterSetId}`}
+                className="flex w-full items-center justify-center gap-2 rounded-2xl border border-[#5B35D5]/30 bg-[#EEEDFE] py-3 text-sm font-semibold text-[#3B24A8] transition hover:bg-[#E0DEFE] dark:border-[#5B35D5]/30 dark:bg-[#5B35D5]/10 dark:text-indigo-300"
+              >
+                <BookOpen className="h-4 w-4" />
+                Review AI practice set{masterSetCount > 0 ? ` (${masterSetCount} questions)` : ""}
+              </Link>
+            )}
           </div>
         </div>
       </div>

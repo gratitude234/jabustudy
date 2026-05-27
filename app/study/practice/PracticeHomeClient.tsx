@@ -881,7 +881,6 @@ function PracticeHomeInner() {
   const [draftLevel, setDraftLevel] = useState(levelParam);
   const [draftSemester, setDraftSemester] = useState(semesterParam);
   const [draftSort, setDraftSort] = useState<SortKey>(sortParam);
-  const [draftPublished, setDraftPublished] = useState(publishedOnly);
   const [draftDifficulty, setDraftDifficulty] = useState(difficultyParam);
   const filterBootstrapRef = useRef(false);
   const [filterStorageReady, setFilterStorageReady] = useState(false);
@@ -1337,7 +1336,6 @@ function PracticeHomeInner() {
     setDraftLevel(levelParam);
     setDraftSemester(semesterParam);
     setDraftSort(sortParam);
-    setDraftPublished(publishedOnly);
     setDraftDifficulty(difficultyParam);
     setDrawerOpen(true);
   }
@@ -1351,7 +1349,7 @@ function PracticeHomeInner() {
         semester: draftSemester || null,
         difficulty: draftDifficulty || null,
         sort: draftSort !== "newest" ? draftSort : null,
-        published: draftPublished ? "1" : null,
+        published: publishedOnly ? "1" : null,
         view: viewParam !== "for_you" ? viewParam : null,
       })
     );
@@ -1834,7 +1832,6 @@ function PracticeHomeInner() {
                 setDraftLevel("");
                 setDraftSemester("");
                 setDraftSort("newest");
-                setDraftPublished(false);
                 setDraftDifficulty("");
               }}
               className={cn(
@@ -1909,7 +1906,6 @@ function PracticeHomeInner() {
               </button>
             ) : null}
           </div>
-          <p className="mt-2 text-xs text-muted-foreground">You can also search course codes in the main search bar.</p>
         </div>
 
         <div className="mt-3 grid gap-2 sm:grid-cols-2">
@@ -1959,20 +1955,6 @@ function PracticeHomeInner() {
           </div>
         </div>
 
-        <div className="mt-3">
-          <ToggleRow
-            label="Published only"
-            desc="Show only published sets (if supported by your DB)"
-            checked={draftPublished}
-            onChange={setDraftPublished}
-          />
-        </div>
-
-        <div className="mt-3 rounded-2xl border border-border bg-muted/40 p-3">
-          <p className="text-xs text-muted-foreground">
-            Filters apply when you tap <span className="font-semibold">Apply</span>. Search updates automatically.
-          </p>
-        </div>
       </Drawer>
 
       {/* Preview sheet */}

@@ -847,6 +847,52 @@ function ReviewBeforeAnswer({
 }
 
 
+function MasterSetCard({ materialId, userId }: { materialId: string; userId?: string }) {
+  const [masterSet, setMasterSet] = useState<{ id: string; questions_count: number } | null | undefined>(undefined);
+
+  useEffect(() => {
+    if (!userId) { setMasterSet(null); return; }
+    void supabase
+      .from("study_quiz_sets")
+      .select("id, questions_count")
+      .eq("created_by", userId)
+      .eq("source_material_id", materialId)
+      .eq("draft_status", "master")
+      .maybeSingle()
+      .then(({ data }) => setMasterSet(data ?? null));
+  }, [userId, materialId]);
+
+  return (
+    <div className="overflow-hidden rounded-2xl border border-border bg-card shadow-sm">
+      <div className="flex items-center justify-between border-b border-border px-4 py-3.5">
+        <p className="flex items-center gap-2 text-sm font-bold text-foreground">
+          <PenLine className="h-4 w-4 text-primary" /> Your sets from this material
+        </p>
+      </div>
+      {masterSet === undefined ? (
+        <div className="animate-pulse px-4 py-5">
+          <div className="h-4 w-2/3 rounded bg-muted" />
+        </div>
+      ) : masterSet === null ? (
+        <p className="px-4 py-5 text-center text-xs text-muted-brand">No sets generated yet</p>
+      ) : (
+        <Link
+          href={`/study/practice/${masterSet.id}`}
+          className="flex items-center justify-between px-4 py-4 transition-colors hover:bg-muted/40"
+        >
+          <div>
+            <p className="text-sm font-semibold text-foreground">AI Practice Set</p>
+            <p className="mt-0.5 text-xs text-muted-foreground">
+              {masterSet.questions_count} question{masterSet.questions_count !== 1 ? "s" : ""}
+            </p>
+          </div>
+          <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" />
+        </Link>
+      )}
+    </div>
+  );
+}
+
 export default function MaterialDetailClient({
   material: m,
   initialSaved = false,
@@ -1999,14 +2045,7 @@ export default function MaterialDetailClient({
             </div>
           </div>
 
-          <div className="overflow-hidden rounded-2xl border border-border bg-card shadow-sm">
-            <div className="flex items-center justify-between border-b border-border px-4 py-3.5">
-              <p className="flex items-center gap-2 text-sm font-bold text-foreground">
-                <PenLine className="h-4 w-4 text-primary" /> Your sets from this material
-              </p>
-            </div>
-            <p className="px-4 py-5 text-center text-xs text-muted-brand">No sets generated yet</p>
-          </div>
+          <MasterSetCard materialId={m.id} userId={userId} />
         </aside>
       </div>
 
