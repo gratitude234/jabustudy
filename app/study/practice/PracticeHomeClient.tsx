@@ -449,11 +449,6 @@ function MiniTabs({ value, onChange }: { value: ViewKey; onChange: (v: ViewKey) 
 
 // â"€â"€â"€ Score ring â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€
 
-type BillingStatusData = {
-  plus: { active: boolean; planKey: string | null; activeUntil: string | null };
-  practice: { limit: number | null; used: number; remaining: number | null };
-} | null;
-
 function PracticeHeroV2({
   dueLoading,
   dueData,
@@ -461,7 +456,6 @@ function PracticeHeroV2({
   avgScore,
   totalSessions,
   onReviewDue,
-  billingStatus,
 }: {
   dueLoading: boolean;
   dueData: DuePracticeData | null;
@@ -469,27 +463,19 @@ function PracticeHeroV2({
   avgScore: number | null;
   totalSessions: number;
   onReviewDue: (setId: string) => void;
-  billingStatus: BillingStatusData;
 }) {
   const primaryDueSet = dueData?.sets?.[0] ?? null;
   const dueCount = dueData?.total ?? 0;
   const dueCourses = dueData?.sets?.slice(0, 2).map((s) => s.course_code ?? s.set_title).filter(Boolean).join(" / ") ?? null;
 
-  const quotaExhausted =
-    billingStatus !== null &&
-    !billingStatus.plus.active &&
-    billingStatus.practice.limit !== null &&
-    (billingStatus.practice.remaining ?? 0) <= 0;
-
-  const hasStatPills = (dueLoading || dueCount > 0) || avgScore !== null || totalSessions > 0;
-
   return (
     <section className="overflow-hidden rounded-[26px] border border-border bg-card p-5 shadow-sm">
-      {/* Title row */}
       <div className="flex items-start justify-between gap-3">
-        <h1 className="font-[family-name:var(--font-bricolage)] text-[30px] font-extrabold leading-none tracking-tight text-foreground">
-          Practice
-        </h1>
+        <div className="min-w-0">
+          <h1 className="font-[family-name:var(--font-bricolage)] text-[30px] font-extrabold leading-none tracking-tight text-foreground">
+            Practice
+          </h1>
+        </div>
         {streak > 0 && (
           <div className="flex shrink-0 items-center gap-1.5 rounded-full border border-orange-200/60 bg-orange-50 px-3 py-2 dark:border-orange-800/40 dark:bg-orange-950/30">
             <Flame className="h-4 w-4 text-orange-500" />
@@ -499,88 +485,32 @@ function PracticeHeroV2({
         )}
       </div>
 
-      {/* Quota row — integrated, no separate card */}
-      {billingStatus === null ? (
-        <div className="mt-3 flex items-center justify-between gap-2">
-          <div className="h-2 w-40 animate-pulse rounded-full bg-muted" />
-          <div className="h-2 w-16 animate-pulse rounded-full bg-muted" />
-        </div>
-      ) : billingStatus.plus.active ? (
-        <div className="mt-3 flex items-center gap-1.5">
-          <Star className="h-3.5 w-3.5 shrink-0 text-[#5B35D5] dark:text-indigo-400" />
-          <span className="text-xs font-extrabold text-[#5B35D5] dark:text-indigo-300">
-            Plus — unlimited practice
+      {/* Stat pills */}
+      <div className="mt-4 flex gap-2 overflow-x-auto pb-0.5 [scrollbar-width:none]">
+        <div className={cn(
+          "flex shrink-0 items-center gap-1.5 rounded-full border px-3 py-1.5",
+          dueCount > 0
+            ? "border-primary/20 bg-primary-light text-primary-text"
+            : "border-border bg-background text-muted-brand"
+        )}>
+          <CalendarClock className="h-3.5 w-3.5" />
+          <span className="text-xs font-extrabold">
+            {dueLoading ? "..." : dueCount + " due"}
           </span>
         </div>
-      ) : quotaExhausted ? (
-        <div className="mt-3 flex items-center justify-between gap-2">
-          <div className="flex items-center gap-1.5">
-            <AlertTriangle className="h-3.5 w-3.5 shrink-0 text-amber-600 dark:text-amber-400" />
-            <span className="text-xs font-extrabold text-amber-900 dark:text-amber-300">
-              Daily limit reached — {billingStatus.practice.limit} questions used
-            </span>
+        {avgScore !== null && (
+          <div className="flex shrink-0 items-center gap-1.5 rounded-full border border-emerald-200/60 bg-emerald-50/80 px-3 py-1.5 dark:border-emerald-800/40 dark:bg-emerald-950/30">
+            <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
+            <span className="text-xs font-extrabold text-emerald-700 dark:text-emerald-400">{avgScore}% avg score</span>
           </div>
-          <Link
-            href="/study/billing"
-            className="shrink-0 text-xs font-extrabold text-primary no-underline hover:underline"
-          >
-            Upgrade
-          </Link>
-        </div>
-      ) : billingStatus.practice.limit !== null ? (
-        <div className="mt-3 space-y-1.5">
-          <div className="flex items-center justify-between gap-2">
-            <span className="text-xs font-semibold text-muted-foreground">
-              {billingStatus.practice.used} of {billingStatus.practice.limit} free questions used today
-            </span>
-            <Link
-              href="/study/billing"
-              className="shrink-0 text-xs font-extrabold text-[#5B35D5] no-underline hover:underline dark:text-indigo-300"
-            >
-              Upgrade
-            </Link>
+        )}
+        {totalSessions > 0 && (
+          <div className="flex shrink-0 items-center gap-1.5 rounded-full border border-border bg-background px-3 py-1.5 text-muted-brand">
+            <History className="h-3.5 w-3.5" />
+            <span className="text-xs font-extrabold">{totalSessions} sessions</span>
           </div>
-          <div className="h-1.5 w-full overflow-hidden rounded-full bg-secondary">
-            <div
-              className="h-full rounded-full bg-[#5B35D5]/60 transition-all"
-              style={{
-                width: `${Math.min(100, Math.round((billingStatus.practice.used / billingStatus.practice.limit) * 100))}%`,
-              }}
-            />
-          </div>
-        </div>
-      ) : null}
-
-      {/* Stat pills — only render when there's something to show */}
-      {hasStatPills && (
-        <div className="mt-3 flex gap-2 overflow-x-auto pb-0.5 [scrollbar-width:none]">
-          {(dueLoading || dueCount > 0) && (
-            <div className={cn(
-              "flex shrink-0 items-center gap-1.5 rounded-full border px-3 py-1.5",
-              dueCount > 0
-                ? "border-primary/20 bg-primary-light text-primary-text"
-                : "border-border bg-background text-muted-brand"
-            )}>
-              <CalendarClock className="h-3.5 w-3.5" />
-              <span className="text-xs font-extrabold">
-                {dueLoading ? "…" : `${dueCount} due`}
-              </span>
-            </div>
-          )}
-          {avgScore !== null && (
-            <div className="flex shrink-0 items-center gap-1.5 rounded-full border border-emerald-200/60 bg-emerald-50/80 px-3 py-1.5 dark:border-emerald-800/40 dark:bg-emerald-950/30">
-              <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
-              <span className="text-xs font-extrabold text-emerald-700 dark:text-emerald-400">{avgScore}% avg</span>
-            </div>
-          )}
-          {totalSessions > 0 && (
-            <div className="flex shrink-0 items-center gap-1.5 rounded-full border border-border bg-background px-3 py-1.5 text-muted-brand">
-              <History className="h-3.5 w-3.5" />
-              <span className="text-xs font-extrabold">{totalSessions} sessions</span>
-            </div>
-          )}
-        </div>
-      )}
+        )}
+      </div>
 
       {dueCount > 0 && (
         <button
@@ -1586,8 +1516,52 @@ function PracticeHomeInner() {
         avgScore={avgScore}
         totalSessions={totalSessions}
         onReviewDue={(setId) => router.push(`/study/practice/${setId}?mode=study&due=1`)}
-        billingStatus={billingStatus}
       />
+
+      {/* Plan / quota status bar — skeleton holds space while fetch is in flight */}
+      {billingStatus === null ? (
+        <div className="h-[52px] animate-pulse rounded-2xl bg-muted" />
+      ) : billingStatus.plus.active ? (
+          <div className="flex items-center gap-2 rounded-2xl border border-[#5B35D5]/20 bg-[#EEEDFE] px-4 py-2.5 dark:border-[#5B35D5]/30 dark:bg-[#5B35D5]/10">
+            <Star className="h-4 w-4 shrink-0 text-[#5B35D5] dark:text-indigo-300" />
+            <p className="text-sm font-extrabold text-[#3B24A8] dark:text-indigo-300">
+              Plus active — unlimited practice
+            </p>
+          </div>
+        ) : billingStatus.practice.limit !== null && (billingStatus.practice.remaining ?? 0) <= 0 ? (
+          <div className="overflow-hidden rounded-2xl border border-amber-300/60 bg-amber-50 dark:border-amber-700/40 dark:bg-amber-950/20">
+            <div className="flex items-center justify-between gap-3 px-4 py-3">
+              <div className="flex items-center gap-2">
+                <AlertTriangle className="h-4 w-4 shrink-0 text-amber-600 dark:text-amber-400" />
+                <p className="text-sm font-extrabold text-amber-900 dark:text-amber-200">Daily limit reached</p>
+              </div>
+              <Link
+                href="/study/billing"
+                className="rounded-xl bg-primary px-3 py-1.5 text-xs font-extrabold text-white no-underline hover:opacity-90"
+              >
+                Upgrade to Plus
+              </Link>
+            </div>
+          </div>
+        ) : billingStatus.practice.limit !== null ? (
+          <div className="rounded-2xl border border-border bg-card px-4 py-3">
+            <div className="flex items-center justify-between gap-2">
+              <p className="text-xs font-semibold text-muted-foreground">
+                {billingStatus.practice.used} of {billingStatus.practice.limit} free questions used today
+              </p>
+              <Link href="/study/billing" className="text-xs font-extrabold text-[#5B35D5] hover:underline dark:text-indigo-300">
+                Upgrade
+              </Link>
+            </div>
+            <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-secondary">
+              <div
+                className="h-full rounded-full bg-amber-500 transition-all"
+                style={{ width: `${Math.min(100, Math.round((billingStatus.practice.used / billingStatus.practice.limit) * 100))}%` }}
+              />
+            </div>
+          </div>
+        ) : null
+      }
 
       {/* Course chips filter */}
       <CourseChipsBar
