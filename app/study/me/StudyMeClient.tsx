@@ -39,6 +39,8 @@ type Counts = {
   uploads: number;
   approvedUploads: number;
   pendingUploads: number;
+  studentsHelped: number;
+  practiceQuestionsPowered: number;
   questions: number;
 };
 
@@ -48,7 +50,24 @@ const EMPTY_COUNTS: Counts = {
   uploads: 0,
   approvedUploads: 0,
   pendingUploads: 0,
+  studentsHelped: 0,
+  practiceQuestionsPowered: 0,
   questions: 0,
+};
+
+type ContributionStatsResponse = {
+  ok?: boolean;
+  stats?: {
+    totalUploads?: number;
+    approvedUploads?: number;
+    pendingUploads?: number;
+    studentsHelped?: number;
+    practiceQuestionsPowered?: number;
+  };
+};
+
+const EMPTY_CONTRIBUTION_RESPONSE: ContributionStatsResponse = {
+  ok: false,
 };
 
 type Tone = "study" | "blue" | "green" | "amber" | "zinc";
@@ -393,8 +412,7 @@ function StudyMeInner() {
       const [
         savedRes,
         attemptsRes,
-        uploadsRes,
-        approvedUploadsRes,
+        contributionRes,
         questionsRes,
       ] = await Promise.all([
         supabase.from("study_saved_items").select("id", { count: "exact", head: true }).eq("user_id", userId),
@@ -403,25 +421,25 @@ function StudyMeInner() {
           .select("id", { count: "exact", head: true })
           .eq("user_id", userId)
           .eq("status", "submitted"),
-        supabase.from("study_materials").select("id", { count: "exact", head: true }).eq("uploader_id", userId),
-        supabase
-          .from("study_materials")
-          .select("id", { count: "exact", head: true })
-          .eq("uploader_id", userId)
-          .eq("approved", true),
+        fetch("/api/study/contributions/me", { cache: "no-store" })
+          .then((res) => res.json() as Promise<ContributionStatsResponse>)
+          .catch(() => EMPTY_CONTRIBUTION_RESPONSE),
         supabase.from("study_questions").select("id", { count: "exact", head: true }).eq("author_id", userId),
       ]);
 
       if (cancelled) return;
 
-      const uploads = uploadsRes.count ?? 0;
-      const approvedUploads = approvedUploadsRes.count ?? 0;
+      const contributionStats = contributionRes.ok ? contributionRes.stats : null;
+      const uploads = contributionStats?.totalUploads ?? 0;
+      const approvedUploads = contributionStats?.approvedUploads ?? 0;
       setCounts({
         saved: savedRes.count ?? 0,
         attempts: attemptsRes.count ?? 0,
         uploads,
         approvedUploads,
-        pendingUploads: Math.max(0, uploads - approvedUploads),
+        pendingUploads: contributionStats?.pendingUploads ?? Math.max(0, uploads - approvedUploads),
+        studentsHelped: contributionStats?.studentsHelped ?? 0,
+        practiceQuestionsPowered: contributionStats?.practiceQuestionsPowered ?? 0,
         questions: questionsRes.count ?? 0,
       });
       setCountsLoading(false);
@@ -524,10 +542,10 @@ function StudyMeInner() {
         </div>
 
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-          <StatPill label="Saved" value={counts.saved} />
-          <StatPill label="Practice" value={counts.attempts} />
           <StatPill label="Uploads" value={counts.uploads} />
-          <StatPill label="Questions" value={counts.questions} />
+          <StatPill label="Approved" value={counts.approvedUploads} />
+          <StatPill label="Students helped" value={counts.studentsHelped} />
+          <StatPill label="Practice powered" value={counts.practiceQuestionsPowered} />
         </div>
 
         {!hasPrefs ? (
@@ -631,7 +649,7 @@ function StudyMeInner() {
               <ToolRow
                 href="/study/materials/my"
                 title="My Uploads"
-                desc={`${counts.approvedUploads} approved, ${counts.pendingUploads} pending`}
+                desc={`${counts.studentsHelped.toLocaleString("en-NG")} students helped, ${counts.practiceQuestionsPowered.toLocaleString("en-NG")} practice questions powered`}
                 icon={<FileText className="h-4 w-4" />}
                 tone="study"
               />

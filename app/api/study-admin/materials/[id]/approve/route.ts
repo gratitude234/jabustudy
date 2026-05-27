@@ -4,6 +4,7 @@ import { requireStudyModeratorFromRequest } from "../../../../../../lib/studyAdm
 import { isWithinScope } from "../../../../../../lib/studyAdmin/scope";
 import { notifyMaterialApproved } from "../../../../../../lib/studyAdmin/notifyUploader";
 import { triggerMaterialIndex } from "../../../../../../lib/studyMaterialIndexTrigger";
+import { notifyFirstCourseUploadIfNeeded } from "@/lib/studyContribution";
 
 function idFromUrl(req: Request) {
   try {
@@ -109,6 +110,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     if (row?.uploader_id && row?.title) {
       await notifyMaterialApproved(id, String(row.title), String(row.uploader_id));
     }
+    void notifyFirstCourseUploadIfNeeded(id, admin);
 
     const baseUrl = process.env.NEXT_PUBLIC_SITE_URL
       ? process.env.NEXT_PUBLIC_SITE_URL

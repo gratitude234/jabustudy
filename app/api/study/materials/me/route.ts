@@ -4,6 +4,7 @@
 import { NextResponse } from "next/server";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { attachFirstCourseUploadFlags } from "@/lib/studyContribution";
 
 export const dynamic = "force-dynamic";
 
@@ -39,7 +40,7 @@ export async function GET(req: Request) {
     const { data, error } = await admin
       .from("study_materials")
       .select(
-        "id, title, material_type, session, approved, upload_status, created_at, updated_at, file_url, file_path, description, study_courses:course_id(course_code, course_title, level, semester)"
+        "id, title, course_id, material_type, session, approved, upload_status, created_at, updated_at, file_url, file_path, description, study_courses:course_id(course_code, course_title, level, semester)"
       )
       .eq("uploader_id", uid)
       .order("created_at", { ascending: false })
@@ -47,7 +48,8 @@ export async function GET(req: Request) {
 
     if (error) throw error;
 
-    return NextResponse.json({ ok: true, items: data || [] });
+    const items = await attachFirstCourseUploadFlags((data as any[]) || [], admin);
+    return NextResponse.json({ ok: true, items });
   } catch (e: any) {
     const status = Number(e?.status) || 500;
     return NextResponse.json({ ok: false, error: e?.message || "Error" }, { status });

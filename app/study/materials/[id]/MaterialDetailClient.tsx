@@ -34,7 +34,7 @@ import {
   ZoomIn,
   ZoomOut,
 } from "lucide-react";
-import { cn, timeAgo } from "@/lib/utils";
+import { buildHref, cn, timeAgo } from "@/lib/utils";
 import { toggleSaved } from "@/lib/studySaved";
 import { supabase } from "@/lib/supabase";
 import { BetterExplanationInline, type BetterExplanationOptionKey } from "@/app/study/_components/BetterExplanationInline";
@@ -217,6 +217,8 @@ type Material = {
   featured: boolean | null;
   created_at: string | null;
   uploader_id: string | null;
+  course_id?: string | null;
+  is_first_course_upload?: boolean;
   uploader?: {
     displayName: string;
     initials: string;
@@ -833,6 +835,7 @@ export default function MaterialDetailClient({
   const title = (m.title ?? course?.course_code ?? "Untitled material").trim();
   const fileUrl = m.file_path ? `/api/study/materials/${m.id}/download` : "";
   const hasFile = fileUrl.length > 0;
+  const courseCode = (course?.course_code ?? "").toString().trim().toUpperCase();
 
   const [saved, setSaved] = useState(initialSaved);
   const [saving, setSaving] = useState(false);
@@ -843,6 +846,7 @@ export default function MaterialDetailClient({
   const [previewOpen, setPreviewOpen] = useState(false);
   const [readingRef, setReadingRef] = useState<{ open: boolean; page?: number; studyRef?: GuidedStudyRef } | null>(null);
   const [toast, setToast] = useState<string | null>(null);
+  const [showGiveBackPrompt, setShowGiveBackPrompt] = useState(false);
   const upvoteCount = m.up_votes ?? 0;
   const [relatedMaterials] = useState<any[]>(initialRelatedMaterials);
   const toastRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -1518,6 +1522,7 @@ export default function MaterialDetailClient({
   async function handleDownload() {
     setDownloads((d) => d + 1);
     showToast("Download started");
+    if (courseCode) setShowGiveBackPrompt(true);
   }
 
   async function handleShare() {
@@ -1621,14 +1626,15 @@ export default function MaterialDetailClient({
     variant = "default",
   }: {
     children: React.ReactNode;
-    variant?: "default" | "verified" | "featured";
+    variant?: "default" | "verified" | "featured" | "first";
   }) => (
     <span
       className={cn(
         "inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-[11px] font-bold text-white",
         variant === "default" && "border-white/20 bg-white/10",
         variant === "verified" && "border-green-300/30 bg-green-400/20",
-        variant === "featured" && "border-amber-300/30 bg-amber-400/20"
+        variant === "featured" && "border-amber-300/30 bg-amber-400/20",
+        variant === "first" && "border-amber-200/40 bg-amber-300/20"
       )}
     >
       {children}
@@ -1716,6 +1722,11 @@ export default function MaterialDetailClient({
                     <Star className="h-3 w-3" /> Featured
                   </HeroBadge>
                 )}
+                {m.is_first_course_upload && course?.course_code && (
+                  <HeroBadge variant="first">
+                    <Star className="h-3 w-3" /> First helper for {course.course_code}
+                  </HeroBadge>
+                )}
               </div>
               <div className="flex items-start gap-3">
                 <div className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl bg-white/15 text-white ring-1 ring-white/10 sm:h-12 sm:w-12">
@@ -1732,7 +1743,7 @@ export default function MaterialDetailClient({
                 </div>
               </div>
               <div className="mt-4 flex flex-wrap gap-x-4 gap-y-2 border-t border-white/15 pt-3.5">
-                <HeroStat icon={Download}>{downloads.toLocaleString("en-NG")} downloads</HeroStat>
+                <HeroStat icon={Download}>Helped {downloads.toLocaleString("en-NG")} student{downloads === 1 ? "" : "s"}</HeroStat>
                 <HeroStat icon={ThumbsUp}>{upvoteCount.toLocaleString("en-NG")} upvotes</HeroStat>
               </div>
             </div>
@@ -1871,7 +1882,7 @@ export default function MaterialDetailClient({
                   </div>
                 </div>
                 <div className="shrink-0 text-right">
-                  <p className="text-[10px] text-muted-brand">Downloads</p>
+                  <p className="text-[10px] text-muted-brand">Students helped</p>
                   <p className="text-xl font-extrabold text-foreground">{downloads.toLocaleString("en-NG")}</p>
                 </div>
               </div>
@@ -1893,7 +1904,7 @@ export default function MaterialDetailClient({
                       <div className="min-w-0">
                         <p className="truncate text-sm font-semibold text-foreground">{r.title ?? "Untitled"}</p>
                         <p className="mt-0.5 text-xs text-muted-brand">
-                          {r.material_type?.replace("_", " ")} · {r.downloads ?? 0} downloads
+                          {r.material_type?.replace("_", " ")} · helped {r.downloads ?? 0} student{(r.downloads ?? 0) === 1 ? "" : "s"}
                         </p>
                       </div>
                       <ChevronRight className="h-4 w-4 shrink-0 text-muted-brand" />
@@ -1958,6 +1969,36 @@ export default function MaterialDetailClient({
         studyRef={readingRef?.studyRef}
         page={readingRef?.page}
       />
+
+      {showGiveBackPrompt && courseCode ? (
+        <div className="fixed inset-x-0 bottom-24 z-40 flex justify-center px-4">
+          <div className="flex w-full max-w-md items-center justify-between gap-3 rounded-2xl border border-border bg-card px-4 py-3 text-sm text-foreground shadow-lg">
+            <p className="min-w-0 text-xs font-semibold leading-relaxed">
+              Got a past question or handout for {courseCode} too? Upload it and help the next person.
+            </p>
+            <div className="flex shrink-0 items-center gap-2">
+              <Link
+                href={buildHref("/study/materials/upload", {
+                  course: courseCode,
+                  course_id: course?.id ?? null,
+                  type: m.material_type === "handout" ? "handout" : "past_question",
+                })}
+                className="rounded-xl bg-primary px-3 py-1.5 text-xs font-bold text-white no-underline hover:opacity-90"
+              >
+                Upload
+              </Link>
+              <button
+                type="button"
+                onClick={() => setShowGiveBackPrompt(false)}
+                className="grid h-7 w-7 place-items-center rounded-xl border border-border bg-background text-muted-brand hover:bg-secondary/50"
+                aria-label="Dismiss upload prompt"
+              >
+                <X className="h-3.5 w-3.5" />
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
 
       {toast && (
         <div className="pointer-events-none fixed inset-x-0 bottom-24 z-50 flex justify-center px-4">
@@ -2088,6 +2129,11 @@ export default function MaterialDetailClient({
                               ? `${resumableDraft.progress.answeredCount}/${resumableDraft.progress.totalCount} answered. Resume only if you want to continue it.`
                               : "Choose the shape of this material-only practice session."}
                           </p>
+                          {!resumableDraft && (
+                            <p className="mt-2 text-xs font-semibold text-primary">
+                              Uploads like this can become practice questions for coursemates.
+                            </p>
+                          )}
                         </div>
                       </div>
 

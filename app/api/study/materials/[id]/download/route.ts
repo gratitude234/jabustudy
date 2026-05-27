@@ -7,6 +7,7 @@ import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { requireStudyModerator } from "@/lib/studyAdmin/requireStudyModerator";
 import { isWithinScope } from "@/lib/studyAdmin/scope";
+import { notifyMaterialDownloadImpactIfMilestone } from "@/lib/studyContribution";
 
 export const dynamic = "force-dynamic";
 
@@ -85,7 +86,12 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
   }
 
   // Fire-and-forget atomic increment — never blocks the redirect
-  void (async () => { try { await admin.rpc("increment_material_downloads", { p_id: materialId }); } catch {} })();
+  void (async () => {
+    try {
+      await admin.rpc("increment_material_downloads", { p_id: materialId });
+      await notifyMaterialDownloadImpactIfMilestone({ materialId, downloaderUserId: userId, admin });
+    } catch {}
+  })();
 
   return NextResponse.redirect(url, { status: 302 });
 }

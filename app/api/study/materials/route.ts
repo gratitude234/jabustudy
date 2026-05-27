@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { attachPublicUploaders } from "@/lib/studyUploaderDisplay";
+import { attachFirstCourseUploadFlags } from "@/lib/studyContribution";
 
 function normalizeQuery(v: string) {
   return (v || "").trim().replace(/\s+/g, " ");
@@ -159,7 +160,8 @@ export async function GET(req: Request) {
       if (mineRes.error) {
         return NextResponse.json({ ok: false, error: mineRes.error.message }, { status: 400 });
       }
-      const items = await attachPublicUploaders((mineRes.data as any[]) ?? []);
+      const firstFlagged = await attachFirstCourseUploadFlags((mineRes.data as any[]) ?? []);
+      const items = await attachPublicUploaders(firstFlagged);
       return NextResponse.json({
         ok: true,
         items,
@@ -241,7 +243,8 @@ export async function GET(req: Request) {
       return NextResponse.json({ ok: false, error: msg, schemaHint }, { status: 400 });
     }
 
-    const items = await attachPublicUploaders((res.data as any[]) ?? []);
+    const firstFlagged = await attachFirstCourseUploadFlags((res.data as any[]) ?? []);
+    const items = await attachPublicUploaders(firstFlagged);
     return NextResponse.json({
       ok: true,
       items,

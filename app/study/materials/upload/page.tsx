@@ -3,7 +3,7 @@
 import { cn } from "@/lib/utils";
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import { getWhatsAppLink } from "@/lib/whatsapp";
 import {
@@ -145,6 +145,20 @@ const MATERIAL_TYPES: Array<{
   { key: "other",         label: "Other",            icon: Paperclip,   hint: "PDF / img",  accept: ["application/pdf", "image/*"] },
 ];
 
+function normalizeMaterialTypeParam(value: string | null): MaterialType | null {
+  if (
+    value === "past_question" ||
+    value === "handout" ||
+    value === "slides" ||
+    value === "note" ||
+    value === "timetable" ||
+    value === "other"
+  ) {
+    return value;
+  }
+  return null;
+}
+
 const LEVEL_LABEL = (n: number) => `${n}L`;
 
 const ACCEPT_STR = [
@@ -253,6 +267,10 @@ async function runConcurrent<T>(tasks: Array<() => Promise<T>>, cap: number): Pr
 
 export default function UploadMaterialsPage() {
   const router = useRouter();
+  const sp = useSearchParams();
+  const prefillCourseId = (sp.get("course_id") ?? "").trim();
+  const prefillCourseCode = (sp.get("course") ?? "").trim().toUpperCase();
+  const prefillMaterialType = normalizeMaterialTypeParam(sp.get("type"));
 
   // Wizard: 1=files, 2=course, 3=details, "queue"=queue view
   const [step, setStep] = useState<1 | 2 | 3 | "queue">(1);
@@ -279,6 +297,7 @@ export default function UploadMaterialsPage() {
   const [q,              setQ]              = useState("");
   const [selectedCourseId, setSelectedCourseId] = useState<string>("");
   const [recentCourseIds,  setRecentCourseIds]  = useState<string[]>([]);
+  const queryPrefillAppliedRef = useRef(false);
 
   // Create course modal
   const [showCreateCourse, setShowCreateCourse] = useState(false);
@@ -454,6 +473,48 @@ export default function UploadMaterialsPage() {
     return () => { mounted = false; };
   }, [userId, isRep, departmentId, role, allowedLevels, scopedDeptId, scopedLevel]);
 
+  useEffect(() => {
+    if (queryPrefillAppliedRef.current) return;
+    if (!prefillCourseId && !prefillCourseCode && !prefillMaterialType) return;
+    if (prefillMaterialType) {
+      setFiles((prev) =>
+        prev.map((file) =>
+          file.materialType === "other"
+            ? { ...file, materialType: prefillMaterialType, pqYear: prefillMaterialType === "past_question" ? file.pqYear : "" }
+            : file
+        )
+      );
+    }
+    if (!courses.length && (prefillCourseId || prefillCourseCode)) {
+      if (prefillCourseCode) setQ(prefillCourseCode);
+      return;
+    }
+
+    if (!prefillCourseId && !prefillCourseCode) {
+      queryPrefillAppliedRef.current = true;
+      return;
+    }
+
+    const matched = courses.find((course) => course.id === prefillCourseId)
+      ?? courses.find((course) => course.course_code.toUpperCase() === prefillCourseCode);
+
+    if (matched) {
+      setSelectedCourseId(matched.id);
+      setQ(matched.course_code);
+      setSemester(matched.semester);
+      saveRecentCourse(matched.id);
+      setFiles((prev) => prev.map((file) => ({
+        ...file,
+        title: file.title || materialTitleSuggestion(matched, file.materialType),
+      })));
+    } else if (prefillCourseCode) {
+      setQ(prefillCourseCode);
+    }
+
+    queryPrefillAppliedRef.current = true;
+    if (prefillCourseId || prefillCourseCode) setStep(2);
+  }, [courses, prefillCourseCode, prefillCourseId, prefillMaterialType]);
+
   // ── Save draft ─────────────────────────────────────────────────────────────
 
   useEffect(() => {
@@ -559,7 +620,7 @@ export default function UploadMaterialsPage() {
       hashing: true,
       parsed: null,
       title: "",
-      materialType: "other" as MaterialType,
+      materialType: prefillMaterialType ?? "other",
       pqYear: "" as const,
       pqSession: "",
       expanded: false,
@@ -572,8 +633,9 @@ export default function UploadMaterialsPage() {
       let hash: string | null = null;
       try { hash = await sha256(entry.file); } catch {}
 
-      const typeLabel = parsed.materialType
-        ? MATERIAL_TYPES.find((x) => x.key === parsed.materialType)?.label ?? ""
+      const materialType = parsed.materialType ?? prefillMaterialType ?? "other";
+      const typeLabel = materialType
+        ? MATERIAL_TYPES.find((x) => x.key === materialType)?.label ?? ""
         : "";
       const suggestedTitle = parsed.courseCode
         ? `${parsed.courseCode}${typeLabel ? ` (${typeLabel})` : ""}`
@@ -587,7 +649,7 @@ export default function UploadMaterialsPage() {
           hashing: false,
           parsed,
           title: suggestedTitle,
-          materialType: parsed.materialType ?? "other",
+          materialType,
           pqYear: (parsed.materialType === "past_question" && parsed.year) ? parsed.year : "",
         };
       }));

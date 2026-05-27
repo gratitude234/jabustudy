@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { adminSupabase } from "@/lib/supabase/admin";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { notifyPracticePoweredImpactIfMilestone } from "@/lib/studyContribution";
 
 export const runtime = "nodejs";
 
@@ -82,6 +83,9 @@ export async function POST(
 
   if (error) {
     return NextResponse.json({ ok: false, code: "DRAFT_KEEP_FAILED", message: error.message }, { status: 500 });
+  }
+  if (sourceMaterialId) {
+    void notifyPracticePoweredImpactIfMilestone(sourceMaterialId, adminSupabase);
   }
   return NextResponse.json({ ok: true });
 }
