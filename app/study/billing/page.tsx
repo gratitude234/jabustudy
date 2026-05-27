@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import {
+  ArrowRight,
   BadgeCheck,
   Check,
   CheckCircle2,
@@ -478,11 +479,20 @@ export default function StudyBillingPage() {
                   type="button"
                   onClick={() => choosePlan(plan.key)}
                   disabled={busyPlan !== null}
-                  className="flex flex-col rounded-2xl border border-border bg-card p-4 text-left transition hover:border-primary/40 hover:bg-primary/5 disabled:opacity-60"
+                  className={cn(
+                    "group flex items-center justify-between gap-3 rounded-2xl border border-border bg-card px-4 py-4 text-left transition",
+                    "hover:border-primary/50 hover:bg-primary/5 hover:shadow-sm",
+                    "active:scale-[0.98] active:bg-primary/10",
+                    "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
+                    "disabled:opacity-60"
+                  )}
                 >
-                  <p className="text-sm font-extrabold text-foreground">{plan.credits} credits</p>
-                  <p className="mt-0.5 text-xs text-muted-foreground">{plan.credits * 5} AI questions</p>
-                  <p className="mt-3 text-lg font-black text-foreground">{money(plan.amountNaira)}</p>
+                  <div>
+                    <p className="text-sm font-extrabold text-foreground">{plan.credits} credits</p>
+                    <p className="mt-0.5 text-xs text-muted-foreground">{plan.credits * 5} AI questions</p>
+                    <p className="mt-2.5 text-lg font-black text-foreground">{money(plan.amountNaira)}</p>
+                  </div>
+                  <ArrowRight className="h-4 w-4 shrink-0 text-muted-foreground transition group-hover:translate-x-0.5 group-hover:text-primary" />
                 </button>
               ))}
             </div>
