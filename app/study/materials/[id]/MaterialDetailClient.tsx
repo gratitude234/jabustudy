@@ -2248,6 +2248,14 @@ export default function MaterialDetailClient({
                       {generationStatusLoading || generatingMore ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
                       {generateDisabledReason ?? `Generate ${quizConfig.count} questions`}
                     </button>
+                    {generationTrust?.credits && !generationTrust.credits.canAfford ? (
+                      <p className="mt-2 text-center text-xs text-muted-foreground">
+                        <Link href="/study/billing" className="font-bold text-primary hover:underline">
+                          Get more credits
+                        </Link>{" "}
+                        to generate questions.
+                      </p>
+                    ) : null}
                   </div>
                 </>
               )}
@@ -2463,18 +2471,11 @@ export default function MaterialDetailClient({
                   </div>
                   <div className="absolute inset-x-0 bottom-0 flex gap-2 border-t border-border bg-card px-4 py-4 pb-[max(1rem,env(safe-area-inset-bottom))]">
                     <button type="button"
-                      onClick={() => {
-                        if (!answered && currentQuestionType === "mcq") {
-                          setAnswers((prev) => ({ ...prev, [currentQuestionIndex]: { chosen: "", correct: false, skipped: true } }));
-                        }
-                        if (currentQuestionIndex + 1 >= qs.length) {
-                          setQuizState("results");
-                        } else {
-                          setCurrentQuestionIndex((i) => i + 1);
-                        }
-                      }}
-                      className="flex-1 rounded-2xl border border-border bg-background py-3 text-sm font-semibold text-muted-brand transition hover:bg-secondary/50 focus-visible:outline-none">
-                      Skip
+                      disabled={currentQuestionIndex === 0}
+                      onClick={() => setCurrentQuestionIndex((i) => Math.max(0, i - 1))}
+                      className="flex-1 inline-flex items-center justify-center gap-2 rounded-2xl border border-border bg-background py-3 text-sm font-semibold text-muted-brand transition hover:bg-secondary/50 disabled:opacity-40 focus-visible:outline-none">
+                      <ArrowLeft className="h-4 w-4" />
+                      Back
                     </button>
                     <button type="button"
                       disabled={!answered}
@@ -2485,8 +2486,8 @@ export default function MaterialDetailClient({
                           setCurrentQuestionIndex((i) => i + 1);
                         }
                       }}
-                      className="flex-[2] rounded-2xl bg-primary py-3 text-sm font-semibold text-white transition hover:opacity-90 disabled:opacity-40 focus-visible:outline-none">
-                      Next →
+                      className="flex-[2] inline-flex items-center justify-center gap-2 rounded-2xl bg-primary py-3 text-sm font-semibold text-white transition hover:opacity-90 disabled:opacity-40 focus-visible:outline-none">
+                      Next <ArrowRight className="h-4 w-4" />
                     </button>
                   </div>
                 </>

@@ -508,6 +508,21 @@ export async function approveBillingOrder(orderId: string, reviewerId: string, n
   return normalizeOrder(updated as BillingOrderRow);
 }
 
+export async function cancelBillingOrder(orderId: string, userId: string) {
+  const { data, error } = await adminSupabase
+    .from("study_billing_orders")
+    .update({ status: "cancelled", updated_at: new Date().toISOString() } as never)
+    .eq("id", orderId)
+    .eq("user_id", userId)
+    .in("status", ["pending_payment"])
+    .select("*")
+    .maybeSingle();
+
+  if (error) throw httpError(error.message, 500, "ORDER_CANCEL_FAILED");
+  if (!data?.id) throw httpError("Order not found or already submitted.", 404, "ORDER_NOT_FOUND");
+  return normalizeOrder(data as BillingOrderRow);
+}
+
 export async function rejectBillingOrder(orderId: string, reviewerId: string, note?: unknown) {
   const reviewedAt = new Date().toISOString();
   const { data, error } = await adminSupabase

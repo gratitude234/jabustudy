@@ -648,3 +648,32 @@ export async function notifyStudyAdminsCourseReviewAction({
     // notification failure must never block review actions
   }
 }
+
+export async function notifyAdminsNewBillingSubmission(args: {
+  reference: string;
+  planLabel: string;
+  amountNaira: number;
+}) {
+  try {
+    const admin = createSupabaseAdminClient();
+    const { data: admins } = await admin.from("study_admins").select("user_id");
+    if (!admins?.length) return;
+    const adminIds = admins.map((a: { user_id: string }) => a.user_id).filter(Boolean) as string[];
+
+    const title = "New payment submitted";
+    const body = `${args.planLabel} — ₦${args.amountNaira.toLocaleString("en-NG")} — Ref: ${args.reference}`;
+    const href = "/study-admin/billing";
+
+    await admin.from("notifications").insert(
+      adminIds.map((uid) => ({ user_id: uid, type: "billing", title, body, href })) as never[]
+    );
+
+    void Promise.allSettled(
+      adminIds.map((uid) =>
+        sendUserPushIfAllowed(uid, { title, body, href, tag: `billing-submission-${args.reference}` }, "rep_alerts")
+      )
+    );
+  } catch {
+    // fire-and-forget — billing state is already persisted
+  }
+}

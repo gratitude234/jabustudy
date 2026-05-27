@@ -7,10 +7,13 @@ import {
   Banknote,
   CheckCircle2,
   Clock3,
+  Copy,
   CreditCard,
   Loader2,
   ReceiptText,
+  RotateCcw,
   UploadCloud,
+  X,
   Zap,
 } from "lucide-react";
 
@@ -94,10 +97,21 @@ function statusClass(status: BillingOrder["status"]) {
   return "border-border bg-background text-muted-foreground";
 }
 
+function expiryLabel(expiresAt: string): { text: string; urgent: boolean } {
+  const ms = new Date(expiresAt).getTime() - Date.now();
+  if (ms <= 0) return { text: "Expired", urgent: true };
+  const hours = Math.floor(ms / 3_600_000);
+  if (hours < 1) return { text: "Expires in < 1 hour", urgent: true };
+  if (hours < 2) return { text: `Expires in ${hours}h`, urgent: true };
+  if (hours < 24) return { text: `Expires in ${hours}h`, urgent: false };
+  return { text: `Expires in ${Math.floor(hours / 24)}d`, urgent: false };
+}
+
 export default function StudyBillingPage() {
   const [snapshot, setSnapshot] = useState<BillingSnapshot | null>(null);
   const [loading, setLoading] = useState(true);
   const [busyPlan, setBusyPlan] = useState<string | null>(null);
+  const [cancellingId, setCancellingId] = useState<string | null>(null);
   const [activeOrderId, setActiveOrderId] = useState<string | null>(null);
   const [file, setFile] = useState<File | null>(null);
   const [senderName, setSenderName] = useState("");
@@ -106,6 +120,14 @@ export default function StudyBillingPage() {
   const [submitting, setSubmitting] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [copied, setCopied] = useState<string | null>(null);
+
+  function copyToClipboard(text: string, key: string) {
+    void navigator.clipboard.writeText(text).then(() => {
+      setCopied(key);
+      window.setTimeout(() => setCopied((c) => (c === key ? null : c)), 2000);
+    });
+  }
 
   async function load() {
     setLoading(true);
@@ -144,6 +166,16 @@ export default function StudyBillingPage() {
   const pendingOrders = snapshot?.orders.filter((order) => order.status === "pending_payment" || order.status === "pending_review") ?? [];
 
   async function createOrder(planKey: string) {
+    // Guard: don't create a duplicate if one is already pending for this plan
+    const existingPending = snapshot?.orders.find(
+      (o) => o.planKey === planKey && (o.status === "pending_payment" || o.status === "pending_review")
+    );
+    if (existingPending) {
+      setActiveOrderId(existingPending.id);
+      setMessage("You already have a pending order for this plan. Complete it or cancel it first.");
+      return;
+    }
+
     setBusyPlan(planKey);
     setMessage(null);
     setError(null);
@@ -165,10 +197,32 @@ export default function StudyBillingPage() {
     }
   }
 
+  async function cancelOrder(orderId: string) {
+    setCancellingId(orderId);
+    setMessage(null);
+    setError(null);
+    try {
+      const res = await fetch(`/api/billing/orders/${orderId}/cancel`, { method: "POST" });
+      const data = await res.json().catch(() => null) as { ok?: boolean; message?: string } | null;
+      if (!res.ok || !data?.ok) throw new Error(data?.message || "Could not cancel order.");
+      setActiveOrderId(null);
+      setMessage("Order cancelled.");
+      await load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not cancel order.");
+    } finally {
+      setCancellingId(null);
+    }
+  }
+
   async function submitReceipt() {
     if (!activeOrder) return;
     if (!file) {
       setError("Choose your receipt screenshot or PDF first.");
+      return;
+    }
+    if (!senderName.trim()) {
+      setError("Sender account name is required so we can verify your transfer.");
       return;
     }
 
@@ -296,7 +350,7 @@ export default function StudyBillingPage() {
                     <div>
                       <p className="text-sm font-extrabold text-foreground">{plan.label}</p>
                       <p className="mt-1 text-xs text-muted-foreground">
-                        Unlimited practice, {plan.credits} AI credits, {plan.plusDays} days.
+                        Unlimited daily practice + {plan.credits} credits to generate AI questions. Valid {plan.plusDays} days.
                       </p>
                     </div>
                     <span className="shrink-0 rounded-full bg-primary px-3 py-1 text-xs font-bold text-primary-foreground">
@@ -313,7 +367,10 @@ export default function StudyBillingPage() {
           </section>
 
           <section className="space-y-3">
-            <h2 className="text-base font-extrabold text-foreground">Extra AI credits</h2>
+            <div>
+              <h2 className="text-base font-extrabold text-foreground">Extra AI credits</h2>
+              <p className="text-xs text-muted-foreground">1 credit = 5 AI-generated questions.</p>
+            </div>
             <div className="grid gap-3 md:grid-cols-3">
               {creditPlans.map((plan) => (
                 <button
@@ -341,28 +398,36 @@ export default function StudyBillingPage() {
 
               <div className="mt-4 grid gap-4 lg:grid-cols-[1fr_1.2fr]">
                 <div className="space-y-3">
-                  {pendingOrders.map((order) => (
-                    <button
-                      key={order.id}
-                      type="button"
-                      onClick={() => setActiveOrderId(order.id)}
-                      className={cn(
-                        "w-full rounded-2xl border p-3 text-left transition",
-                        activeOrderId === order.id ? "border-primary bg-primary/5" : "border-border bg-background hover:bg-secondary/40"
-                      )}
-                    >
-                      <div className="flex items-start justify-between gap-2">
-                        <div>
-                          <p className="text-sm font-extrabold text-foreground">{order.planLabel}</p>
-                          <p className="mt-0.5 text-xs font-semibold text-muted-foreground">{order.reference}</p>
+                  {pendingOrders.map((order) => {
+                    const expiry = order.status === "pending_payment" ? expiryLabel(order.expiresAt) : null;
+                    return (
+                      <button
+                        key={order.id}
+                        type="button"
+                        onClick={() => setActiveOrderId(order.id)}
+                        className={cn(
+                          "w-full rounded-2xl border p-3 text-left transition",
+                          activeOrderId === order.id ? "border-primary bg-primary/5" : "border-border bg-background hover:bg-secondary/40"
+                        )}
+                      >
+                        <div className="flex items-start justify-between gap-2">
+                          <div>
+                            <p className="text-sm font-extrabold text-foreground">{order.planLabel}</p>
+                            <p className="mt-0.5 text-xs font-semibold text-muted-foreground">{order.reference}</p>
+                          </div>
+                          <span className={cn("rounded-full border px-2 py-0.5 text-[10px] font-bold", statusClass(order.status))}>
+                            {statusLabel(order.status)}
+                          </span>
                         </div>
-                        <span className={cn("rounded-full border px-2 py-0.5 text-[10px] font-bold", statusClass(order.status))}>
-                          {statusLabel(order.status)}
-                        </span>
-                      </div>
-                      <p className="mt-2 text-sm font-bold">{money(order.amountNaira)}</p>
-                    </button>
-                  ))}
+                        <p className="mt-2 text-sm font-bold">{money(order.amountNaira)}</p>
+                        {expiry ? (
+                          <p className={cn("mt-1 text-[10px] font-bold", expiry.urgent ? "text-rose-600" : "text-muted-foreground")}>
+                            {expiry.text}
+                          </p>
+                        ) : null}
+                      </button>
+                    );
+                  })}
                 </div>
 
                 {activeOrder ? (
@@ -374,7 +439,19 @@ export default function StudyBillingPage() {
                       </div>
                       <div>
                         <p className="text-xs font-bold uppercase text-muted-foreground">Account number</p>
-                        <p className="mt-1 text-sm font-extrabold tabular-nums">{snapshot.bank.accountNumber || "Not configured"}</p>
+                        <div className="mt-1 flex items-center gap-2">
+                          <p className="text-sm font-extrabold tabular-nums">{snapshot.bank.accountNumber || "Not configured"}</p>
+                          {snapshot.bank.accountNumber ? (
+                            <button
+                              type="button"
+                              onClick={() => copyToClipboard(snapshot.bank.accountNumber, "account")}
+                              className="shrink-0 rounded-lg p-1 text-muted-foreground hover:bg-secondary hover:text-foreground"
+                              aria-label="Copy account number"
+                            >
+                              {copied === "account" ? <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" /> : <Copy className="h-3.5 w-3.5" />}
+                            </button>
+                          ) : null}
+                        </div>
                       </div>
                       <div>
                         <p className="text-xs font-bold uppercase text-muted-foreground">Account name</p>
@@ -387,7 +464,17 @@ export default function StudyBillingPage() {
                     </div>
 
                     <div className="mt-4 rounded-2xl border border-primary/20 bg-primary/5 p-3">
-                      <p className="text-xs font-bold uppercase text-primary">Use this narration/reference</p>
+                      <div className="flex items-center justify-between gap-2">
+                        <p className="text-xs font-bold uppercase text-primary">Use this narration/reference</p>
+                        <button
+                          type="button"
+                          onClick={() => copyToClipboard(activeOrder.reference, `ref-${activeOrder.id}`)}
+                          className="shrink-0 rounded-lg p-1 text-primary hover:bg-primary/10"
+                          aria-label="Copy reference"
+                        >
+                          {copied === `ref-${activeOrder.id}` ? <CheckCircle2 className="h-4 w-4 text-emerald-600" /> : <Copy className="h-4 w-4" />}
+                        </button>
+                      </div>
                       <p className="mt-1 text-xl font-black tracking-wide text-foreground">{activeOrder.reference}</p>
                     </div>
 
@@ -399,7 +486,9 @@ export default function StudyBillingPage() {
                     ) : (
                       <div className="mt-4 space-y-3">
                         <label className="block">
-                          <span className="text-xs font-bold uppercase text-muted-foreground">Receipt screenshot or PDF</span>
+                          <span className="text-xs font-bold uppercase text-muted-foreground">
+                            Receipt screenshot or PDF
+                          </span>
                           <input
                             type="file"
                             accept="image/*,application/pdf"
@@ -408,18 +497,27 @@ export default function StudyBillingPage() {
                           />
                         </label>
                         <div className="grid gap-3 sm:grid-cols-2">
-                          <input
-                            value={senderName}
-                            onChange={(event) => setSenderName(event.target.value)}
-                            placeholder="Sender account name"
-                            className="rounded-xl border border-border bg-card px-3 py-2 text-sm outline-none focus:border-primary"
-                          />
-                          <input
-                            value={senderBank}
-                            onChange={(event) => setSenderBank(event.target.value)}
-                            placeholder="Sender bank"
-                            className="rounded-xl border border-border bg-card px-3 py-2 text-sm outline-none focus:border-primary"
-                          />
+                          <label className="block">
+                            <span className="text-xs font-semibold text-muted-foreground">
+                              Sender account name <span className="text-rose-500">*</span>
+                            </span>
+                            <input
+                              value={senderName}
+                              onChange={(event) => setSenderName(event.target.value)}
+                              placeholder="Your bank account name"
+                              required
+                              className="mt-1 block w-full rounded-xl border border-border bg-card px-3 py-2 text-sm outline-none focus:border-primary"
+                            />
+                          </label>
+                          <label className="block">
+                            <span className="text-xs font-semibold text-muted-foreground">Sender bank</span>
+                            <input
+                              value={senderBank}
+                              onChange={(event) => setSenderBank(event.target.value)}
+                              placeholder="e.g. GTBank"
+                              className="mt-1 block w-full rounded-xl border border-border bg-card px-3 py-2 text-sm outline-none focus:border-primary"
+                            />
+                          </label>
                         </div>
                         <input
                           value={transactionReference}
@@ -427,15 +525,27 @@ export default function StudyBillingPage() {
                           placeholder="Transfer reference (optional)"
                           className="w-full rounded-xl border border-border bg-card px-3 py-2 text-sm outline-none focus:border-primary"
                         />
-                        <button
-                          type="button"
-                          onClick={submitReceipt}
-                          disabled={submitting}
-                          className="inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-primary px-4 py-3 text-sm font-extrabold text-primary-foreground disabled:cursor-not-allowed disabled:opacity-60"
-                        >
-                          {submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : <UploadCloud className="h-4 w-4" />}
-                          Submit for review
-                        </button>
+                        <div className="flex gap-2">
+                          <button
+                            type="button"
+                            onClick={submitReceipt}
+                            disabled={submitting}
+                            className="inline-flex flex-1 items-center justify-center gap-2 rounded-2xl bg-primary px-4 py-3 text-sm font-extrabold text-primary-foreground disabled:cursor-not-allowed disabled:opacity-60"
+                          >
+                            {submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : <UploadCloud className="h-4 w-4" />}
+                            Submit for review
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => cancelOrder(activeOrder.id)}
+                            disabled={cancellingId === activeOrder.id}
+                            className="inline-flex items-center gap-1.5 rounded-2xl border border-border bg-background px-3 py-3 text-sm font-semibold text-muted-foreground hover:border-rose-300 hover:text-rose-600 disabled:opacity-60"
+                            title="Cancel this order"
+                          >
+                            {cancellingId === activeOrder.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <X className="h-4 w-4" />}
+                            Cancel
+                          </button>
+                        </div>
                       </div>
                     )}
                   </div>
@@ -454,9 +564,23 @@ export default function StudyBillingPage() {
                       <p className="truncate text-sm font-bold text-foreground">{order.planLabel}</p>
                       <p className="text-xs text-muted-foreground">{order.reference} - {formatDate(order.createdAt)}</p>
                     </div>
-                    <span className={cn("shrink-0 rounded-full border px-2.5 py-1 text-xs font-bold", statusClass(order.status))}>
-                      {statusLabel(order.status)}
-                    </span>
+                    <div className="flex shrink-0 items-center gap-2">
+                      <span className={cn("rounded-full border px-2.5 py-1 text-xs font-bold", statusClass(order.status))}>
+                        {statusLabel(order.status)}
+                      </span>
+                      {order.status === "rejected" ? (
+                        <button
+                          type="button"
+                          onClick={() => createOrder(order.planKey)}
+                          disabled={busyPlan !== null}
+                          className="inline-flex items-center gap-1 text-xs font-bold text-primary hover:underline disabled:opacity-60"
+                          title="Create a new order for this plan"
+                        >
+                          <RotateCcw className="h-3 w-3" />
+                          Try again
+                        </button>
+                      ) : null}
+                    </div>
                   </div>
                 ))}
               </div>
