@@ -135,6 +135,32 @@ type GenerationStreamStatus = {
   phase?: string;
 };
 
+function isSavedGeneratedQuestion(value: unknown): value is GeneratedQuestion {
+  if (!value || typeof value !== "object") return false;
+  const row = value as Partial<GeneratedQuestion>;
+  if (typeof row.question !== "string" || !row.question.trim()) return false;
+
+  if (row.question_type === "short_answer" || row.question_type === "theory") {
+    const written = row as Partial<GeneratedWrittenQuestion>;
+    return typeof written.model_answer === "string" && Array.isArray(written.marking_points);
+  }
+
+  const mcq = row as Partial<GeneratedMcqQuestion>;
+  return Boolean(
+    mcq.options &&
+    mcq.optionIds &&
+    typeof mcq.options.A === "string" &&
+    typeof mcq.options.B === "string" &&
+    typeof mcq.options.C === "string" &&
+    typeof mcq.options.D === "string" &&
+    typeof mcq.optionIds.A === "string" &&
+    typeof mcq.optionIds.B === "string" &&
+    typeof mcq.optionIds.C === "string" &&
+    typeof mcq.optionIds.D === "string" &&
+    isBetterExplanationOptionKey(mcq.answer)
+  );
+}
+
 type ActiveAiDraft = {
   setId: string;
   title: string | null;
@@ -336,6 +362,7 @@ async function readNdjsonQuestions(
   questions: GeneratedQuestion[];
   ai: AiGenerationMeta | null;
   draftSetId?: string;
+  savedQuestions?: GeneratedQuestion[];
   savedCount?: number;
   requestedCount?: number;
   repaired?: boolean;
@@ -404,6 +431,9 @@ async function readNdjsonQuestions(
     questions,
     ai: finalAi,
     draftSetId: typeof doneMeta.draftSetId === "string" ? doneMeta.draftSetId : undefined,
+    savedQuestions: Array.isArray(doneMeta.savedQuestions)
+      ? doneMeta.savedQuestions.filter(isSavedGeneratedQuestion)
+      : undefined,
     savedCount: typeof doneMeta.savedCount === "number" ? doneMeta.savedCount : undefined,
     requestedCount: typeof doneMeta.requestedCount === "number" ? doneMeta.requestedCount : undefined,
     repaired: typeof doneMeta.repaired === "boolean" ? doneMeta.repaired : undefined,
@@ -1362,7 +1392,28 @@ export default function MaterialDetailClient({
         } : prev);
       }
       setGenerationAi(result.ai);
-      await loadDraftWorkspace(result.draftSetId, null);
+      const hasCompleteSavedPayload = Boolean(
+        result.savedQuestions?.length &&
+        (typeof result.savedCount !== "number" || result.savedQuestions.length === result.savedCount)
+      );
+      if (!result.reusedDraft && hasCompleteSavedPayload && result.savedQuestions) {
+        const attemptId = await ensureWorkspaceAttempt(result.draftSetId, null);
+        setGeneratedQuestions(result.savedQuestions);
+        setActiveDraftSetId(result.draftSetId);
+        setActiveAttemptId(attemptId);
+        setAnswers({});
+        setWrittenAnswers({});
+        setWrittenCompared({});
+        setWrittenGradeStates({});
+        setRetryPool(null);
+        setHintShown({});
+        setGenerateMoreError(null);
+        syncedQuizMissesRef.current = null;
+        setCurrentQuestionIndex(0);
+        setQuizState("quiz");
+      } else {
+        await loadDraftWorkspace(result.draftSetId, null);
+      }
       void refreshGenerationStatus(config, mode);
     } catch (error) {
       const detail = error instanceof Error ? error.message : "Something went wrong.";

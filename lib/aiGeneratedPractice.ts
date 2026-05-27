@@ -77,6 +77,50 @@ type InsertedQuestionRow = {
   position: number | null;
 };
 
+type InsertedOptionRow = {
+  id: string;
+  question_id: string;
+  is_correct: boolean | null;
+  position: number | null;
+};
+
+export type SavedGeneratedPracticeQuestion =
+  | {
+      question_type: "mcq";
+      dbQuestionId: string;
+      optionIds: Partial<Record<OptionKey, string>>;
+      setId: string;
+      question: string;
+      options: Record<OptionKey, string>;
+      answer: OptionKey;
+      explanation: string;
+      hint?: string;
+      questionKind?: string;
+      difficultyLevel?: string;
+      cognitiveLevel?: string;
+      sourceTopic?: string;
+      questionFingerprint?: string;
+      generationMeta?: Record<string, unknown> | null;
+      studyRef?: Record<string, unknown>;
+    }
+  | {
+      question_type: "short_answer" | "theory";
+      dbQuestionId: string;
+      setId: string;
+      question: string;
+      model_answer: string;
+      marking_points: string[];
+      explanation?: string;
+      hint?: string;
+      questionKind?: string;
+      difficultyLevel?: string;
+      cognitiveLevel?: string;
+      sourceTopic?: string;
+      questionFingerprint?: string;
+      generationMeta?: Record<string, unknown> | null;
+      studyRef?: Record<string, unknown>;
+    };
+
 export type SaveGeneratedPracticeResult = {
   setId: string;
   savedCount: number;
@@ -87,6 +131,7 @@ export type SaveGeneratedPracticeResult = {
   poolBackedCount: number;
   generatedCount: number;
   poolQuestionIds: string[];
+  savedQuestions: SavedGeneratedPracticeQuestion[];
 };
 
 export type SaveGeneratedPracticeArgs = {
@@ -209,6 +254,63 @@ function cleanJsonObject(value: unknown): Record<string, unknown> | null {
   } catch {
     return null;
   }
+}
+
+function toSavedQuestion(args: {
+  setId: string;
+  questionId: string;
+  question: SavableQuestion;
+  optionRows: InsertedOptionRow[];
+}): SavedGeneratedPracticeQuestion {
+  const studyRef = cleanJsonObject(args.question.studyRef) ?? undefined;
+  const generationMeta = cleanJsonObject(args.question.generationMeta);
+  const common = {
+    dbQuestionId: args.questionId,
+    setId: args.setId,
+    question: args.question.question,
+    explanation: args.question.explanation || "",
+    questionKind: cleanLabel(args.question.questionKind) ?? undefined,
+    difficultyLevel: cleanLabel(args.question.difficultyLevel, 40) ?? undefined,
+    cognitiveLevel: cleanLabel(args.question.cognitiveLevel, 40) ?? undefined,
+    sourceTopic: cleanLabel(args.question.sourceTopic ?? args.question.studyRef?.topic, 120) ?? undefined,
+    questionFingerprint: cleanLabel(args.question.questionFingerprint, 240) ?? undefined,
+    generationMeta,
+    studyRef,
+  };
+
+  if (args.question.question_type !== "mcq") {
+    return {
+      ...common,
+      question_type: args.question.question_type,
+      model_answer: args.question.model_answer ?? "",
+      marking_points: args.question.marking_points ?? [],
+    };
+  }
+
+  const optionKeys = ["A", "B", "C", "D"] as const;
+  const optionIds: Partial<Record<OptionKey, string>> = {};
+  const answer = optionKeys.find((key, index) =>
+    args.optionRows.some((row) => row.position === index && row.is_correct)
+  ) ?? args.question.answer ?? "A";
+
+  for (const row of args.optionRows) {
+    if (typeof row.position !== "number") continue;
+    const key = optionKeys[row.position];
+    if (key && row.id) optionIds[key] = row.id;
+  }
+
+  return {
+    ...common,
+    question_type: "mcq",
+    optionIds,
+    options: {
+      A: args.question.options?.A ?? "",
+      B: args.question.options?.B ?? "",
+      C: args.question.options?.C ?? "",
+      D: args.question.options?.D ?? "",
+    },
+    answer,
+  };
 }
 
 function normalizeForFingerprint(value: string) {
@@ -721,9 +823,12 @@ export async function saveGeneratedPracticeSet(args: SaveGeneratedPracticeArgs):
     throw Object.assign(new Error("Failed to save questions."), { status: 500, code: "OPTION_BUILD_FAILED" });
   }
 
-  const { error: optionsError } = optionPayload.length > 0
-    ? await adminSupabase.from("study_quiz_options").insert(optionPayload)
-    : { error: null };
+  const { data: insertedOptions, error: optionsError } = optionPayload.length > 0
+    ? await adminSupabase
+      .from("study_quiz_options")
+      .insert(optionPayload)
+      .select("id, question_id, is_correct, position")
+    : { data: [] as InsertedOptionRow[], error: null };
 
   if (optionsError) {
     console.error("[aiGeneratedPractice] option insert error:", optionsError);
@@ -731,6 +836,27 @@ export async function saveGeneratedPracticeSet(args: SaveGeneratedPracticeArgs):
     await adminSupabase.from("study_quiz_sets").delete().eq("id", quizSetId);
     throw Object.assign(new Error("Failed to save questions. Please try again."), { status: 500, code: "OPTION_INSERT_FAILED" });
   }
+
+  const optionsByQuestionId = new Map<string, InsertedOptionRow[]>();
+  for (const option of (insertedOptions ?? []) as InsertedOptionRow[]) {
+    const rows = optionsByQuestionId.get(option.question_id) ?? [];
+    rows.push(option);
+    optionsByQuestionId.set(option.question_id, rows);
+  }
+
+  const savedQuestions = orderedQuestions
+    .map((questionRow) => {
+      if (typeof questionRow.position !== "number") return null;
+      const question = questionsToSave[questionRow.position];
+      if (!question) return null;
+      return toSavedQuestion({
+        setId: quizSetId,
+        questionId: questionRow.id,
+        question,
+        optionRows: optionsByQuestionId.get(questionRow.id) ?? [],
+      });
+    })
+    .filter((question): question is SavedGeneratedPracticeQuestion => Boolean(question));
 
   if (!isDraft) {
     void notifyPracticePoweredImpactIfMilestone(args.materialId, adminSupabase);
@@ -746,6 +872,7 @@ export async function saveGeneratedPracticeSet(args: SaveGeneratedPracticeArgs):
     poolBackedCount: poolBackedQuestions.length,
     generatedCount: generatedQuestions.length,
     poolQuestionIds: poolQuestionIds.filter((id): id is string => Boolean(id)),
+    savedQuestions,
   };
 }
 
