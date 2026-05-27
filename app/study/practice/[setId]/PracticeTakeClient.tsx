@@ -865,6 +865,7 @@ if (err || !meta) {
   }).length;
   const practiceQuotaExhausted =
     !submitted &&
+    !isDueMode &&
     practiceAccess?.limit !== null &&
     typeof practiceAccess?.remaining === "number" &&
     practiceAccess.remaining === 0;
@@ -1653,6 +1654,7 @@ if (err || !meta) {
           )}
 
           {!submitted &&
+           !isRetryMode &&
            originalQuestionCount !== null &&
            questions.length < originalQuestionCount && (
             <div className="rounded-2xl border border-[#5B35D5]/20 bg-[#EEEDFE] px-4 py-3 dark:border-[#5B35D5]/30 dark:bg-[#5B35D5]/10">
