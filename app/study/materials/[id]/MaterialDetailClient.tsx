@@ -31,6 +31,7 @@ import {
   Star,
   ThumbsUp,
   X,
+  Zap,
   ZoomIn,
   ZoomOut,
 } from "lucide-react";
@@ -1985,7 +1986,7 @@ export default function MaterialDetailClient({
                 <PenLine className="h-4 w-4 text-primary" />
                 Practice
               </p>
-              <p className="mt-1 text-xs text-muted-brand">Continue your open practice session for this material.</p>
+              <p className="mt-1 text-xs text-muted-brand">Generate AI practice questions from this material. 1 credit = 5 questions.</p>
             </div>
             <div className="p-4">
               <button
@@ -1993,7 +1994,7 @@ export default function MaterialDetailClient({
                 onClick={() => void openAiPracticeWorkspace()}
                 className="flex w-full items-center justify-center gap-2 rounded-2xl bg-primary px-4 py-3 text-sm font-bold text-white shadow-sm transition hover:opacity-90 focus-visible:outline-none"
               >
-                <PenLine className="h-4 w-4" /> Open practice session
+                <Sparkles className="h-4 w-4" /> Generate practice questions
               </button>
             </div>
           </div>
@@ -2132,30 +2133,6 @@ export default function MaterialDetailClient({
                       {writtenCount > 0 ? ` · Written ${writtenAnsweredCount}/${writtenCount}` : ""}
                     </p>
                   )}
-                  {generationAi && (quizState === "quiz" || quizState === "results") && (
-                    <p
-                      className="mt-1 max-w-[300px] truncate text-[11px] font-semibold text-muted-brand"
-                      title={`${generationAi.provider} · ${generationAi.model} · ${generationAi.inputMode}`}
-                    >
-                      {formatAiProvider(generationAi)} · {formatAiModel(generationAi)}
-                    </p>
-                  )}
-                  {generationAi?.fallbackReason && (quizState === "quiz" || quizState === "results") && (
-                    <p
-                      className="mt-0.5 max-w-[300px] line-clamp-2 text-[10px] font-medium leading-snug text-amber-700"
-                      title={generationAi.fallbackReason}
-                    >
-                      Fallback: {generationAi.fallbackReason}
-                    </p>
-                  )}
-                  {generationAi && formatAiReason(generationAi) && (quizState === "quiz" || quizState === "results") && (
-                    <p
-                      className="mt-0.5 max-w-[300px] line-clamp-2 text-[10px] font-medium leading-snug text-muted-brand"
-                      title={formatAiReason(generationAi)}
-                    >
-                      {formatAiReason(generationAi)}
-                    </p>
-                  )}
                 </div>
                 <button type="button" onClick={closeAiPracticeWorkspace}
                   className="grid h-9 w-9 shrink-0 place-items-center rounded-full border border-border bg-background text-muted-brand transition hover:bg-secondary/50 focus-visible:outline-none"
@@ -2170,23 +2147,61 @@ export default function MaterialDetailClient({
                 <>
                   <div className="flex-1 overflow-y-auto px-4 py-5 pb-36 md:px-6">
                     <div className="mx-auto max-w-2xl space-y-4">
-                      <div className="rounded-2xl border border-border bg-background px-4 py-3">
-                        <div className="min-w-0">
+                      {/* Cost / credit summary card — shown at the top before any options */}
+                      {generationTrust?.credits && !generationStatusLoading ? (() => {
+                        const { balance, cost, canAfford } = generationTrust.credits;
+                        const isFree = (generationTrust.dailyLimit?.remaining ?? 0) > 0;
+                        return (
+                          <div className={cn(
+                            "flex items-center justify-between gap-3 rounded-2xl border px-4 py-3",
+                            !canAfford
+                              ? "border-rose-200 bg-rose-50"
+                              : isFree
+                                ? "border-emerald-200 bg-emerald-50"
+                                : "border-border bg-background"
+                          )}>
+                            <div className="min-w-0">
+                              {!canAfford ? (
+                                <>
+                                  <p className="text-sm font-bold text-rose-700">Not enough credits</p>
+                                  <p className="mt-0.5 text-xs text-rose-600">
+                                    You need {cost} credit{cost !== 1 ? "s" : ""} but only have {balance}.{" "}
+                                    <Link href="/study/billing" className="font-bold underline">Top up →</Link>
+                                  </p>
+                                </>
+                              ) : isFree ? (
+                                <>
+                                  <p className="text-sm font-bold text-emerald-700">This generation is free</p>
+                                  <p className="mt-0.5 text-xs text-emerald-600">
+                                    {generationTrust.dailyLimit!.remaining} free generation{generationTrust.dailyLimit!.remaining !== 1 ? "s" : ""} left this month · {balance} credit{balance !== 1 ? "s" : ""} untouched
+                                  </p>
+                                </>
+                              ) : (
+                                <>
+                                  <p className="text-sm font-bold text-foreground">
+                                    Cost: {cost} credit{cost !== 1 ? "s" : ""}
+                                  </p>
+                                  <p className="mt-0.5 text-xs text-muted-brand">
+                                    {balance} credit{balance !== 1 ? "s" : ""} remaining after · 1 credit = 5 questions
+                                  </p>
+                                </>
+                              )}
+                            </div>
+                            <Zap className={cn("h-5 w-5 shrink-0", !canAfford ? "text-rose-400" : isFree ? "text-emerald-500" : "text-amber-500")} />
+                          </div>
+                        );
+                      })() : (
+                        <div className="rounded-2xl border border-border bg-background px-4 py-3">
                           <p className="text-sm font-bold text-foreground">
                             {resumableDraft ? "Unfinished draft available" : "Generate from this material"}
                           </p>
                           <p className="mt-0.5 text-xs text-muted-brand">
                             {resumableDraft
-                              ? `${resumableDraft.progress.answeredCount}/${resumableDraft.progress.totalCount} answered. Resume only if you want to continue it.`
-                              : "Choose the shape of this material-only practice session."}
+                              ? `${resumableDraft.progress.answeredCount}/${resumableDraft.progress.totalCount} answered. Resume to continue.`
+                              : "Configure your practice set below."}
                           </p>
-                          {!resumableDraft && (
-                            <p className="mt-2 text-xs font-semibold text-primary">
-                              Uploads like this can become practice questions for coursemates.
-                            </p>
-                          )}
                         </div>
-                      </div>
+                      )}
 
                       {resumableDraft && (
                         <button
@@ -2269,23 +2284,6 @@ export default function MaterialDetailClient({
                         />
                       </label>
 
-                      <div className="flex flex-wrap gap-2 text-xs font-semibold text-muted-brand">
-                        {generationTrust?.credits ? (
-                          <span className="rounded-full border border-border bg-background px-3 py-1.5">
-                            Credits: {generationTrust.credits.balance} left, cost {generationTrust.credits.cost}
-                          </span>
-                        ) : null}
-                        {generationTrust?.dailyLimit ? (
-                          <span className="rounded-full border border-border bg-background px-3 py-1.5">
-                            {dailyLimitLabel}
-                          </span>
-                        ) : null}
-                        {generationTrust?.message && !generationTrust.ok ? (
-                          <span className="rounded-full border border-rose-500/25 bg-rose-500/10 px-3 py-1.5 text-rose-700 dark:text-rose-300">
-                            {generationTrust.message}
-                          </span>
-                        ) : null}
-                      </div>
                     </div>
                   </div>
 
@@ -2633,7 +2631,17 @@ export default function MaterialDetailClient({
                     className="inline-flex w-full items-center justify-center gap-2 rounded-2xl border border-primary bg-primary-light px-4 py-3 text-sm font-semibold text-primary-text transition hover:opacity-90 disabled:opacity-50 focus-visible:outline-none">
                     {generatingMore
                       ? <><Loader2 className="h-4 w-4 animate-spin" /> Generating…</>
-                      : <><Sparkles className="h-4 w-4" /> Generate new questions</>
+                      : <>
+                          <Sparkles className="h-4 w-4" />
+                          Generate new questions
+                          {generationTrust?.credits && !generatingMore ? (
+                            <span className="ml-1 rounded-full bg-primary/15 px-2 py-0.5 text-[10px] font-bold">
+                              {(generationTrust.dailyLimit?.remaining ?? 0) > 0
+                                ? "free"
+                                : `${generationTrust.credits.cost} credit${generationTrust.credits.cost !== 1 ? "s" : ""}`}
+                            </span>
+                          ) : null}
+                        </>
                     }
                   </button>
                   {generatingMore && (
@@ -2664,6 +2672,7 @@ export default function MaterialDetailClient({
                       className="inline-flex w-full items-center justify-center gap-2 rounded-2xl border border-border bg-background px-4 py-3 text-sm font-semibold text-foreground transition hover:bg-secondary/50 focus-visible:outline-none">
                       <RotateCcw className="h-4 w-4" />
                       Retry missed ({missedList.length})
+                      <span className="ml-auto rounded-full border border-border bg-secondary px-2 py-0.5 text-[10px] font-bold text-muted-foreground">free</span>
                     </button>
                     <button
                       type="button"
@@ -2676,8 +2685,15 @@ export default function MaterialDetailClient({
                         : <>
                             <Sparkles className="h-4 w-4" />
                             {missedTopicsForDisplay.length > 0
-                              ? `You got ${missedList.length} wrong — practice ${missedTopicsForDisplay.join(" & ")}`
-                              : `Generate on what I got wrong (${missedList.length})`}
+                              ? `New questions on ${missedTopicsForDisplay.join(" & ")}`
+                              : `New questions on what I got wrong`}
+                            <span className="ml-auto rounded-full bg-primary/15 px-2 py-0.5 text-[10px] font-bold">
+                              {(generationTrust?.dailyLimit?.remaining ?? 0) > 0
+                                ? "free"
+                                : generationTrust?.credits
+                                  ? `${generationTrust.credits.cost} credit${generationTrust.credits.cost !== 1 ? "s" : ""}`
+                                  : "credits"}
+                            </span>
                           </>
                       }
                     </button>
