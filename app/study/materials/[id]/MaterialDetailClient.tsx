@@ -2171,18 +2171,18 @@ export default function MaterialDetailClient({
                                 </>
                               ) : isFree ? (
                                 <>
-                                  <p className="text-sm font-bold text-emerald-700">This generation is free</p>
+                                  <p className="text-sm font-bold text-emerald-700">Free — {quizConfig.count} questions</p>
                                   <p className="mt-0.5 text-xs text-emerald-600">
-                                    {generationTrust.dailyLimit!.remaining} free generation{generationTrust.dailyLimit!.remaining !== 1 ? "s" : ""} left this month · {balance} credit{balance !== 1 ? "s" : ""} untouched
+                                    {generationTrust.dailyLimit!.remaining} of {generationTrust.dailyLimit!.limit} free generations left this month
                                   </p>
                                 </>
                               ) : (
                                 <>
                                   <p className="text-sm font-bold text-foreground">
-                                    Cost: {cost} credit{cost !== 1 ? "s" : ""}
+                                    {cost} credit{cost !== 1 ? "s" : ""} — {quizConfig.count} questions
                                   </p>
                                   <p className="mt-0.5 text-xs text-muted-brand">
-                                    {balance} credit{balance !== 1 ? "s" : ""} remaining after · 1 credit = 5 questions
+                                    {balance - cost} credit{(balance - cost) !== 1 ? "s" : ""} left after · 1 credit = 5 questions
                                   </p>
                                 </>
                               )}
