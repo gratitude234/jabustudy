@@ -687,7 +687,7 @@ async function handleGenerateQuestionsRequest(req: NextRequest) {
     : [];
   const pooledCount = pooledQuestions.length;
   const aiQuestionCount = Math.max(0, questionCount - pooledCount);
-  const estimatedAiCreditCost = aiQuestionCount > 0 ? Math.max(1, Math.ceil(aiQuestionCount / 5)) : 0;
+  const estimatedAiCreditCost = Math.max(1, Math.ceil(questionCount / 5));
   const aiCoveredQuestions = [
     ...coveredQuestions,
     ...pooledQuestions.map((question) => question.question),
@@ -720,7 +720,7 @@ async function handleGenerateQuestionsRequest(req: NextRequest) {
 
   // ── Credits check ─────────────────────────────────────────────────────────
   const currentBalance = generationAccess.credits.balance;
-  if (aiQuestionCount > 0 && !generationAccess.allowed) {
+  if (!generationAccess.allowed) {
     return NextResponse.json(
       {
         ok: false,
@@ -874,7 +874,7 @@ Return ONLY a valid JSON object with no markdown, no backticks, no preamble:
         }
 
         const savedGeneratedCount = Math.max(0, draft?.generatedCount ?? chargeableCount);
-        const finalCreditCost = savedGeneratedCount > 0 ? Math.max(1, Math.ceil(savedGeneratedCount / 5)) : 0;
+        const finalCreditCost = savedCount > 0 ? Math.max(1, Math.ceil(savedCount / 5)) : 0;
         if (finalCreditCost > 0 && generationAccess.chargeMode === "free_monthly") {
           emitStatus("Confirming free monthly generation.", "free-ai-allowance");
           try {
