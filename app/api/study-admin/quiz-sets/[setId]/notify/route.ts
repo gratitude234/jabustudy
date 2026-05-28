@@ -11,10 +11,10 @@ export async function POST(
     const { setId } = await params;
     const admin = createSupabaseAdminClient();
 
-    // Fetch the quiz set + its course
+    // Fetch the quiz set
     const { data: set, error: setErr } = await admin
       .from("study_quiz_sets")
-      .select("id, title, questions_count, course_code, study_courses(id, department_id, level, semester)")
+      .select("id, title, questions_count, course_code, level, semester")
       .eq("id", setId)
       .maybeSingle();
 
@@ -22,7 +22,19 @@ export async function POST(
       return NextResponse.json({ ok: false, message: "Quiz set not found." }, { status: 404 });
     }
 
-    const course = Array.isArray(set.study_courses) ? set.study_courses[0] : set.study_courses;
+    if (!set.course_code) {
+      return NextResponse.json(
+        { ok: false, message: "No course code on this quiz set. Cannot target students." },
+        { status: 422 }
+      );
+    }
+
+    // Look up department_id via the course code
+    const { data: course } = await admin
+      .from("study_courses")
+      .select("department_id")
+      .eq("course_code", set.course_code)
+      .maybeSingle();
 
     if (!course?.department_id) {
       return NextResponse.json(
@@ -31,8 +43,8 @@ export async function POST(
       );
     }
 
-    const level = course.level;
-    const semester = String(course.semester ?? "").trim().toLowerCase();
+    const level = set.level;
+    const semester = String(set.semester ?? "").trim().toLowerCase();
 
     // Find students whose preferences match this course's dept/level/semester
     let usersQuery = admin
