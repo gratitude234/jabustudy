@@ -270,6 +270,12 @@ function fileTypeBadge(kind: "pdf" | "image" | "other", m: Material) {
   return "FILE";
 }
 
+function openFileLabel(badge: string) {
+  if (badge === "WORD") return "Open Word Document";
+  if (badge === "PPT") return "Open PowerPoint";
+  return "Open File";
+}
+
 function FileIcon({ kind }: { kind: "pdf" | "image" | "other" }) {
   if (kind === "pdf") return <FileText className="h-6 w-6" />;
   if (kind === "image") return <ImageIcon className="h-6 w-6" />;
@@ -1849,6 +1855,29 @@ export default function MaterialDetailClient({
             </div>
           </div>
 
+          {(course?.course_code || course?.level || course?.semester) && (
+            <div className="flex flex-wrap items-center gap-2">
+              {course?.course_code && (
+                <Link
+                  href={`/study/courses/${encodeURIComponent(course.course_code)}`}
+                  className="inline-flex items-center rounded-full border border-[#5B35D5]/20 bg-[#EEEDFE] px-3 py-1.5 text-xs font-bold text-[#3B24A8] transition hover:bg-[#5B35D5]/20 dark:border-[#5B35D5]/30 dark:bg-[#5B35D5]/10 dark:text-indigo-300"
+                >
+                  {course.course_code}
+                </Link>
+              )}
+              {course?.level && (
+                <span className="inline-flex items-center rounded-full border border-border bg-card px-3 py-1.5 text-xs font-semibold text-foreground">
+                  {course.level}L
+                </span>
+              )}
+              {course?.semester && (
+                <span className="inline-flex items-center rounded-full border border-border bg-card px-3 py-1.5 text-xs font-semibold text-foreground capitalize">
+                  {course.semester} semester
+                </span>
+              )}
+            </div>
+          )}
+
           <div className="grid grid-cols-[1fr_44px_44px_44px] gap-2 sm:grid-cols-[minmax(0,1.15fr)_minmax(0,1fr)_48px_48px]">
             <button
               type="button"
@@ -1924,16 +1953,20 @@ export default function MaterialDetailClient({
           {hasFile ? (
             <div className={cn(activeTab === "info" ? "hidden md:block" : "block")}>
               {kind === "other" ? (
-                <div className={cn(activeTab !== "read" ? "hidden md:flex" : "flex", "items-center gap-3 rounded-2xl border border-border bg-card p-4")}>
-                  <div className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-secondary text-muted-brand">
-                    <ExternalLink className="h-4 w-4" />
-                  </div>
-                  <div className="min-w-0">
-                    <p className="text-sm font-semibold text-foreground">Inline preview not available</p>
-                    <p className="mt-0.5 text-xs text-muted-brand">
-                      This file type ({badge}) can&apos;t be previewed here. Use &quot;Read {badge}&quot; to open it or &quot;Download&quot; to save it.
-                    </p>
-                  </div>
+                <div className={cn(activeTab !== "read" ? "hidden md:block" : "block")}>
+                  <a
+                    href={hasFile ? fileUrl : "#"}
+                    target="_blank"
+                    rel="noreferrer"
+                    onClick={hasFile ? () => void handleDownload() : (e) => e.preventDefault()}
+                    className={cn(
+                      "flex h-12 w-full items-center justify-center gap-2 rounded-2xl border border-primary bg-primary text-sm font-bold text-white shadow-sm transition hover:opacity-90",
+                      !hasFile && "pointer-events-none opacity-50"
+                    )}
+                  >
+                    <ExternalLink className="h-4 w-4 shrink-0" />
+                    {openFileLabel(badge)}
+                  </a>
                 </div>
               ) : (
                 <InlinePreview url={fileUrl} title={title} kind={kind} defaultOpen={activeTab === "read"} />
