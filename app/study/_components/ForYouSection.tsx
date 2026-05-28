@@ -415,7 +415,7 @@ export function ForYouSection({
 
       {loading ? (
         <div className="-mx-4 overflow-x-auto px-4 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-          <div className="flex gap-3 pb-1">
+          <div className="flex gap-3 pb-2 pl-px pt-1">
             <div className="w-[260px] shrink-0"><Skeleton /></div>
             <div className="w-[260px] shrink-0"><Skeleton /></div>
             <div className="w-[260px] shrink-0"><Skeleton /></div>
@@ -423,7 +423,7 @@ export function ForYouSection({
         </div>
       ) : sortedItems.length > 0 ? (
         <div className="-mx-4 overflow-x-auto px-4 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-          <div className="flex gap-3 pb-1">
+          <div className="flex gap-3 pb-2 pl-px pt-1">
             {sortedItems.map((material, index) => (
               <div key={material.id} className="w-[260px] shrink-0">
                 <MaterialCard

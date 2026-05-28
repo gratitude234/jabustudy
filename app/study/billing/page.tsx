@@ -95,6 +95,8 @@ function statusBadge(status: BillingOrder["status"]) {
   return <span className={cn("rounded-full px-2.5 py-0.5 text-xs font-semibold", cls)}>{label}</span>;
 }
 
+const PAYSTACK_ENABLED = process.env.NEXT_PUBLIC_PAYSTACK_ENABLED === "true";
+
 export default function StudyBillingPage() {
   const [snapshot, setSnapshot] = useState<BillingSnapshot | null>(null);
   const [loading, setLoading] = useState(true);
@@ -312,7 +314,7 @@ export default function StudyBillingPage() {
       </div>
 
       {/* Paystack payment confirmed banner */}
-      {pollStatus === "done" ? (
+      {PAYSTACK_ENABLED && pollStatus === "done" ? (
         <div className="flex items-center gap-3 rounded-2xl border border-emerald-200 bg-emerald-50 px-5 py-4">
           <CheckCircle2 className="h-5 w-5 shrink-0 text-emerald-600" />
           <div>
@@ -323,7 +325,7 @@ export default function StudyBillingPage() {
       ) : null}
 
       {/* Paystack payment taking too long banner */}
-      {pollStatus === "failed" ? (
+      {PAYSTACK_ENABLED && pollStatus === "failed" ? (
         <div className="rounded-2xl border border-amber-200 bg-amber-50 px-5 py-4 text-sm text-amber-800">
           <p className="font-bold">Still confirming your payment…</p>
           <p className="mt-0.5 text-xs">If you completed payment, your access will activate shortly. Refresh the page to check.</p>
@@ -366,7 +368,7 @@ export default function StudyBillingPage() {
             <p className="shrink-0 text-xl font-black tabular-nums text-foreground">{money(checkoutOrder.amountNaira)}</p>
           </div>
 
-          {checkoutOrder.paymentMethod === "paystack" && checkoutOrder.status === "pending_payment" ? (
+          {PAYSTACK_ENABLED && checkoutOrder.paymentMethod === "paystack" && checkoutOrder.status === "pending_payment" ? (
             <div className="px-5 py-6 text-center">
               <Loader2 className="mx-auto h-10 w-10 animate-spin text-primary" />
               <p className="mt-3 text-base font-bold text-foreground">Waiting for Paystack to confirm your payment…</p>
@@ -538,26 +540,30 @@ export default function StudyBillingPage() {
                       <li className="flex items-center gap-2"><CheckCircle2 className="h-3.5 w-3.5 shrink-0 text-emerald-500" /> Unlimited daily practice</li>
                       <li className="flex items-center gap-2"><CheckCircle2 className="h-3.5 w-3.5 shrink-0 text-emerald-500" /> {plan.credits} AI credits included</li>
                     </ul>
-                    <button
-                      type="button"
-                      onClick={() => payWithPaystack(plan.key)}
-                      disabled={busyPlan !== null}
-                      className="mt-4 inline-flex items-center justify-center gap-2 rounded-2xl bg-primary py-2.5 text-sm font-extrabold text-primary-foreground transition disabled:opacity-60"
-                    >
-                      {busyPlan === plan.key + "_ps" ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
-                      Pay instantly — {money(plan.amountNaira)}
-                    </button>
+                    {PAYSTACK_ENABLED ? (
+                      <button
+                        type="button"
+                        onClick={() => payWithPaystack(plan.key)}
+                        disabled={busyPlan !== null}
+                        className="mt-4 inline-flex items-center justify-center gap-2 rounded-2xl bg-primary py-2.5 text-sm font-extrabold text-primary-foreground transition disabled:opacity-60"
+                      >
+                        {busyPlan === plan.key + "_ps" ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+                        Pay instantly — {money(plan.amountNaira)}
+                      </button>
+                    ) : null}
                     <button
                       type="button"
                       onClick={() => choosePlan(plan.key)}
                       disabled={busyPlan !== null}
                       className={cn(
-                        "mt-2 inline-flex items-center justify-center gap-2 rounded-2xl py-2.5 text-sm font-semibold transition disabled:opacity-60",
-                        isMonthly ? "border border-primary/40 text-primary hover:bg-primary/5" : "border border-border text-muted-foreground hover:border-primary/40 hover:text-primary"
+                        "inline-flex items-center justify-center gap-2 rounded-2xl py-2.5 text-sm font-extrabold transition disabled:opacity-60",
+                        PAYSTACK_ENABLED
+                          ? (isMonthly ? "mt-2 border border-primary/40 text-primary hover:bg-primary/5" : "mt-2 border border-border text-muted-foreground hover:border-primary/40 hover:text-primary")
+                          : (isMonthly ? "mt-4 bg-primary text-primary-foreground" : "mt-4 border border-primary bg-transparent text-primary hover:bg-primary/5")
                       )}
                     >
                       {busyPlan === plan.key ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
-                      Pay by bank transfer
+                      {PAYSTACK_ENABLED ? "Pay by bank transfer" : `Get Plus — ${money(plan.amountNaira)}`}
                     </button>
                   </div>
                 );
@@ -582,15 +588,17 @@ export default function StudyBillingPage() {
                     <p className="mt-0.5 text-xs text-muted-foreground">{plan.credits * 5} AI questions</p>
                     <p className="mt-2.5 text-lg font-black text-foreground">{money(plan.amountNaira)}</p>
                   </div>
-                  <button
-                    type="button"
-                    onClick={() => payWithPaystack(plan.key)}
-                    disabled={busyPlan !== null}
-                    className="inline-flex items-center justify-center gap-1.5 rounded-xl bg-primary py-2 text-xs font-extrabold text-primary-foreground disabled:opacity-60"
-                  >
-                    {busyPlan === plan.key + "_ps" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}
-                    Pay instantly
-                  </button>
+                  {PAYSTACK_ENABLED ? (
+                    <button
+                      type="button"
+                      onClick={() => payWithPaystack(plan.key)}
+                      disabled={busyPlan !== null}
+                      className="inline-flex items-center justify-center gap-1.5 rounded-xl bg-primary py-2 text-xs font-extrabold text-primary-foreground disabled:opacity-60"
+                    >
+                      {busyPlan === plan.key + "_ps" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}
+                      Pay instantly
+                    </button>
+                  ) : null}
                   <button
                     type="button"
                     onClick={() => choosePlan(plan.key)}
@@ -598,7 +606,7 @@ export default function StudyBillingPage() {
                     className="inline-flex items-center justify-center gap-1.5 rounded-xl border border-border py-2 text-xs font-semibold text-muted-foreground hover:border-primary/40 hover:text-primary disabled:opacity-60"
                   >
                     {busyPlan === plan.key ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}
-                    Bank transfer
+                    {PAYSTACK_ENABLED ? "Bank transfer" : `${plan.credits} credits — ${money(plan.amountNaira)}`}
                   </button>
                 </div>
               ))}
@@ -606,7 +614,9 @@ export default function StudyBillingPage() {
           </div>
 
           <p className="text-center text-xs text-muted-foreground">
-            Pay instantly with Paystack, or by bank transfer (manual review, usually a few hours).
+            {PAYSTACK_ENABLED
+              ? "Pay instantly with Paystack, or by bank transfer (manual review, usually a few hours)."
+              : "Payment by bank transfer. Access activates after manual review (usually within a few hours)."}
           </p>
         </div>
       ) : null}

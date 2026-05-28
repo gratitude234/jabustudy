@@ -507,9 +507,11 @@ function MaterialCard({
                   {courseCode}
                 </Link>
               )}
-              <span className="rounded-full border border-border bg-background px-2 py-0.5 text-[11px] font-semibold text-muted-brand">
-                Helped {dlCount.toLocaleString("en-NG")} student{dlCount === 1 ? "" : "s"}
-              </span>
+              {dlCount > 0 && (
+                <span className="rounded-full border border-border bg-background px-2 py-0.5 text-[11px] font-semibold text-muted-brand">
+                  Helped {dlCount.toLocaleString("en-NG")} student{dlCount === 1 ? "" : "s"}
+                </span>
+              )}
               {isPopular && (
                 <span className="inline-flex items-center gap-1 rounded-full border border-amber-300/50 bg-amber-50 px-2 py-0.5 text-[10px] font-semibold text-amber-800 dark:border-amber-700/40 dark:bg-amber-950/30 dark:text-amber-300">Popular</span>
               )}

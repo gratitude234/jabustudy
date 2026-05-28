@@ -460,7 +460,9 @@ export default function MyUploadsPage() {
                           {courseMeta.join(" · ")}
                         </p>
                         <div className="mt-2 flex flex-wrap items-center gap-3 text-[11px] text-muted-brand">
-                          <span>Helped {(it.downloads ?? 0).toLocaleString()} student{(it.downloads ?? 0) === 1 ? "" : "s"}</span>
+                          {(it.downloads ?? 0) > 0 && (
+                            <span>Helped {(it.downloads ?? 0).toLocaleString()} student{(it.downloads ?? 0) === 1 ? "" : "s"}</span>
+                          )}
                           <span>Uploaded {formatDate(it.created_at)}</span>
                         </div>
                       </div>

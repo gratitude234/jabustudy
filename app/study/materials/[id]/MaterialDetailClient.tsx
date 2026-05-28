@@ -1841,7 +1841,9 @@ export default function MaterialDetailClient({
                 </div>
               </div>
               <div className="mt-4 flex flex-wrap gap-x-4 gap-y-2 border-t border-white/15 pt-3.5">
-                <HeroStat icon={Download}>Helped {downloads.toLocaleString("en-NG")} student{downloads === 1 ? "" : "s"}</HeroStat>
+                {downloads > 0 && (
+                  <HeroStat icon={Download}>Helped {downloads.toLocaleString("en-NG")} student{downloads === 1 ? "" : "s"}</HeroStat>
+                )}
                 <HeroStat icon={ThumbsUp}>{upvoteCount.toLocaleString("en-NG")} upvotes</HeroStat>
               </div>
             </div>
