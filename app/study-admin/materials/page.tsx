@@ -4,7 +4,7 @@ import { cn } from "@/lib/utils";
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import {
   Check,
   ExternalLink,
@@ -126,9 +126,15 @@ function IndexStatusBadge({ item }: { item: MaterialItem }) {
 
 export default function StudyAdminMaterialsPage() {
   const router = useRouter();
-  const [status, setStatus] = useState<"pending" | "approved" | "all">("pending");
+  const searchParams = useSearchParams();
+  const [status, setStatus] = useState<"pending" | "approved" | "all">(
+    () => {
+      const s = searchParams.get("status");
+      return s === "approved" || s === "all" ? s : "pending";
+    }
+  );
   const [brokenOnly, setBrokenOnly] = useState(false);
-  const [q, setQ] = useState("");
+  const [q, setQ] = useState(() => searchParams.get("q") ?? "");
   const [loading, setLoading] = useState(true);
   const [items, setItems] = useState<MaterialItem[]>([]);
   const [err, setErr] = useState<string | null>(null);

@@ -511,7 +511,8 @@ export async function notifyStudyAdminsNewMaterialUploaded({
     const uploaderHint = uploaderEmail ? ` from ${uploaderEmail.split("@")[0]}` : "";
     const notifTitle = "New material uploaded";
     const body = `${prefix}${shortTitle}${uploaderHint} is live. Download it to create practice questions.`;
-    const href = `/study/materials/${materialId}`;
+    const qParam = courseCode ? `&q=${encodeURIComponent(courseCode)}` : "";
+    const href = `/study-admin/materials?status=all${qParam}`;
 
     await admin.from("notifications").insert(
       recipientIds.map((uid) => ({
