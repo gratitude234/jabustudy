@@ -571,7 +571,7 @@ export function MaterialCard({
       href={href}
       onClick={onClick}
       className={cn(
-        "rounded-2xl border bg-card p-4 shadow-sm hover:bg-secondary/20",
+        "block h-full rounded-2xl border bg-card p-4 no-underline shadow-sm hover:bg-secondary/20",
         "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
         isWeak ? "border-amber-300/50 dark:border-amber-700/40" : "border-border"
       )}
