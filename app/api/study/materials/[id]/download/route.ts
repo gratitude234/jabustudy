@@ -34,7 +34,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
   // Load material + course scope info (for moderators)
   const { data: row, error } = await admin
     .from("study_materials")
-    .select("id, approved, uploader_id, file_path, course_id")
+    .select("id, approved, uploader_id, file_path, course_id, title")
     .eq("id", materialId)
     .maybeSingle();
 
@@ -45,6 +45,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
   const uploader_id = (row as any).uploader_id as string | null;
   const file_path = (row as any).file_path as string | null;
   const course_id = (row as any).course_id as string | null;
+  const title = ((row as any).title as string | null)?.trim() || "material";
 
   if (!file_path) return jsonError("File not ready", 409, "FILE_NOT_READY");
 
@@ -75,7 +76,11 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
     }
   }
 
-  const { data: signed, error: signErr } = await admin.storage.from(BUCKET).createSignedUrl(file_path, EXPIRES_IN_SECONDS);
+  const ext = file_path.split(".").pop()?.toLowerCase() ?? "";
+  const safeTitle = title.replace(/[^\w\s\-().]/g, "").trim() || "material";
+  const downloadName = ext ? `${safeTitle}.${ext}` : safeTitle;
+
+  const { data: signed, error: signErr } = await admin.storage.from(BUCKET).createSignedUrl(file_path, EXPIRES_IN_SECONDS, { download: preview ? false : downloadName });
   if (signErr) return jsonError(signErr.message || "Failed to sign download", 500, "SIGN_DOWNLOAD_FAILED");
 
   const url = (signed as any)?.signedUrl as string | undefined;

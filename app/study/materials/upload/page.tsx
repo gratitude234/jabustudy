@@ -140,11 +140,10 @@ const MATERIAL_TYPES: Array<{
   accept: string[];
 }> = [
   { key: "past_question", label: "Past question", icon: FileQuestion, hint: "Needs year", accept: ["application/pdf", "image/*"] },
+  { key: "note",          label: "Lecture note",    icon: BookOpen,    hint: "PDF",        accept: ["application/pdf"] },
   { key: "handout",       label: "Handout",        icon: FileText,    hint: "PDF",        accept: ["application/pdf"] },
   { key: "slides",        label: "Slides",          icon: Presentation,hint: "PDF",        accept: ["application/pdf"] },
-  { key: "note",          label: "Lecture note",    icon: BookOpen,    hint: "PDF",        accept: ["application/pdf"] },
   { key: "timetable",     label: "Timetable",       icon: Calendar,    hint: "PDF / img",  accept: ["application/pdf", "image/*"] },
-  { key: "other",         label: "Other",            icon: Paperclip,   hint: "PDF / img",  accept: ["application/pdf", "image/*"] },
 ];
 
 function normalizeMaterialTypeParam(value: string | null): MaterialType | null {
@@ -643,7 +642,7 @@ export default function UploadMaterialsPage() {
       hashing: true,
       parsed: null,
       title: "",
-      materialType: prefillMaterialType ?? "other",
+      materialType: prefillMaterialType ?? "note",
       pqYear: "" as const,
       pqSession: "",
       expanded: false,
@@ -656,7 +655,7 @@ export default function UploadMaterialsPage() {
       let hash: string | null = null;
       try { hash = await sha256(entry.file); } catch {}
 
-      const materialType = parsed.materialType ?? prefillMaterialType ?? "other";
+      const materialType = parsed.materialType ?? prefillMaterialType ?? "note";
       const typeLabel = materialType
         ? MATERIAL_TYPES.find((x) => x.key === materialType)?.label ?? ""
         : "";

@@ -285,7 +285,7 @@ function formatMaterialType(t: string | null) {
       note: "Lecture Note",
       slides: "Slides",
       timetable: "Timetable",
-      other: "Other",
+      other: "Material",
     }[t] ?? t
   );
 }

@@ -122,7 +122,7 @@ function formatDate(iso: string) {
 }
 
 function formatMaterialType(value: MaterialType | null) {
-  if (!value) return "Other";
+  if (!value || value === "other") return "Material";
   return value.replace(/_/g, " ");
 }
 
