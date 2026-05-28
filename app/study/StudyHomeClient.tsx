@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { BookOpen, ArrowRight, Calculator, Trophy, Zap } from "lucide-react";
+import { BookOpen, ArrowRight, Calculator, Trophy, Zap, ShieldCheck } from "lucide-react";
 import Link from "next/link";
 import { supabase } from "@/lib/supabase";
 import { trackHomeView, type StudyHomeHeroState } from "@/lib/studyAnalytics";
@@ -288,6 +288,17 @@ function StudyHomeInner() {
       />
 
       <QuickActions repStatus={rep.status} />
+
+      {!rep.loading && rep.status === "approved" ? (
+        <Link
+          href="/study-admin"
+          className="inline-flex items-center gap-2 self-start rounded-2xl border border-[#5B35D5]/20 bg-[#EEEDFE] px-3 py-2 text-xs font-semibold text-[#3B24A8] transition hover:bg-[#5B35D5]/20 dark:border-[#5B35D5]/30 dark:bg-[#5B35D5]/10 dark:text-indigo-300"
+        >
+          <ShieldCheck className="h-3.5 w-3.5" />
+          Study Admin
+          <ArrowRight className="h-3.5 w-3.5" />
+        </Link>
+      ) : null}
 
       {userId && totalAttempts !== null && totalAttempts > 0 ? (
         <StatsStrip userId={userId} />
