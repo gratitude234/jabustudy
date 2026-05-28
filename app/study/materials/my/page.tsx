@@ -38,14 +38,18 @@ type Item = {
   title: string | null;
   material_type: MaterialType | null;
   approved: boolean | null;
+  upload_status: string | null;
   downloads: number | null;
   created_at: string;
   description: string | null;
+  rejection_reason: string | null;
   study_courses?: CourseMini | null;
 };
 
 type MaterialRow = Omit<Item, "study_courses"> & {
   study_courses?: CourseMini | CourseMini[] | null;
+  rejection_reason?: string | null;
+  upload_status?: string | null;
 };
 
 type RepMeResponse = {
@@ -124,12 +128,12 @@ function formatMaterialType(value: MaterialType | null) {
 
 function StatusPill({
   approved,
-  note,
+  rejectionReason,
 }: {
   approved: boolean | null;
-  note?: string | null;
+  rejectionReason?: string | null;
 }) {
-  const looksRejected = approved === false && !!(note || "").trim();
+  const looksRejected = approved === false && !!(rejectionReason || "").trim();
   if (approved) {
     return (
       <span className="inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[10px] font-semibold text-emerald-700 dark:border-emerald-800/40 dark:bg-emerald-950/20 dark:text-emerald-400">
@@ -190,7 +194,7 @@ export default function MyUploadsPage() {
           supabase
             .from("study_materials")
             .select(
-              "id,title,material_type,approved,downloads,created_at,description,study_courses:course_id(course_code,course_title,level,semester)"
+              "id,title,material_type,approved,upload_status,downloads,created_at,description,rejection_reason,study_courses:course_id(course_code,course_title,level,semester)"
             )
             .eq("uploader_id", user.id)
             .order("created_at", { ascending: false })
@@ -450,7 +454,7 @@ export default function MyUploadsPage() {
                           <span className="inline-flex items-center rounded-full bg-primary-light px-2 py-0.5 text-[10px] font-semibold text-primary-text dark:bg-primary/10 dark:text-indigo-200">
                             {courseCode}
                           </span>
-                          <StatusPill approved={it.approved} note={it.description} />
+                          <StatusPill approved={it.approved} rejectionReason={it.rejection_reason} />
                         </div>
                         <p className="mt-1 text-xs text-muted-brand">
                           {courseMeta.join(" · ")}
@@ -466,19 +470,44 @@ export default function MyUploadsPage() {
                       </span>
                     </Link>
 
-                    {!it.approved && (it.description || "").trim() ? (
-                      <div
-                        className={cn(
-                          "mt-3 rounded-2xl border px-3 py-3 text-xs",
-                          "border-rose-200 bg-rose-50 text-rose-700",
-                          "dark:border-rose-800/40 dark:bg-rose-950/20 dark:text-rose-400"
-                        )}
-                      >
-                        <p className="font-semibold">Rejection note</p>
-                        <p className="mt-1">{it.description}</p>
-                        <p className="mt-2">Fix it and re-upload from the Upload page.</p>
-                      </div>
-                    ) : null}
+                    {(() => {
+                      if (it.approved) return null;
+                      const isBroken = it.upload_status === "broken" ||
+                        (it.description || "").startsWith("[BROKEN_UPLOAD");
+                      const adminNote = (it.rejection_reason || "").trim();
+                      if (isBroken) {
+                        return (
+                          <div className={cn(
+                            "mt-3 rounded-2xl border px-3 py-3 text-xs",
+                            "border-amber-200 bg-amber-50 text-amber-800",
+                            "dark:border-amber-700/40 dark:bg-amber-950/20 dark:text-amber-300"
+                          )}>
+                            <p className="font-semibold">Upload incomplete</p>
+                            <p className="mt-1">The file didn't reach our servers. Please try uploading it again.</p>
+                            <Link
+                              href="/study/materials/upload"
+                              className="mt-2 inline-flex items-center gap-1 font-semibold underline underline-offset-2 no-underline"
+                            >
+                              Re-upload
+                            </Link>
+                          </div>
+                        );
+                      }
+                      if (adminNote) {
+                        return (
+                          <div className={cn(
+                            "mt-3 rounded-2xl border px-3 py-3 text-xs",
+                            "border-rose-200 bg-rose-50 text-rose-700",
+                            "dark:border-rose-800/40 dark:bg-rose-950/20 dark:text-rose-400"
+                          )}>
+                            <p className="font-semibold">Rejection note</p>
+                            <p className="mt-1">{adminNote}</p>
+                            <p className="mt-2">Fix it and re-upload from the Upload page.</p>
+                          </div>
+                        );
+                      }
+                      return null;
+                    })()}
                   </div>
                 );
               })}

@@ -33,6 +33,7 @@ import {
   Paperclip,
   RefreshCw,
   File as FileIcon,
+  ExternalLink,
 } from "lucide-react";
 import { Card, EmptyState } from "../../_components/StudyUI";
 
@@ -118,6 +119,7 @@ type QueueEntry = {
   progress: number;
   error?: string;
   retryPayload?: UploadInitPayload;
+  duplicateOf?: { id: string; title?: string; created_at?: string } | null;
   courseId: string;
   title: string;
   materialType: MaterialType;
@@ -545,6 +547,14 @@ export default function UploadMaterialsPage() {
     try { window.localStorage.removeItem(DRAFT_KEY); } catch {}
   }
 
+  function addMoreFiles() {
+    setFiles([]);
+    setQueue([]);
+    setAutoFillBanner(false);
+    setStep(1);
+    // selectedCourseId, q, description preserved so the course stays selected
+  }
+
   // ── Derived ───────────────────────────────────────────────────────────────
 
   const filteredCourses = useMemo(() => {
@@ -613,6 +623,19 @@ export default function UploadMaterialsPage() {
   }
 
   function addFiles(newFiles: File[]) {
+    const MAX_BYTES = 52_428_800; // 50 MB
+    const oversized = newFiles.filter((f) => f.size > MAX_BYTES);
+    const valid = newFiles.filter((f) => f.size <= MAX_BYTES);
+    if (oversized.length) {
+      setBanner({
+        type: "error",
+        text: `${oversized.map((f) => f.name).join(", ")} ${oversized.length === 1 ? "is" : "are"} over 50 MB and cannot be uploaded.`,
+      });
+    }
+    if (!valid.length) return;
+    // eslint-disable-next-line no-param-reassign
+    newFiles = valid;
+
     const entries: FileEntry[] = newFiles.map((f) => ({
       id: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
       file: f,
@@ -793,6 +816,14 @@ export default function UploadMaterialsPage() {
         }).then((r) => r.json() as Promise<UploadInitResponse>);
 
         if (!initRes.ok) {
+          if ((initRes as any).code === "DUPLICATE_FOUND") {
+            updateQ({
+              status: "failed",
+              error: "This file already exists in the Study Hub.",
+              duplicateOf: (initRes as any).duplicate_of ?? null,
+            });
+            return;
+          }
           throw new Error(friendlyError(initRes.code, initRes.message));
         }
 
@@ -820,11 +851,12 @@ export default function UploadMaterialsPage() {
       );
       if (uploadErr) throw new Error((uploadErr as any).message || "File upload failed.");
 
-      // Complete
+      // Complete — check the result; a failure means the file didn't finalise server-side
+      let completeOk = false;
       try {
         const { data: sessionData } = await supabase.auth.getSession();
         const bearer = sessionData.session?.access_token;
-        await fetch("/api/study/materials/upload/complete", {
+        const completeRes = await fetch("/api/study/materials/upload/complete", {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
@@ -832,7 +864,14 @@ export default function UploadMaterialsPage() {
           },
           body: JSON.stringify({ material_id }),
         });
+        const completeJson = await completeRes.json().catch(() => ({}));
+        completeOk = completeRes.ok && completeJson?.ok === true;
       } catch {}
+
+      if (!completeOk) {
+        updateQ({ status: "failed", error: "Upload finalisation failed — please retry." });
+        return;
+      }
 
       updateQ({ status: "done", progress: 100, retryPayload: undefined });
     } catch (e: any) {
@@ -991,21 +1030,25 @@ export default function UploadMaterialsPage() {
           {/* Wizard step indicator */}
           {step !== "queue" && (
             <div className="flex items-center gap-1 text-xs text-muted-brand">
-              {([1, 2, 3] as const).map((s, i) => (
-                <span key={s} className="flex items-center gap-1">
-                  {i > 0 && <span className="opacity-30">›</span>}
-                  <span
-                    className={cn(
-                      "rounded-full px-2 py-0.5",
-                      step === s
-                        ? "font-semibold text-foreground"
+              {([1, 2, 3] as const).map((s, i) => {
+                const isDone = typeof step === "number" && step > s;
+                const isActive = step === s;
+                return (
+                  <span key={s} className="flex items-center gap-1">
+                    {i > 0 && <span className="opacity-30">›</span>}
+                    <span
+                      className={cn(
+                        "rounded-full px-2 py-0.5",
+                        isActive ? "font-semibold text-foreground"
+                        : isDone ? "text-emerald-600 dark:text-emerald-400"
                         : "opacity-50"
-                    )}
-                  >
-                    {s === 1 ? "Files" : s === 2 ? "Course" : "Details"}
+                      )}
+                    >
+                      {isDone ? "✓ " : ""}{s === 1 ? "Files" : s === 2 ? "Course" : "Details"}
+                    </span>
                   </span>
-                </span>
-              ))}
+                );
+              })}
             </div>
           )}
 
@@ -1021,7 +1064,6 @@ export default function UploadMaterialsPage() {
                 ref={fileInputRef}
                 type="file"
                 accept={ACCEPT_STR}
-                capture="environment"
                 multiple
                 className="sr-only"
                 onChange={(e) => {
@@ -1098,11 +1140,7 @@ export default function UploadMaterialsPage() {
                         <p className="truncate text-sm font-medium text-foreground">{f.file.name}</p>
                         <p className="text-xs text-muted-brand">
                           {fmtBytes(f.file.size)}
-                          {f.hashing
-                            ? " · Computing hash…"
-                            : f.hash
-                            ? ` · SHA-256: ${f.hash.slice(0, 12)}…`
-                            : ""}
+                          {f.hashing ? " · Checking for duplicates…" : ""}
                         </p>
                       </div>
                       {f.hashing && <Loader2 className="h-4 w-4 shrink-0 animate-spin text-muted-brand" />}
@@ -1134,7 +1172,7 @@ export default function UploadMaterialsPage() {
               </div>
 
               {/* Sticky (mobile) */}
-              <div className="fixed inset-x-0 bottom-0 z-40 border-t border-border bg-background/95 px-4 pb-4 pt-3 backdrop-blur sm:hidden">
+              <div className="fixed inset-x-0 bottom-0 z-[60] border-t border-border bg-background/95 px-4 pb-4 pt-3 backdrop-blur sm:hidden">
                 <button
                   type="button"
                   disabled={files.length === 0}
@@ -1347,7 +1385,14 @@ export default function UploadMaterialsPage() {
                 <button
                   type="button"
                   disabled={!selectedCourse}
-                  onClick={() => setStep(3)}
+                  onClick={() => {
+                    setFiles((prev) => prev.map((f) => {
+                      const needsInfo = f.materialType === "past_question" &&
+                        (!f.pqYear || !f.pqSession?.includes("/"));
+                      return needsInfo ? { ...f, expanded: true } : f;
+                    }));
+                    setStep(3);
+                  }}
                   className={cn(
                     "inline-flex items-center gap-2 rounded-2xl px-5 py-2.5 text-sm font-medium transition",
                     selectedCourse ? "bg-primary text-white" : "bg-secondary text-muted-brand"
@@ -1358,11 +1403,18 @@ export default function UploadMaterialsPage() {
               </div>
 
               {/* Sticky (mobile) */}
-              <div className="fixed inset-x-0 bottom-0 z-40 border-t border-border bg-background/95 px-4 pb-4 pt-3 backdrop-blur sm:hidden">
+              <div className="fixed inset-x-0 bottom-0 z-[60] border-t border-border bg-background/95 px-4 pb-4 pt-3 backdrop-blur sm:hidden">
                 <button
                   type="button"
                   disabled={!selectedCourse}
-                  onClick={() => setStep(3)}
+                  onClick={() => {
+                    setFiles((prev) => prev.map((f) => {
+                      const needsInfo = f.materialType === "past_question" &&
+                        (!f.pqYear || !f.pqSession?.includes("/"));
+                      return needsInfo ? { ...f, expanded: true } : f;
+                    }));
+                    setStep(3);
+                  }}
                   className={cn(
                     "w-full inline-flex items-center justify-center gap-2 rounded-2xl py-3.5 text-sm font-medium transition",
                     selectedCourse ? "bg-primary text-white" : "bg-secondary text-muted-brand"
@@ -1517,6 +1569,7 @@ export default function UploadMaterialsPage() {
                                     !f.pqSession.includes("/") ? "border-amber-400" : "border-border"
                                   )}
                                 />
+                                <p className="text-[11px] text-muted-brand">Format: 2022/2023</p>
                               </label>
                             </div>
                           )}
@@ -1558,7 +1611,7 @@ export default function UploadMaterialsPage() {
               </div>
 
               {/* Sticky (mobile) */}
-              <div className="fixed inset-x-0 bottom-0 z-40 border-t border-border bg-background/95 px-4 pb-4 pt-3 backdrop-blur sm:hidden">
+              <div className="fixed inset-x-0 bottom-0 z-[60] border-t border-border bg-background/95 px-4 pb-4 pt-3 backdrop-blur sm:hidden">
                 <button
                   type="button"
                   disabled={!canSubmitStep3}
@@ -1587,7 +1640,7 @@ export default function UploadMaterialsPage() {
                 </p>
                 <button
                   type="button"
-                  onClick={resetUpload}
+                  onClick={addMoreFiles}
                   className="inline-flex items-center gap-1.5 rounded-2xl border border-border bg-background px-3 py-1.5 text-xs font-medium text-foreground hover:bg-secondary/50"
                 >
                   <Plus className="h-3.5 w-3.5" /> Add more files
@@ -1734,17 +1787,29 @@ export default function UploadMaterialsPage() {
 
                     {/* Error + retry button */}
                     {qEntry.status === "failed" && (
-                      <div className="mt-2 flex items-center justify-between gap-2">
-                        <p className="min-w-0 truncate text-xs text-rose-700 dark:text-rose-400">
-                          {qEntry.error}
-                        </p>
-                        <button
-                          type="button"
-                          onClick={() => retryQueueEntry(qEntry.id)}
-                          className="inline-flex shrink-0 items-center gap-1.5 rounded-xl border border-rose-200 bg-rose-50 px-2 py-1 text-xs font-medium text-rose-700 hover:bg-rose-100"
-                        >
-                          <RefreshCw className="h-3 w-3" /> Retry upload
-                        </button>
+                      <div className="mt-2 space-y-1.5">
+                        <div className="flex items-center justify-between gap-2">
+                          <p className="min-w-0 truncate text-xs text-rose-700 dark:text-rose-400">
+                            {qEntry.error}
+                          </p>
+                          {!qEntry.duplicateOf && (
+                            <button
+                              type="button"
+                              onClick={() => retryQueueEntry(qEntry.id)}
+                              className="inline-flex shrink-0 items-center gap-1.5 rounded-xl border border-rose-200 bg-rose-50 px-2 py-1 text-xs font-medium text-rose-700 hover:bg-rose-100"
+                            >
+                              <RefreshCw className="h-3 w-3" /> Retry upload
+                            </button>
+                          )}
+                        </div>
+                        {qEntry.duplicateOf?.id && (
+                          <Link
+                            href={`/study/materials/${qEntry.duplicateOf.id}`}
+                            className="inline-flex items-center gap-1 text-[11px] font-medium text-primary underline underline-offset-2"
+                          >
+                            View existing material <ExternalLink className="h-3 w-3" />
+                          </Link>
+                        )}
                       </div>
                     )}
                   </div>
