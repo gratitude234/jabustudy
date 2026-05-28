@@ -324,6 +324,65 @@ export async function sendRepRejectedEmail({
   }
 }
 
+// ─── New quiz set ──────────────────────────────────────────────────────────────
+
+export async function sendNewQuizSetEmail({
+  userIds,
+  setId,
+  title,
+  courseCode,
+  questionsCount,
+}: {
+  userIds: string[];
+  setId: string;
+  title: string | null;
+  courseCode: string | null;
+  questionsCount: number;
+}): Promise<void> {
+  if (!userIds.length) return;
+  try {
+    const admin = createSupabaseAdminClient();
+    const href = `${SITE_URL}/study/practice/${setId}`;
+    const count = questionsCount;
+    const qLabel = `${count} question${count === 1 ? "" : "s"}`;
+    const setLabel = title ?? (courseCode ? `${courseCode} Practice Set` : "Practice Set");
+    const subject = courseCode
+      ? `New practice set for ${courseCode} — ${qLabel}`
+      : `New practice set available — ${qLabel}`;
+
+    const html = emailLayout(`
+      ${heading("New practice set available ⚡")}
+      ${para(courseCode
+        ? `A new practice set for <strong>${courseCode}</strong> has been published on Jabu Study.`
+        : "A new practice set has been published on Jabu Study.")}
+      ${blockquote(`${setLabel} — ${qLabel} ready to practice`)}
+      ${btn("Start Practising", href)}
+      ${muted("Test your knowledge while the material is fresh!")}
+    `);
+
+    const { data: users } = await admin.auth.admin.listUsers({ perPage: 1000 });
+    const idSet = new Set(userIds);
+    const emails = (users?.users ?? [])
+      .filter(u => idSet.has(u.id) && u.email)
+      .map(u => u.email as string);
+
+    if (!emails.length) return;
+
+    const resend = getResend();
+    for (let i = 0; i < emails.length; i += 100) {
+      const batch = emails.slice(i, i + 100).map(to => ({
+        from: FROM,
+        to,
+        subject,
+        html,
+      }));
+      await resend.batch.send(batch);
+    }
+  } catch {
+    // Email failure must never block the notify flow
+  }
+}
+
 // ─── New material in department ────────────────────────────────────────────────
 
 export async function sendNewMaterialEmail({
