@@ -327,21 +327,20 @@ export async function sendRepRejectedEmail({
 // ─── New quiz set ──────────────────────────────────────────────────────────────
 
 export async function sendNewQuizSetEmail({
-  userIds,
+  emails,
   setId,
   title,
   courseCode,
   questionsCount,
 }: {
-  userIds: string[];
+  emails: string[];
   setId: string;
   title: string | null;
   courseCode: string | null;
   questionsCount: number;
 }): Promise<void> {
-  if (!userIds.length) return;
+  if (!emails.length) return;
   try {
-    const admin = createSupabaseAdminClient();
     const href = `${SITE_URL}/study/practice/${setId}`;
     const count = questionsCount;
     const qLabel = `${count} question${count === 1 ? "" : "s"}`;
@@ -360,14 +359,6 @@ export async function sendNewQuizSetEmail({
       ${muted("Test your knowledge while the material is fresh!")}
     `);
 
-    const { data: users } = await admin.auth.admin.listUsers({ perPage: 1000 });
-    const idSet = new Set(userIds);
-    const emails = (users?.users ?? [])
-      .filter(u => idSet.has(u.id) && u.email)
-      .map(u => u.email as string);
-
-    if (!emails.length) return;
-
     const resend = getResend();
     for (let i = 0; i < emails.length; i += 100) {
       const batch = emails.slice(i, i + 100).map(to => ({
@@ -378,8 +369,8 @@ export async function sendNewQuizSetEmail({
       }));
       await resend.batch.send(batch);
     }
-  } catch {
-    // Email failure must never block the notify flow
+  } catch (err) {
+    console.error("[sendNewQuizSetEmail]", err);
   }
 }
 

@@ -81,6 +81,15 @@ export async function POST(
 
     const allIds = (users as { user_id: string }[]).map((u) => u.user_id);
 
+    // Resolve emails for matched users (parallel, before response so serverless fn stays alive)
+    const emailLookups = await Promise.allSettled(
+      allIds.map((id) => admin.auth.admin.getUserById(id))
+    );
+    const recipientEmails = emailLookups
+      .filter((r): r is PromiseFulfilledResult<Awaited<ReturnType<typeof admin.auth.admin.getUserById>>> =>
+        r.status === "fulfilled" && !!r.value.data.user?.email)
+      .map((r) => r.value.data.user!.email as string);
+
     // Web push — fire-and-forget
     void (async () => {
       try {
@@ -99,13 +108,15 @@ export async function POST(
       try {
         const { sendNewQuizSetEmail } = await import("@/lib/email");
         await sendNewQuizSetEmail({
-          userIds: allIds,
+          emails: recipientEmails,
           setId,
           title: set.title,
           courseCode: set.course_code,
           questionsCount: count,
         });
-      } catch { /* never break */ }
+      } catch (err) {
+        console.error("[notify] email error:", err);
+      }
     })();
 
     return NextResponse.json({ ok: true, notified: rows.length });
