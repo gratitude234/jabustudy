@@ -941,7 +941,7 @@ export default function MaterialDetailClient({
   const [resumableDraft, setResumableDraft] = useState<ResumableAiDraft | null>(null);
   const [activeDraftSetId, setActiveDraftSetId] = useState<string | null>(null);
   const [activeAttemptId, setActiveAttemptId] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<"practice" | "read" | "info">("practice");
+  const [activeTab, setActiveTab] = useState<"practice" | "read" | "info">("read");
 
   // Quiz state machine
   const [quizState, setQuizState] = useState<"idle" | "configure" | "loading" | "quiz" | "results">("idle");
@@ -1901,6 +1901,25 @@ export default function MaterialDetailClient({
               <Share2 className="h-4 w-4" />
             </button>
           </div>
+
+          {activeTab === "read" && (
+            <button
+              type="button"
+              onClick={() => void openAiPracticeWorkspace()}
+              className="flex w-full items-center justify-between gap-3 rounded-2xl border border-primary/30 bg-primary/5 px-4 py-3.5 text-left transition hover:bg-primary/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+            >
+              <div className="flex items-center gap-3">
+                <div className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-primary text-white">
+                  <Zap className="h-4 w-4" />
+                </div>
+                <div>
+                  <p className="text-sm font-extrabold text-foreground">Practice from this material</p>
+                  <p className="text-xs text-muted-brand">Turn it into AI-powered MCQs · 1 credit = 5 questions</p>
+                </div>
+              </div>
+              <ChevronRight className="h-4 w-4 shrink-0 text-primary" />
+            </button>
+          )}
 
           {hasFile ? (
             <div className={cn(activeTab === "info" ? "hidden md:block" : "block")}>
