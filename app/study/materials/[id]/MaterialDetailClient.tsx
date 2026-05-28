@@ -1847,7 +1847,7 @@ export default function MaterialDetailClient({
             </div>
           </div>
 
-          <div className="grid grid-cols-[minmax(0,1.25fr)_minmax(0,1fr)_44px_44px] gap-2 sm:grid-cols-[minmax(0,1.15fr)_minmax(0,1fr)_48px_48px]">
+          <div className="grid grid-cols-[1fr_44px_44px_44px] gap-2 sm:grid-cols-[minmax(0,1.15fr)_minmax(0,1fr)_48px_48px]">
             <button
               type="button"
               onClick={() => setPreviewOpen(true)}
@@ -1860,6 +1860,7 @@ export default function MaterialDetailClient({
             <a
               href={hasFile ? fileUrl : "#"}
               download
+              aria-label="Download"
               onClick={(e) => {
                 if (!hasFile) {
                   e.preventDefault();
@@ -1868,12 +1869,13 @@ export default function MaterialDetailClient({
                 void handleDownload();
               }}
               className={cn(
-                "inline-flex h-12 min-w-0 items-center justify-center gap-2 rounded-2xl border border-border bg-card px-3 text-sm font-bold text-foreground shadow-sm transition hover:bg-secondary/50",
+                "flex h-12 w-full shrink-0 items-center justify-center rounded-2xl border border-border bg-card text-foreground shadow-sm transition hover:bg-secondary/50",
+                "sm:min-w-0 sm:gap-2 sm:px-3 sm:text-sm sm:font-bold",
                 !hasFile && "pointer-events-none opacity-50"
               )}
             >
               <Download className="h-4 w-4 shrink-0" />
-              <span className="truncate">Download</span>
+              <span className="hidden sm:inline truncate">Download</span>
             </a>
             <button
               type="button"
@@ -1900,7 +1902,21 @@ export default function MaterialDetailClient({
 
           {hasFile ? (
             <div className={cn(activeTab === "info" ? "hidden md:block" : "block")}>
-              <InlinePreview url={fileUrl} title={title} kind={kind} defaultOpen={activeTab === "read"} />
+              {kind === "other" ? (
+                <div className={cn(activeTab !== "read" ? "hidden md:flex" : "flex", "items-center gap-3 rounded-2xl border border-border bg-card p-4")}>
+                  <div className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-secondary text-muted-brand">
+                    <ExternalLink className="h-4 w-4" />
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-sm font-semibold text-foreground">Inline preview not available</p>
+                    <p className="mt-0.5 text-xs text-muted-brand">
+                      This file type ({badge}) can&apos;t be previewed here. Use &quot;Read {badge}&quot; to open it or &quot;Download&quot; to save it.
+                    </p>
+                  </div>
+                </div>
+              ) : (
+                <InlinePreview url={fileUrl} title={title} kind={kind} defaultOpen={activeTab === "read"} />
+              )}
             </div>
           ) : (
             <div className="rounded-2xl border border-border bg-card p-5 text-sm text-muted-brand">

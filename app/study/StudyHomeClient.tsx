@@ -466,7 +466,7 @@ function MyCourses({ scopeLabel }: { scopeLabel: string | null }) {
     return (
       <div className="space-y-3">
         <div className="h-5 w-28 animate-pulse rounded-full bg-muted" />
-        <div className="grid gap-3 sm:grid-cols-2">
+        <div className="grid grid-cols-2 gap-3">
           {[0, 1, 2, 3].map((i) => (
             <div key={i} className="h-20 animate-pulse rounded-2xl bg-muted" />
           ))}
@@ -509,13 +509,13 @@ function MyCourses({ scopeLabel }: { scopeLabel: string | null }) {
       </div>
 
       {coursesLoading ? (
-        <div className="grid gap-3 sm:grid-cols-2">
+        <div className="grid grid-cols-2 gap-3">
           {[0, 1, 2, 3].map((i) => (
             <div key={i} className="h-20 animate-pulse rounded-2xl bg-muted" />
           ))}
         </div>
       ) : courses.length > 0 ? (
-        <div className="grid gap-3 sm:grid-cols-2">
+        <div className="grid grid-cols-2 gap-3">
           {courses.map((course) => (
             <Link
               key={course.id}

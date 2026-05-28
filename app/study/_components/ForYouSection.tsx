@@ -414,27 +414,33 @@ export function ForYouSection({
       </div>
 
       {loading ? (
-        <div className="grid gap-3 sm:grid-cols-2">
-          <Skeleton />
-          <Skeleton />
+        <div className="-mx-4 overflow-x-auto px-4 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+          <div className="flex gap-3 pb-1">
+            <div className="w-[260px] shrink-0"><Skeleton /></div>
+            <div className="w-[260px] shrink-0"><Skeleton /></div>
+            <div className="w-[260px] shrink-0"><Skeleton /></div>
+          </div>
         </div>
       ) : sortedItems.length > 0 ? (
-        <div className="grid gap-3 sm:grid-cols-2">
-          {sortedItems.map((material, index) => (
-            <MaterialCard
-              key={material.id}
-              m={material}
-              weakAccuracy={weakAreas.get((material.course_code ?? "").toUpperCase())}
-              context="for-you"
-              onClick={() =>
-                trackHomeCta("for_you_card", {
-                  material_id: material.id,
-                  material_type: material.material_type,
-                  position: index + 1,
-                })
-              }
-            />
-          ))}
+        <div className="-mx-4 overflow-x-auto px-4 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+          <div className="flex gap-3 pb-1">
+            {sortedItems.map((material, index) => (
+              <div key={material.id} className="w-[260px] shrink-0">
+                <MaterialCard
+                  m={material}
+                  weakAccuracy={weakAreas.get((material.course_code ?? "").toUpperCase())}
+                  context="for-you"
+                  onClick={() =>
+                    trackHomeCta("for_you_card", {
+                      material_id: material.id,
+                      material_type: material.material_type,
+                      position: index + 1,
+                    })
+                  }
+                />
+              </div>
+            ))}
+          </div>
         </div>
       ) : hasChips ? (
         <EmptyState

@@ -94,6 +94,8 @@ export type BillingOrderRow = {
   admin_note: string | null;
   created_at: string;
   updated_at: string;
+  payment_method: "manual" | "paystack";
+  paystack_reference: string | null;
 };
 
 function httpError(message: string, status: number, code: string) {
@@ -610,7 +612,126 @@ export function normalizeOrder(row: BillingOrderRow) {
     createdAt: row.created_at,
     updatedAt: row.updated_at,
     expiresAt: new Date(new Date(row.created_at).getTime() + 48 * 3_600_000).toISOString(),
+    paymentMethod: (row.payment_method ?? "manual") as "manual" | "paystack",
+    paystackReference: row.paystack_reference ?? null,
   };
+}
+
+export async function createPaystackBillingOrder(userId: string, planKey: unknown) {
+  const plan = getBillingPlan(planKey);
+  const reference = await uniqueReference();
+  const now = new Date().toISOString();
+
+  const { data, error } = await adminSupabase
+    .from("study_billing_orders")
+    .insert({
+      user_id: userId,
+      product_type: plan.productType,
+      plan_key: plan.key,
+      amount_naira: plan.amountNaira,
+      credits: plan.credits,
+      plus_days: plan.plusDays,
+      reference,
+      status: "pending_payment",
+      payment_method: "paystack",
+      updated_at: now,
+    } as never)
+    .select("*")
+    .single();
+
+  if (error || !data) throw httpError(error?.message || "Could not create order.", 500, "ORDER_CREATE_FAILED");
+  return normalizeOrder(data as BillingOrderRow);
+}
+
+export async function approvePaystackBillingOrder(orderId: string, paystackTxnId: string) {
+  const { data: order, error } = await adminSupabase
+    .from("study_billing_orders")
+    .select("*")
+    .eq("id", orderId)
+    .maybeSingle();
+
+  if (error) throw httpError(error.message, 500, "DB_ERROR");
+  if (!order?.id) throw httpError("Order not found.", 404, "ORDER_NOT_FOUND");
+
+  const row = order as BillingOrderRow;
+  if (row.status === "approved") return normalizeOrder(row);
+  if (row.payment_method !== "paystack") throw httpError("Not a Paystack order.", 409, "WRONG_PAYMENT_METHOD");
+  if (row.status !== "pending_payment") throw httpError("Order cannot be approved.", 409, "ORDER_NOT_APPROVABLE");
+
+  const plan = getBillingPlan(row.plan_key);
+  const now = new Date();
+
+  if (plan.productType === "plus" && plan.plusDays) {
+    const current = await getPlusRow(row.user_id);
+    const baseMs = current?.active_until && new Date(current.active_until).getTime() > now.getTime()
+      ? new Date(current.active_until).getTime()
+      : now.getTime();
+    const activeUntil = new Date(baseMs + plan.plusDays * 86_400_000).toISOString();
+
+    const { error: entitlementError } = await adminSupabase
+      .from("study_plus_entitlements")
+      .upsert({
+        user_id: row.user_id,
+        plan_key: plan.key,
+        active_until: activeUntil,
+        last_order_id: row.id,
+        updated_at: now.toISOString(),
+      } as never, { onConflict: "user_id" });
+    if (entitlementError) throw httpError(entitlementError.message, 500, "PLUS_ACTIVATION_FAILED");
+
+    if (plan.credits > 0) {
+      await grantCredits({
+        userId: row.user_id,
+        amount: plan.credits,
+        reason: "plus_grant",
+        orderId: row.id,
+        metadata: { planKey: plan.key, activeUntil },
+      });
+    }
+  } else if (plan.productType === "credits") {
+    await grantCredits({
+      userId: row.user_id,
+      amount: plan.credits,
+      reason: "purchase",
+      orderId: row.id,
+      metadata: { planKey: plan.key },
+    });
+  }
+
+  const reviewedAt = now.toISOString();
+  const { data: updated, error: updateError } = await adminSupabase
+    .from("study_billing_orders")
+    .update({
+      status: "approved",
+      reviewed_by: null,
+      reviewed_at: reviewedAt,
+      admin_note: "paystack-auto",
+      paystack_reference: paystackTxnId,
+      updated_at: reviewedAt,
+    } as never)
+    .eq("id", row.id)
+    .select("*")
+    .single();
+
+  if (updateError || !updated) throw httpError(updateError?.message || "Order approval failed.", 500, "ORDER_APPROVE_FAILED");
+  void notifyBillingUser(row.user_id, {
+    title: "Payment confirmed",
+    body: `${plan.label} is now active on your account.`,
+  });
+  return normalizeOrder(updated as BillingOrderRow);
+}
+
+export async function getOrderByReference(reference: string, userId: string) {
+  const { data, error } = await adminSupabase
+    .from("study_billing_orders")
+    .select("*")
+    .eq("reference", reference)
+    .eq("user_id", userId)
+    .maybeSingle();
+
+  if (error) throw httpError(error.message, 500, "DB_ERROR");
+  if (!data?.id) return null;
+  return normalizeOrder(data as BillingOrderRow);
 }
 
 export async function signedReceiptUrl(path: string | null | undefined) {

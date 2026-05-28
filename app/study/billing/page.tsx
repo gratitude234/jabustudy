@@ -44,6 +44,8 @@ type BillingOrder = {
   createdAt: string;
   expiresAt: string;
   adminNote: string | null;
+  paymentMethod: "manual" | "paystack";
+  paystackReference: string | null;
 };
 
 type BillingSnapshot = {
@@ -99,6 +101,8 @@ export default function StudyBillingPage() {
   const [busyPlan, setBusyPlan] = useState<string | null>(null);
   const [cancellingId, setCancellingId] = useState<string | null>(null);
   const [checkoutOrderId, setCheckoutOrderId] = useState<string | null>(null);
+  const [paystackRef, setPaystackRef] = useState<string | null>(null);
+  const [pollStatus, setPollStatus] = useState<"idle" | "polling" | "done" | "failed">("idle");
   const [file, setFile] = useState<File | null>(null);
   const [senderName, setSenderName] = useState("");
   const [senderBank, setSenderBank] = useState("");
@@ -136,7 +140,42 @@ export default function StudyBillingPage() {
     }
   }
 
-  useEffect(() => { const t = window.setTimeout(() => { void load(); }, 0); return () => window.clearTimeout(t); }, []);
+  useEffect(() => {
+    const t = window.setTimeout(() => {
+      const ref = new URLSearchParams(window.location.search).get("ref");
+      if (ref) setPaystackRef(ref);
+      void load();
+    }, 0);
+    return () => window.clearTimeout(t);
+  }, []);
+
+  useEffect(() => {
+    if (!paystackRef || pollStatus !== "idle") return;
+    setPollStatus("polling");
+    let attempts = 0;
+    const interval = window.setInterval(async () => {
+      attempts++;
+      try {
+        const res = await fetch(`/api/billing/orders/status?ref=${encodeURIComponent(paystackRef)}`);
+        const data = await res.json().catch(() => null) as { ok?: boolean; order?: BillingOrder } | null;
+        if (data?.ok && data.order?.status === "approved") {
+          window.clearInterval(interval);
+          history.replaceState(null, "", window.location.pathname);
+          setPollStatus("done");
+          await load();
+        } else if (attempts >= 15) {
+          window.clearInterval(interval);
+          setPollStatus("failed");
+        }
+      } catch {
+        if (attempts >= 15) {
+          window.clearInterval(interval);
+          setPollStatus("failed");
+        }
+      }
+    }, 2000);
+    return () => window.clearInterval(interval);
+  }, [paystackRef, pollStatus]);
 
   const plusPlans = useMemo(() => snapshot?.plans.filter((p) => p.productType === "plus") ?? [], [snapshot]);
   const creditPlans = useMemo(() => snapshot?.plans.filter((p) => p.productType === "credits") ?? [], [snapshot]);
@@ -163,6 +202,23 @@ export default function StudyBillingPage() {
     } catch (err) {
       showToast(err instanceof Error ? err.message : "Could not create order.", "err");
     } finally {
+      setBusyPlan(null);
+    }
+  }
+
+  async function payWithPaystack(planKey: string) {
+    setBusyPlan(planKey + "_ps");
+    try {
+      const res = await fetch("/api/billing/orders/paystack/init", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ planKey }),
+      });
+      const data = await res.json().catch(() => null) as { ok?: boolean; authorizationUrl?: string; message?: string } | null;
+      if (!res.ok || !data?.ok || !data.authorizationUrl) throw new Error(data?.message ?? "Could not initialize payment.");
+      window.location.href = data.authorizationUrl;
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : "Payment failed.", "err");
       setBusyPlan(null);
     }
   }
@@ -255,6 +311,25 @@ export default function StudyBillingPage() {
         </Link>
       </div>
 
+      {/* Paystack payment confirmed banner */}
+      {pollStatus === "done" ? (
+        <div className="flex items-center gap-3 rounded-2xl border border-emerald-200 bg-emerald-50 px-5 py-4">
+          <CheckCircle2 className="h-5 w-5 shrink-0 text-emerald-600" />
+          <div>
+            <p className="text-sm font-extrabold text-emerald-800">Payment confirmed!</p>
+            <p className="text-xs text-emerald-700">Your access has been activated.</p>
+          </div>
+        </div>
+      ) : null}
+
+      {/* Paystack payment taking too long banner */}
+      {pollStatus === "failed" ? (
+        <div className="rounded-2xl border border-amber-200 bg-amber-50 px-5 py-4 text-sm text-amber-800">
+          <p className="font-bold">Still confirming your payment…</p>
+          <p className="mt-0.5 text-xs">If you completed payment, your access will activate shortly. Refresh the page to check.</p>
+        </div>
+      ) : null}
+
       {/* Current status — compact bar */}
       {snapshot ? (
         <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 rounded-2xl border border-border bg-card px-4 py-3 text-sm">
@@ -291,7 +366,22 @@ export default function StudyBillingPage() {
             <p className="shrink-0 text-xl font-black tabular-nums text-foreground">{money(checkoutOrder.amountNaira)}</p>
           </div>
 
-          {checkoutOrder.status === "pending_review" ? (
+          {checkoutOrder.paymentMethod === "paystack" && checkoutOrder.status === "pending_payment" ? (
+            <div className="px-5 py-6 text-center">
+              <Loader2 className="mx-auto h-10 w-10 animate-spin text-primary" />
+              <p className="mt-3 text-base font-bold text-foreground">Waiting for Paystack to confirm your payment…</p>
+              <p className="mt-1 text-sm text-muted-foreground">This happens automatically. You can safely close this page and come back.</p>
+              <button
+                type="button"
+                onClick={() => cancelOrder(checkoutOrder.id)}
+                disabled={cancellingId === checkoutOrder.id}
+                className="mt-4 inline-flex items-center gap-1.5 rounded-2xl border border-border px-4 py-2.5 text-sm font-semibold text-muted-foreground hover:border-rose-300 hover:text-rose-600 disabled:opacity-60"
+              >
+                {cancellingId === checkoutOrder.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <X className="h-4 w-4" />}
+                Cancel order
+              </button>
+            </div>
+          ) : checkoutOrder.status === "pending_review" ? (
             <div className="px-5 py-6 text-center">
               <CheckCircle2 className="mx-auto h-10 w-10 text-emerald-500" />
               <p className="mt-3 text-base font-bold text-foreground">Receipt submitted</p>
@@ -450,15 +540,24 @@ export default function StudyBillingPage() {
                     </ul>
                     <button
                       type="button"
+                      onClick={() => payWithPaystack(plan.key)}
+                      disabled={busyPlan !== null}
+                      className="mt-4 inline-flex items-center justify-center gap-2 rounded-2xl bg-primary py-2.5 text-sm font-extrabold text-primary-foreground transition disabled:opacity-60"
+                    >
+                      {busyPlan === plan.key + "_ps" ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+                      Pay instantly — {money(plan.amountNaira)}
+                    </button>
+                    <button
+                      type="button"
                       onClick={() => choosePlan(plan.key)}
                       disabled={busyPlan !== null}
                       className={cn(
-                        "mt-4 inline-flex items-center justify-center gap-2 rounded-2xl py-2.5 text-sm font-extrabold transition disabled:opacity-60",
-                        isMonthly ? "bg-primary text-primary-foreground" : "border border-primary bg-transparent text-primary hover:bg-primary/5"
+                        "mt-2 inline-flex items-center justify-center gap-2 rounded-2xl py-2.5 text-sm font-semibold transition disabled:opacity-60",
+                        isMonthly ? "border border-primary/40 text-primary hover:bg-primary/5" : "border border-border text-muted-foreground hover:border-primary/40 hover:text-primary"
                       )}
                     >
                       {busyPlan === plan.key ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
-                      Get Plus — {money(plan.amountNaira)}
+                      Pay by bank transfer
                     </button>
                   </div>
                 );
@@ -474,32 +573,40 @@ export default function StudyBillingPage() {
             </div>
             <div className="grid gap-3 sm:grid-cols-3">
               {creditPlans.map((plan) => (
-                <button
+                <div
                   key={plan.key}
-                  type="button"
-                  onClick={() => choosePlan(plan.key)}
-                  disabled={busyPlan !== null}
-                  className={cn(
-                    "group flex items-center justify-between gap-3 rounded-2xl border border-border bg-card px-4 py-4 text-left transition",
-                    "hover:border-primary/50 hover:bg-primary/5 hover:shadow-sm",
-                    "active:scale-[0.98] active:bg-primary/10",
-                    "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
-                    "disabled:opacity-60"
-                  )}
+                  className="flex flex-col gap-2 rounded-2xl border border-border bg-card px-4 py-4"
                 >
                   <div>
                     <p className="text-sm font-extrabold text-foreground">{plan.credits} credits</p>
                     <p className="mt-0.5 text-xs text-muted-foreground">{plan.credits * 5} AI questions</p>
                     <p className="mt-2.5 text-lg font-black text-foreground">{money(plan.amountNaira)}</p>
                   </div>
-                  <ArrowRight className="h-4 w-4 shrink-0 text-muted-foreground transition group-hover:translate-x-0.5 group-hover:text-primary" />
-                </button>
+                  <button
+                    type="button"
+                    onClick={() => payWithPaystack(plan.key)}
+                    disabled={busyPlan !== null}
+                    className="inline-flex items-center justify-center gap-1.5 rounded-xl bg-primary py-2 text-xs font-extrabold text-primary-foreground disabled:opacity-60"
+                  >
+                    {busyPlan === plan.key + "_ps" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}
+                    Pay instantly
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => choosePlan(plan.key)}
+                    disabled={busyPlan !== null}
+                    className="inline-flex items-center justify-center gap-1.5 rounded-xl border border-border py-2 text-xs font-semibold text-muted-foreground hover:border-primary/40 hover:text-primary disabled:opacity-60"
+                  >
+                    {busyPlan === plan.key ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}
+                    Bank transfer
+                  </button>
+                </div>
               ))}
             </div>
           </div>
 
           <p className="text-center text-xs text-muted-foreground">
-            Payment by bank transfer. Access activates after manual review (usually within a few hours).
+            Pay instantly with Paystack, or by bank transfer (manual review, usually a few hours).
           </p>
         </div>
       ) : null}
