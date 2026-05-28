@@ -25,7 +25,7 @@ export default function AskQuestionClient() {
   const presetCourse = (sp.get("course") ?? "").trim().toUpperCase();
   const presetLevel  = (sp.get("level") ?? "").trim();
 
-  const [userId, setUserId] = useState<string | null>(null);
+  const [userId, setUserId] = useState<string | null | undefined>(undefined);
   const [courseOptions, setCourseOptions] = useState<Array<{ code: string; title: string | null }>>([]);
   const [profileComplete, setProfileComplete] = useState<boolean | null>(null);
 
@@ -52,7 +52,7 @@ export default function AskQuestionClient() {
   useEffect(() => {
     (async () => {
       const { data } = await supabase.auth.getUser();
-      setUserId(data?.user?.id ?? null);
+      setUserId(data?.user?.id ?? null); // null = definitively not signed in
       if (!data?.user) return;
 
       try {
@@ -183,7 +183,7 @@ export default function AskQuestionClient() {
       </div>
 
       {/* Auth gate */}
-      {!userId && (
+      {userId === null && (
         <div className="rounded-2xl border border-primary/20 bg-primary-light p-4 dark:border-primary/30 dark:bg-primary/10">
           <div className="flex items-start gap-3">
             <div className="mt-0.5 grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-primary">
