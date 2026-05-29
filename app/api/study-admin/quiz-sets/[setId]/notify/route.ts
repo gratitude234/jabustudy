@@ -90,34 +90,35 @@ export async function POST(
         r.status === "fulfilled" && !!r.value.data.user?.email)
       .map((r) => r.value.data.user!.email as string);
 
-    // Web push — fire-and-forget
-    void (async () => {
-      try {
-        const { sendUserPush, filterPushAllowed } = await import("@/lib/webPush");
-        const allowed = await filterPushAllowed(allIds, "quizzes");
-        await Promise.allSettled(
-          allowed.map((uid) =>
-            sendUserPush(uid, { title: notifTitle, body: notifBody, href, tag: `new-quiz-${setId}` })
-          )
-        );
-      } catch { /* never break */ }
-    })();
-
-    // Email — fire-and-forget
-    void (async () => {
-      try {
-        const { sendNewQuizSetEmail } = await import("@/lib/email");
-        await sendNewQuizSetEmail({
-          emails: recipientEmails,
-          setId,
-          title: set.title,
-          courseCode: set.course_code,
-          questionsCount: count,
-        });
-      } catch (err) {
-        console.error("[notify] email error:", err);
-      }
-    })();
+    // Run push + email concurrently and await both before responding
+    // (fire-and-forget after response is frozen on Vercel serverless)
+    await Promise.allSettled([
+      (async () => {
+        try {
+          const { sendUserPush, filterPushAllowed } = await import("@/lib/webPush");
+          const allowed = await filterPushAllowed(allIds, "quizzes");
+          await Promise.allSettled(
+            allowed.map((uid) =>
+              sendUserPush(uid, { title: notifTitle, body: notifBody, href, tag: `new-quiz-${setId}` })
+            )
+          );
+        } catch { /* never break */ }
+      })(),
+      (async () => {
+        try {
+          const { sendNewQuizSetEmail } = await import("@/lib/email");
+          await sendNewQuizSetEmail({
+            emails: recipientEmails,
+            setId,
+            title: set.title,
+            courseCode: set.course_code,
+            questionsCount: count,
+          });
+        } catch (err) {
+          console.error("[notify] email error:", err);
+        }
+      })(),
+    ]);
 
     return NextResponse.json({ ok: true, notified: rows.length });
   } catch (e: any) {
