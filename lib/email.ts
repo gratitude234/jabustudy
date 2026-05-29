@@ -8,7 +8,16 @@ import { Resend } from "resend";
 import { createSupabaseAdminClient } from "./supabase/admin";
 
 const FROM = process.env.RESEND_FROM ?? "Jabu Study <notifications@jabustudy.com>";
-const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? "https://www.jabustudy.com";
+
+function resolveSiteUrl(): string {
+  const raw = process.env.NEXT_PUBLIC_SITE_URL?.trim();
+  if (raw && !raw.startsWith("http://localhost") && !raw.startsWith("http://127.")) return raw.replace(/\/$/, "");
+  const vercel = process.env.VERCEL_URL?.trim();
+  if (vercel) return `https://${vercel.replace(/\/$/, "")}`;
+  return "https://www.jabustudy.com";
+}
+
+const SITE_URL = resolveSiteUrl();
 
 function getResend() {
   const key = process.env.RESEND_API_KEY;

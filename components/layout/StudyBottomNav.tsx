@@ -4,7 +4,6 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
   BookOpen,
-  Calculator,
   Home,
   MessageCircleQuestion,
   UserRound,
@@ -23,7 +22,6 @@ const STUDY_NAV_ITEMS: StudyNavItem[] = [
   { href: "/study/library", label: "Library", icon: BookOpen, match: "prefix" },
   { href: "/study/practice", label: "Practice", icon: Zap, match: "prefix" },
   { href: "/study/questions", label: "Q&A", icon: MessageCircleQuestion, match: "prefix" },
-  { href: "/study/gpa", label: "GPA", icon: Calculator, match: "prefix" },
   { href: "/study/me", label: "Me", icon: UserRound, match: "exact" },
 ];
 
@@ -54,7 +52,7 @@ export default function StudyBottomNav() {
   return (
     <nav className="fixed bottom-0 left-0 right-0 z-50 border-t border-primary/15 bg-background/95 shadow-[0_-8px_24px_rgba(91,53,213,0.08)] backdrop-blur md:hidden [[data-hide-nav=true]_&]:hidden">
       <div className="mx-auto max-w-6xl px-2">
-        <div className="grid h-14 grid-cols-6">
+        <div className="grid h-14 grid-cols-5">
           {STUDY_NAV_ITEMS.map((item) => {
             const active = isActive(pathname, item);
             const Icon = item.icon;
