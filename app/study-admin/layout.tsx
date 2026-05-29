@@ -68,8 +68,8 @@ export default function StudyAdminLayout({ children }: { children: React.ReactNo
   if (loading) {
     return (
       <div className="mx-auto w-full max-w-6xl px-4 py-8">
-        <div className="rounded-3xl border bg-white p-4 shadow-sm">
-          <p className="text-sm text-zinc-600">Loading admin…</p>
+        <div className="rounded-3xl border bg-card p-4 shadow-sm">
+          <p className="text-sm text-muted-foreground">Loading admin…</p>
         </div>
       </div>
     );

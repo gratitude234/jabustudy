@@ -9,6 +9,7 @@ import {
   CheckCircle2,
   Copy,
   Loader2,
+  RefreshCw,
   RotateCcw,
   UploadCloud,
   X,
@@ -326,9 +327,21 @@ export default function StudyBillingPage() {
 
       {/* Paystack payment taking too long banner */}
       {PAYSTACK_ENABLED && pollStatus === "failed" ? (
-        <div className="rounded-2xl border border-amber-200 bg-amber-50 px-5 py-4 text-sm text-amber-800">
-          <p className="font-bold">Still confirming your payment…</p>
-          <p className="mt-0.5 text-xs">If you completed payment, your access will activate shortly. Refresh the page to check.</p>
+        <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 dark:border-amber-800 dark:bg-amber-950/30">
+          <p className="text-sm font-medium text-amber-800 dark:text-amber-200">
+            Payment confirmation is taking longer than expected
+          </p>
+          <p className="mt-1 text-sm text-amber-700 dark:text-amber-300">
+            Your payment may still be processing. Refresh to check the latest status.
+          </p>
+          <button
+            type="button"
+            onClick={() => window.location.reload()}
+            className="mt-3 inline-flex items-center gap-2 rounded-2xl border border-amber-300 bg-white px-4 py-2 text-sm font-semibold text-amber-800 hover:bg-amber-50 dark:border-amber-700 dark:bg-amber-900/50 dark:text-amber-200"
+          >
+            <RefreshCw className="h-4 w-4" />
+            Refresh page
+          </button>
         </div>
       ) : null}
 

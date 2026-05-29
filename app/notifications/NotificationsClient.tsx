@@ -212,6 +212,7 @@ export default function NotificationsClient() {
   const [userId, setUserId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [rows, setRows] = useState<NotificationRow[]>([]);
+  const [error, setError] = useState<string | null>(null);
 
   const unread = useMemo(() => rows.filter((r) => !r.is_read).length, [rows]);
 
@@ -227,6 +228,7 @@ export default function NotificationsClient() {
 
   async function loadNotifications(uid: string) {
     setLoading(true);
+    setError(null);
     try {
       const { data } = await supabase
         .from("notifications")
@@ -237,6 +239,7 @@ export default function NotificationsClient() {
       setRows((data as NotificationRow[]) ?? []);
     } catch {
       setRows([]);
+      setError("Couldn't load notifications");
     } finally {
       setLoading(false);
     }
@@ -357,6 +360,17 @@ export default function NotificationsClient() {
               </div>
             </div>
           ))}
+        </div>
+      ) : error ? (
+        <div className="rounded-2xl border border-border bg-card p-4">
+          <p className="text-sm font-medium text-foreground">{error}</p>
+          <button
+            type="button"
+            onClick={() => userId && loadNotifications(userId)}
+            className="mt-3 inline-flex items-center gap-2 rounded-2xl border border-border bg-secondary px-4 py-2.5 text-sm font-medium text-foreground hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          >
+            Try again
+          </button>
         </div>
       ) : rows.length === 0 ? (
         <div className="rounded-3xl border bg-white p-8 shadow-sm">
