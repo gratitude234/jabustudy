@@ -324,7 +324,6 @@ export default function UploadMaterialsPage() {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [files,      setFiles]      = useState<FileEntry[]>([]);
   const [isDragging, setIsDragging] = useState(false);
-  const [autoFillBanner, setAutoFillBanner] = useState(false);
 
   // Upload queue
   const [queue, setQueue] = useState<QueueEntry[]>([]);
@@ -541,7 +540,6 @@ export default function UploadMaterialsPage() {
     setSelectedCourseId("");
     setQ("");
     setDescription("");
-    setAutoFillBanner(false);
     setStep(1);
     try { window.localStorage.removeItem(DRAFT_KEY); } catch {}
   }
@@ -549,7 +547,6 @@ export default function UploadMaterialsPage() {
   function addMoreFiles() {
     setFiles([]);
     setQueue([]);
-    setAutoFillBanner(false);
     setStep(1);
     // selectedCourseId, q, description preserved so the course stays selected
   }
@@ -641,7 +638,7 @@ export default function UploadMaterialsPage() {
       hash: null,
       hashing: true,
       parsed: null,
-      title: "",
+      title: f.name.replace(/\.[^.]+$/, ""),
       materialType: prefillMaterialType ?? "note",
       pqYear: "" as const,
       pqSession: "",
@@ -680,9 +677,6 @@ export default function UploadMaterialsPage() {
     });
 
     runConcurrent(tasks, 3).then((results) => {
-      const anyFilled = results.some((r) => r.courseCode || r.materialType || r.year);
-      if (anyFilled) setAutoFillBanner(true);
-
       const firstWithCode = results.find((r) => r.courseCode);
       if (firstWithCode?.courseCode) {
         const code = firstWithCode.courseCode;
@@ -1109,47 +1103,39 @@ export default function UploadMaterialsPage() {
                 first so it can be converted into a clean PDF before upload.
               </div>
 
-              {/* Auto-fill banner */}
-              {autoFillBanner && (
-                <div className="flex items-center justify-between gap-2 rounded-2xl border border-primary/30 bg-primary-light px-3 py-2">
-                  <div className="flex items-center gap-2">
-                    <Info className="h-4 w-4 shrink-0 text-primary" />
-                    <p className="text-xs text-primary-text">Auto-filled from filename</p>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => setAutoFillBanner(false)}
-                    className="rounded-lg p-1 hover:bg-black/5"
-                  >
-                    <X className="h-3.5 w-3.5 text-primary-text" />
-                  </button>
-                </div>
-              )}
-
               {/* File list */}
               {files.length > 0 && (
                 <div className="space-y-2">
                   {files.map((f) => (
-                    <div
-                      key={f.id}
-                      className="flex items-center gap-3 rounded-2xl border border-border bg-background px-3 py-2.5"
-                    >
-                      <div className="shrink-0">{getFileIcon(f.file.type)}</div>
-                      <div className="min-w-0 flex-1">
-                        <p className="truncate text-sm font-medium text-foreground">{f.file.name}</p>
-                        <p className="text-xs text-muted-brand">
-                          {fmtBytes(f.file.size)}
-                          {f.hashing ? " · Checking for duplicates…" : ""}
-                        </p>
+                    <div key={f.id} className="rounded-2xl border border-border bg-background px-3 py-2.5 space-y-2">
+                      <div className="flex items-center gap-3">
+                        <div className="shrink-0">{getFileIcon(f.file.type)}</div>
+                        <div className="min-w-0 flex-1">
+                          <p className="truncate text-sm font-medium text-foreground">{f.file.name}</p>
+                          <p className="text-xs text-muted-brand">
+                            {fmtBytes(f.file.size)}
+                            {f.hashing ? " · Checking for duplicates…" : ""}
+                          </p>
+                        </div>
+                        {f.hashing && <Loader2 className="h-4 w-4 shrink-0 animate-spin text-muted-brand" />}
+                        <button
+                          type="button"
+                          onClick={() => removeFile(f.id)}
+                          className="flex h-7 w-7 shrink-0 items-center justify-center rounded-xl border border-border bg-background hover:bg-secondary/50"
+                        >
+                          <X className="h-3.5 w-3.5" />
+                        </button>
                       </div>
-                      {f.hashing && <Loader2 className="h-4 w-4 shrink-0 animate-spin text-muted-brand" />}
-                      <button
-                        type="button"
-                        onClick={() => removeFile(f.id)}
-                        className="flex h-7 w-7 shrink-0 items-center justify-center rounded-xl border border-border bg-background hover:bg-secondary/50"
-                      >
-                        <X className="h-3.5 w-3.5" />
-                      </button>
+                      <input
+                        value={f.title}
+                        onChange={(e) => updateFile(f.id, { title: e.target.value })}
+                        placeholder="Title"
+                        disabled={f.hashing}
+                        className={cn(
+                          "w-full rounded-xl border border-border bg-background px-3 py-2 text-sm text-foreground outline-none placeholder:text-muted-brand focus:border-border/80",
+                          f.hashing && "opacity-50 cursor-not-allowed"
+                        )}
+                      />
                     </div>
                   ))}
                 </div>
