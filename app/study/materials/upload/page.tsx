@@ -322,6 +322,7 @@ export default function UploadMaterialsPage() {
 
   // Multi-file state
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const fileListRef  = useRef<HTMLDivElement | null>(null);
   const [files,      setFiles]      = useState<FileEntry[]>([]);
   const [isDragging, setIsDragging] = useState(false);
 
@@ -550,6 +551,15 @@ export default function UploadMaterialsPage() {
     setStep(1);
     // selectedCourseId, q, description preserved so the course stays selected
   }
+
+  // Scroll file list into view when the first file is added
+  const hadFiles = useRef(false);
+  useEffect(() => {
+    if (files.length > 0 && !hadFiles.current) {
+      fileListRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    }
+    hadFiles.current = files.length > 0;
+  }, [files.length]);
 
   // ── Derived ───────────────────────────────────────────────────────────────
 
@@ -1105,7 +1115,7 @@ export default function UploadMaterialsPage() {
 
               {/* File list */}
               {files.length > 0 && (
-                <div className="space-y-2">
+                <div ref={fileListRef} className="space-y-2">
                   {files.map((f) => (
                     <div key={f.id} className="rounded-2xl border border-border bg-background px-3 py-2.5 space-y-2">
                       <div className="flex items-center gap-3">
