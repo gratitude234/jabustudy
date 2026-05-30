@@ -304,6 +304,8 @@ function StudyHomeInner() {
         <StatsStrip userId={userId} />
       ) : null}
 
+      {userId ? <RankCard userId={userId} /> : null}
+
       <ForYouSection chips={chips} setChips={setChips} onClearFilters={clearFilters} />
 
       <MyCourses scopeLabel={scopeLabel} />
@@ -381,6 +383,55 @@ function StudyHomeInner() {
         </div>
       </aside>
     </div>
+  );
+}
+
+function RankCard({ userId }: { userId: string }) {
+  const [data, setData] = useState<{ rank: number; points: number } | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const { data: rows } = await supabase.rpc("get_study_leaderboard", {
+          p_scope: "dept",
+          p_user_id: userId,
+          p_period: "all",
+          p_limit: 200,
+          p_offset: 0,
+        });
+        const list = rows as Array<{ user_id: string; rank: number; points: number }> | null;
+        const row = list?.find((r) => r.user_id === userId);
+        if (!cancelled && row && row.points > 0) setData({ rank: row.rank, points: row.points });
+      } catch {
+        // non-critical
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [userId]);
+
+  if (loading) return <div className="h-14 animate-pulse rounded-2xl bg-muted" />;
+  if (!data) return null;
+
+  return (
+    <Link
+      href="/study/leaderboard"
+      className="flex items-center gap-3 rounded-2xl border border-[#5B35D5]/20 bg-[#EEEDFE] px-4 py-3 no-underline transition hover:bg-[#5B35D5]/15 dark:border-[#5B35D5]/30 dark:bg-[#5B35D5]/10"
+    >
+      <Trophy className="h-5 w-5 shrink-0 text-[#5B35D5] dark:text-indigo-300" />
+      <div className="min-w-0 flex-1">
+        <p className="text-sm font-extrabold text-[#3B24A8] dark:text-indigo-200">
+          #{data.rank} in your department
+        </p>
+        <p className="text-xs font-semibold text-[#5B35D5]/70 dark:text-indigo-400">
+          {data.points} pts total
+        </p>
+      </div>
+      <ArrowRight className="h-4 w-4 shrink-0 text-[#5B35D5] dark:text-indigo-300" />
+    </Link>
   );
 }
 

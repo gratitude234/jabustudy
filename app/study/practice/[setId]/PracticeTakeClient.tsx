@@ -1793,12 +1793,6 @@ if (err || !meta) {
 
                 {writtenCompareOpen ? (
                   <div className="space-y-2">
-                    <div className="rounded-2xl border border-border bg-background p-3">
-                      <p className="text-xs font-extrabold text-muted-foreground">Your answer</p>
-                      <p className="mt-1 whitespace-pre-wrap text-sm leading-relaxed text-foreground">
-                        {currentWrittenAnswer.trim() || "No answer submitted."}
-                      </p>
-                    </div>
                     {currentGradeState.status === "loading" ? (
                       <div className="flex items-center gap-3 rounded-2xl border border-[#5B35D5]/20 bg-[#EEEDFE] p-3 text-[#3B24A8] dark:border-[#5B35D5]/30 dark:bg-[#5B35D5]/10 dark:text-indigo-300">
                         <Loader2 className="h-4 w-4 animate-spin" />
@@ -1806,55 +1800,56 @@ if (err || !meta) {
                       </div>
                     ) : currentGradeState.status === "error" ? (
                       <div className="rounded-2xl border border-rose-500/25 bg-rose-500/10 p-3">
-                        <p className="text-xs font-extrabold text-rose-700 dark:text-rose-300">AI grading failed</p>
+                        <p className="text-xs font-extrabold text-rose-700 dark:text-rose-300">Grading failed</p>
                         <p className="mt-1 text-sm text-foreground">{currentGradeState.message}</p>
                       </div>
                     ) : currentGradeState.status === "done" ? (
-                      <div className="rounded-2xl border border-emerald-500/25 bg-emerald-500/10 p-3">
-                        <div className="flex flex-wrap items-center justify-between gap-2">
-                          <p className="text-xs font-extrabold text-emerald-700 dark:text-emerald-300">AI feedback</p>
-                          <span className="rounded-full border border-emerald-500/30 bg-background px-2.5 py-1 text-xs font-extrabold text-foreground">
-                            {currentGradeState.grade.score}/{currentGradeState.grade.maxScore} - {verdictLabel(currentGradeState.grade.verdict)}
-                          </span>
-                          {currentGradeState.pendingPoints ? (
-                            <span className="rounded-full border border-amber-500/30 bg-amber-500/10 px-2.5 py-1 text-xs font-extrabold text-amber-700 dark:text-amber-300">
-                              +{currentGradeState.pendingPoints} pt{currentGradeState.pendingPoints === 1 ? "" : "s"} pending
+                      <>
+                        <div className="rounded-2xl border border-emerald-500/25 bg-emerald-500/10 p-3">
+                          <div className="flex flex-wrap items-center justify-between gap-2">
+                            <p className="text-xs font-extrabold text-emerald-700 dark:text-emerald-300">AI feedback</p>
+                            <span className="rounded-full border border-emerald-500/30 bg-background px-2.5 py-1 text-xs font-extrabold text-foreground">
+                              {currentGradeState.grade.score}/{currentGradeState.grade.maxScore} · {verdictLabel(currentGradeState.grade.verdict)}
                             </span>
+                            {currentGradeState.pendingPoints ? (
+                              <span className="rounded-full border border-amber-500/30 bg-amber-500/10 px-2.5 py-1 text-xs font-extrabold text-amber-700 dark:text-amber-300">
+                                +{currentGradeState.pendingPoints} pt{currentGradeState.pendingPoints === 1 ? "" : "s"} on submit
+                              </span>
+                            ) : null}
+                          </div>
+                          <p className="mt-2 text-sm leading-relaxed text-foreground">{currentGradeState.grade.feedback}</p>
+                          {currentGradeState.grade.missingPoints.length > 0 ? (
+                            <div className="mt-3">
+                              <p className="text-xs font-extrabold text-amber-700 dark:text-amber-300">You missed</p>
+                              <ul className="mt-1 list-disc space-y-1 pl-5 text-sm leading-relaxed text-foreground">
+                                {currentGradeState.grade.missingPoints.map((point, pointIndex) => (
+                                  <li key={`${point}-${pointIndex}`}>{point}</li>
+                                ))}
+                              </ul>
+                            </div>
+                          ) : null}
+                          {currentGradeState.cached ? (
+                            <p className="mt-2 text-[11px] font-semibold text-muted-foreground">Loaded from saved feedback.</p>
                           ) : null}
                         </div>
-                        <p className="mt-2 text-sm leading-relaxed text-foreground">{currentGradeState.grade.feedback}</p>
-                        {currentGradeState.grade.missingPoints.length > 0 ? (
-                          <div className="mt-3">
-                            <p className="text-xs font-extrabold text-amber-700 dark:text-amber-300">Focus on</p>
-                            <ul className="mt-1 list-disc space-y-1 pl-5 text-sm leading-relaxed text-foreground">
-                              {currentGradeState.grade.missingPoints.map((point, pointIndex) => (
-                                <li key={`${point}-${pointIndex}`}>{point}</li>
-                              ))}
-                            </ul>
-                          </div>
-                        ) : null}
-                        <p className="mt-3 text-[11px] font-semibold text-muted-foreground">
-                          Eligible leaderboard points are awarded only when you submit.
-                          {currentGradeState.cached ? " Loaded from saved feedback." : ""}
-                        </p>
-                      </div>
-                    ) : null}
-                    <div className="rounded-2xl border border-[#5B35D5]/20 bg-[#EEEDFE] p-3 dark:border-[#5B35D5]/30 dark:bg-[#5B35D5]/10">
-                      <p className="text-xs font-extrabold text-[#3B24A8] dark:text-indigo-300">Model answer</p>
-                      <p className="mt-1 whitespace-pre-wrap text-sm leading-relaxed text-foreground">
-                        {current.model_answer?.trim() || current.explanation?.trim() || "No model answer provided yet."}
-                      </p>
-                      {currentMarkingPoints.length > 0 ? (
-                        <div className="mt-3">
-                          <p className="text-xs font-extrabold text-[#3B24A8] dark:text-indigo-300">Marking points</p>
-                          <ul className="mt-1 list-disc space-y-1 pl-5 text-sm leading-relaxed text-foreground">
-                            {currentMarkingPoints.map((point, pointIndex) => (
-                              <li key={`${point}-${pointIndex}`}>{point}</li>
-                            ))}
-                          </ul>
+                        <div className="rounded-2xl border border-[#5B35D5]/20 bg-[#EEEDFE] p-3 dark:border-[#5B35D5]/30 dark:bg-[#5B35D5]/10">
+                          <p className="text-xs font-extrabold text-[#3B24A8] dark:text-indigo-300">Model answer</p>
+                          <p className="mt-1 whitespace-pre-wrap text-sm leading-relaxed text-foreground">
+                            {current.model_answer?.trim() || current.explanation?.trim() || "No model answer provided yet."}
+                          </p>
+                          {currentMarkingPoints.length > 0 ? (
+                            <div className="mt-3">
+                              <p className="text-xs font-extrabold text-[#3B24A8] dark:text-indigo-300">Marking points</p>
+                              <ul className="mt-1 list-disc space-y-1 pl-5 text-sm leading-relaxed text-foreground">
+                                {currentMarkingPoints.map((point, pointIndex) => (
+                                  <li key={pointIndex}>{typeof point === "string" ? point : (point as any)?.text ?? (point as any)?.point ?? String(point)}</li>
+                                ))}
+                              </ul>
+                            </div>
+                          ) : null}
                         </div>
-                      ) : null}
-                    </div>
+                      </>
+                    ) : null}
                   </div>
                 ) : null}
               </div>
