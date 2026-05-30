@@ -1240,7 +1240,8 @@ function PracticeHomeInner() {
           const lv = Number(levelParam);
           if (Number.isFinite(lv)) query = query.eq("level", lv);
         } else if (viewParam === "for_you" && !personalizedOff && typeof contextPrefs?.level === "number") {
-          query = query.eq("level", contextPrefs.level);
+          // Include sets with null level (cross-level courses like GNS)
+          query = query.or(`level.eq.${contextPrefs.level},level.is.null`);
         }
 
         if (!disabledColumns.has("semester")) {
@@ -1251,7 +1252,8 @@ function PracticeHomeInner() {
           } else if (viewParam === "for_you" && !personalizedOff && contextPrefs?.semester) {
             const semMap: Record<string, string> = { "1st": "first", "2nd": "second", summer: "summer" };
             const s = semMap[contextPrefs.semester.trim()] ?? contextPrefs.semester.trim().toLowerCase();
-            if (s) query = query.eq("semester", s);
+            // Include sets with null semester (cross-semester courses like GNS)
+            if (s) query = query.or(`semester.eq.${s},semester.is.null`);
           }
         }
 
