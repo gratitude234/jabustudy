@@ -304,6 +304,7 @@ export default function PracticeTakeClient() {
 
   const setId = String(params?.setId ?? "");
   const attemptFromUrl = String(sp.get("attempt") ?? "").trim();
+  const freshFromUrl = sp.get("fresh") === "1";
   const modeParam = sp.get("mode") ?? "study";
   const isStudyMode = modeParam === "study";
   const isDueParam = sp.get("due") === "1";
@@ -339,6 +340,7 @@ export default function PracticeTakeClient() {
   const engine = usePracticeEngine({
     setId,
     attemptFromUrl,
+    freshFromUrl,
     studyMode: isStudyMode || isDueParam,
     dueQuestionIds: isDueParam ? dueQuestionIds : null,
   });

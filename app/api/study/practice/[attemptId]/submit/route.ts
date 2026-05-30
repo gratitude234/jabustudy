@@ -277,6 +277,7 @@ export async function POST(
   const attemptUpdate = {
     status: "submitted",
     submitted_at: submittedIso,
+    updated_at: submittedIso,
     score: correct,
     total_questions: orderedQuestions.length,
     scored_questions_count: scoredQuestions.length,

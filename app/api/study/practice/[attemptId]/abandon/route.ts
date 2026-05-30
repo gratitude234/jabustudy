@@ -36,7 +36,7 @@ export async function POST(
 
   const { error: updateError } = await admin
     .from("study_practice_attempts")
-    .update({ status: "abandoned" })
+    .update({ status: "abandoned", updated_at: new Date().toISOString() })
     .eq("id", attemptId)
     .eq("user_id", user.id)
     .eq("status", "in_progress");

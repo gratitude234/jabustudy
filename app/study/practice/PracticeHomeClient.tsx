@@ -132,6 +132,77 @@ type SetAttemptSummary = {
   inProgressPct: number | null; // progress through in-progress attempt (answered/total)
 };
 
+const PRACTICE_PAGE_SIZE = 12;
+const FOR_YOU_CANDIDATE_LIMIT = 60;
+const FOR_YOU_RESULT_LIMIT = 6;
+
+function normalizeCourseCode(value: unknown) {
+  return String(value ?? "").trim().toUpperCase();
+}
+
+function normalizeLevel(value: unknown) {
+  if (typeof value === "number" && Number.isFinite(value)) return Math.trunc(value);
+  if (typeof value === "string") {
+    const parsed = Number(value.trim());
+    if (Number.isFinite(parsed)) return Math.trunc(parsed);
+  }
+  return null;
+}
+
+function normalizeSemester(value: unknown) {
+  const normalized = String(value ?? "").trim().toLowerCase();
+  if (!normalized) return "";
+  if (normalized === "1st" || normalized === "first") return "first";
+  if (normalized === "2nd" || normalized === "second") return "second";
+  if (normalized === "summer") return "summer";
+  return normalized;
+}
+
+function timestampMs(value: unknown) {
+  if (!value) return 0;
+  const time = new Date(String(value)).getTime();
+  return Number.isFinite(time) ? time : 0;
+}
+
+function scoreForYouSet(args: {
+  set: QuizSetRow;
+  summary?: SetAttemptSummary | null;
+  selectedCourse: string;
+  preferredCourses: Set<string>;
+  preferredLevel: number | null;
+  preferredSemester: string;
+}) {
+  const { set, summary, selectedCourse, preferredCourses, preferredLevel, preferredSemester } = args;
+  let score = 0;
+
+  const code = normalizeCourseCode(set.course_code);
+  const level = normalizeLevel(set.level);
+  const semester = normalizeSemester(set.semester);
+
+  if (selectedCourse && code === selectedCourse) score += 50;
+  if (code && preferredCourses.has(code)) score += 30;
+  if (summary?.inProgressId) score += 20;
+
+  const bestPct = summary?.bestPct ?? null;
+  const neverAttempted = bestPct === null && !summary?.inProgressId;
+  if (bestPct !== null && bestPct < 50) score += 8;
+  if (neverAttempted) score += 6;
+  if (bestPct !== null && bestPct >= 70) score -= 15;
+
+  if (preferredLevel !== null && level !== null && level === preferredLevel) score += 8;
+  if (preferredSemester && semester === preferredSemester) score += 5;
+
+  const diff = String(set.difficulty ?? "").toLowerCase();
+  if (preferredLevel !== null) {
+    if (preferredLevel >= 400 && diff === "hard") score += 4;
+    if (preferredLevel >= 300 && diff === "medium") score += 2;
+    if (preferredLevel <= 200 && diff === "easy") score += 4;
+    if (preferredLevel <= 200 && diff === "hard") score -= 4;
+  }
+
+  return score;
+}
+
 type DuePracticeData = {
   total: number;
   sets: Array<{
@@ -945,7 +1016,6 @@ function PracticeHomeInner() {
   }, [contextPrefs, prefsLoading]);
 
   // Pagination
-  const PAGE_SIZE = 12;
   const [page, setPage] = useState(1);
 
   const filtersKey = useMemo(() => {
@@ -1087,22 +1157,35 @@ function PracticeHomeInner() {
   // Loaded whenever the visible set list changes. Gives each card personal
   // context: best score, attempt count, in-progress state.
   const [setAttemptMap, setSetAttemptMap] = useState<Record<string, SetAttemptSummary>>({});
+  const [attemptLoading, setAttemptLoading] = useState(false);
 
   useEffect(() => {
     const setIds = sets.map((s) => s.id).filter(Boolean);
-    if (!setIds.length) return;
+    if (!setIds.length) {
+      setSetAttemptMap({});
+      setAttemptLoading(false);
+      return;
+    }
+
+    if (!authedUserId) {
+      setSetAttemptMap({});
+      setAttemptLoading(false);
+      return;
+    }
 
     let cancelled = false;
+    setAttemptLoading(true);
+    setSetAttemptMap({});
+
     (async () => {
       try {
-        if (!authedUserId) return;
-
-        // Fetch all attempts for visible sets in one query
+        // Fetch newest attempt rows first so resume/latest context is stable.
         const { data, error } = await supabase
           .from("study_practice_attempts")
-          .select("id,set_id,status,score,total_questions")
+          .select("id,set_id,status,score,total_questions,updated_at,submitted_at")
           .eq("user_id", authedUserId)
-          .in("set_id", setIds);
+          .in("set_id", setIds)
+          .order("updated_at", { ascending: false });
 
         if (cancelled || error || !data) return;
 
@@ -1158,6 +1241,8 @@ function PracticeHomeInner() {
         if (!cancelled) setSetAttemptMap(map);
       } catch {
         // Non-fatal â€" cards just show without personal context
+      } finally {
+        if (!cancelled) setAttemptLoading(false);
       }
     })();
 
@@ -1176,10 +1261,11 @@ function PracticeHomeInner() {
     }
 
     try {
+      const isForYou = viewParam === "for_you";
       const course = courseParam.trim().toUpperCase();
       const strictForYouWithoutCourses =
         isFirst &&
-        viewParam === "for_you" &&
+        isForYou &&
         !personalizedOff &&
         !course &&
         isProfileComplete &&
@@ -1189,11 +1275,13 @@ function PracticeHomeInner() {
         setSets([]);
         setTotal(0);
         setHasMore(false);
+        setAttemptLoading(false);
         return;
       }
 
-      const from = (nextPage - 1) * PAGE_SIZE;
-      const to = from + PAGE_SIZE - 1;
+      const pageSize = isForYou ? FOR_YOU_CANDIDATE_LIMIT : PRACTICE_PAGE_SIZE;
+      const from = isForYou ? 0 : (nextPage - 1) * pageSize;
+      const to = from + pageSize - 1;
       const disabledColumns = new Set<PracticeSetOptionalField>();
 
       const buildQuery = () => {
@@ -1264,7 +1352,7 @@ function PracticeHomeInner() {
           }
         }
 
-        if (sortParam === "oldest") query = query.order("created_at", { ascending: true });
+        if (!isForYou && sortParam === "oldest") query = query.order("created_at", { ascending: true });
         else query = query.order("created_at", { ascending: false });
 
         return query.range(from, to);
@@ -1303,6 +1391,7 @@ function PracticeHomeInner() {
         if (isFirst) {
           setSets([]);
           setTotal(0);
+          setAttemptLoading(false);
         }
         return;
       }
@@ -1311,6 +1400,7 @@ function PracticeHomeInner() {
       setTotal(totalCount);
 
       const rows = ((res.data as any[]) ?? []).filter(Boolean) as QuizSetRow[];
+      if (isFirst) setAttemptLoading(isForYou && Boolean(authedUserId) && rows.length > 0);
 
       setSets((prev) => {
         if (isFirst) return rows;
@@ -1320,8 +1410,8 @@ function PracticeHomeInner() {
         return merged;
       });
 
-      const loaded = (nextPage - 1) * PAGE_SIZE + rows.length;
-      setHasMore(loaded < totalCount);
+      const loaded = isForYou ? rows.length : (nextPage - 1) * pageSize + rows.length;
+      setHasMore(!isForYou && loaded < totalCount);
     } finally {
       setLoading(false);
       setLoadingMore(false);
@@ -1395,74 +1485,35 @@ function PracticeHomeInner() {
   const forYouSets = useMemo(() => {
     if (!sets.length) return [];
 
-    // URL params take priority; fall back to loaded user prefs
-    const wantCourse = (courseParam.trim() || "").toUpperCase();
-    const wantLevel =
-      levelParam
-        ? Number(levelParam)
-        : typeof userPrefs?.level === "number"
-        ? userPrefs.level
-        : NaN;
-    const wantSem =
-      semesterParam.trim().toLowerCase() ||
-      (userPrefs?.semester ?? "").toLowerCase();
+    const selectedCourse = normalizeCourseCode(courseParam);
+    const preferredCourses = new Set(courseCodes.map(normalizeCourseCode).filter(Boolean));
+    const preferredLevel = normalizeLevel(levelParam) ?? normalizeLevel(userPrefs?.level);
+    const preferredSemester = normalizeSemester(semesterParam) || normalizeSemester(userPrefs?.semester);
 
-    const scored = sets.map((s) => {
-      let score = 0;
-      const code = (s.course_code ?? "").toString().trim().toUpperCase();
-
-      // Strong match: exact course code
-      if (wantCourse && code === wantCourse) score += 3;
-
-      // Level match: from prefs or URL param
-      if (
-        Number.isFinite(wantLevel) &&
-        typeof s.level === "number" &&
-        s.level === wantLevel
-      )
-        score += 2;
-
-      // Semester match
-      if (
-        wantSem &&
-        (s.semester ?? "").toString().trim().toLowerCase() === wantSem
-      )
-        score += 1;
-
-      // Difficulty score: prefer sets appropriate for user's level
-      // Upper levels (400+) get a boost for harder sets; lower levels for easier ones.
-      const diff = (s.difficulty ?? "").toLowerCase();
-      if (Number.isFinite(wantLevel)) {
-        if (wantLevel >= 400 && diff === "hard")   score += 1.5;
-        if (wantLevel >= 300 && diff === "medium")  score += 0.5;
-        if (wantLevel <= 200 && diff === "easy")    score += 1.5;
-        if (wantLevel <= 200 && diff === "hard")    score -= 1;
-      }
-
-      // Slight recency boost
-      if (s.created_at) score += 0.2;
-
-      const summary = setAttemptMap[s.id];
-      const bestPct = summary?.bestPct ?? null;
-      const neverAttempted = bestPct === null && !summary?.inProgressId;
-
-      if (neverAttempted) score += 2;
-      if (bestPct !== null && bestPct >= 70) score -= 2;
-      if (bestPct !== null && bestPct < 50) score += 1;
-
-      return { s, score };
-    });
+    const scored = sets.map((s) => ({
+      s,
+      score: scoreForYouSet({
+        set: s,
+        summary: setAttemptMap[s.id] ?? null,
+        selectedCourse,
+        preferredCourses,
+        preferredLevel,
+        preferredSemester,
+      }),
+      createdAt: timestampMs(s.created_at),
+    }));
 
     return scored
-      .sort((a, b) => b.score - a.score)
-      .slice(0, 6)
+      .sort((a, b) => b.score - a.score || b.createdAt - a.createdAt || a.s.id.localeCompare(b.s.id))
+      .slice(0, FOR_YOU_RESULT_LIMIT)
       .map((x) => x.s);
-  }, [sets, courseParam, levelParam, semesterParam, userPrefs, setAttemptMap]);
+  }, [sets, courseParam, courseCodes, levelParam, semesterParam, userPrefs, setAttemptMap]);
 
   const visibleSets = useMemo(() => {
     if (viewParam === "for_you") return forYouSets.length ? forYouSets : sets;
     return sets;
   }, [viewParam, forYouSets, sets]);
+  const waitingForForYouAttempts = viewParam === "for_you" && attemptLoading;
 
   const timedExamSet = useMemo(() => {
     const seen = new Set<string>();
@@ -1492,10 +1543,17 @@ function PracticeHomeInner() {
     inProgressId: string;
     title: string;
   } | null>(null);
+  const [abandoningAttemptId, setAbandoningAttemptId] = useState<string | null>(null);
 
-  function startSet(id: string, mode: "exam" | "study" = "study", resumeAttemptId?: string) {
+  function startSet(
+    id: string,
+    mode: "exam" | "study" = "study",
+    resumeAttemptId?: string,
+    options?: { fresh?: boolean }
+  ) {
     const params = new URLSearchParams({ mode });
     if (resumeAttemptId) params.set("attempt", resumeAttemptId);
+    if (options?.fresh) params.set("fresh", "1");
     router.push(`/study/practice/${encodeURIComponent(id)}?${params.toString()}`);
   }
 
@@ -1512,12 +1570,20 @@ function PracticeHomeInner() {
     }
   }
 
-  function handleStartFresh(inProgressId: string, setId: string) {
+  async function handleStartFresh(inProgressId: string, setId: string) {
+    if (abandoningAttemptId) return;
+    setAbandoningAttemptId(inProgressId);
     setResumeSheet(null);
-    fetch(`/api/study/practice/${encodeURIComponent(inProgressId)}/abandon`, {
-      method: "POST",
-    }).catch(() => {});
-    startSet(setId);
+    try {
+      await fetch(`/api/study/practice/${encodeURIComponent(inProgressId)}/abandon`, {
+        method: "POST",
+      });
+    } catch {
+      // The practice engine receives fresh=1 so it will not restore this session even if abandon is slow.
+    } finally {
+      setAbandoningAttemptId(null);
+      startSet(setId, "study", undefined, { fresh: true });
+    }
   }
 
   return (
@@ -1777,7 +1843,7 @@ function PracticeHomeInner() {
       <>
           {/* RESULTS */}
           <div className="flex min-w-0 flex-col gap-3">
-            {loading ? (
+            {loading || waitingForForYouAttempts ? (
               <>
                 {Array.from({ length: 6 }).map((_, i) => (
                   <SkeletonCard key={i} className="rounded-3xl" />
@@ -2125,9 +2191,10 @@ function PracticeHomeInner() {
             <button
               type="button"
               onClick={() => resumeSheet && handleStartFresh(resumeSheet.inProgressId, resumeSheet.setId)}
+              disabled={Boolean(abandoningAttemptId)}
               className="inline-flex items-center justify-center gap-2 rounded-2xl border border-border bg-background px-4 py-3 text-sm font-semibold text-foreground hover:bg-secondary/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-card"
             >
-              <RotateCcw className="h-4 w-4" /> Start Fresh
+              <RotateCcw className="h-4 w-4" /> {abandoningAttemptId ? "Starting..." : "Start Fresh"}
             </button>
           </div>
         }

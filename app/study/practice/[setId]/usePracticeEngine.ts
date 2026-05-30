@@ -120,11 +120,14 @@ function readLocalDraft(key: string): LatestRestore {
 export function usePracticeEngine({
   setId,
   attemptFromUrl,
+  freshFromUrl = false,
   studyMode = false,
   dueQuestionIds,
 }: {
   setId: string;
   attemptFromUrl: string;
+  /** One-time intent from ?fresh=1: create a new attempt instead of restoring an existing one. */
+  freshFromUrl?: boolean;
   /** Study mode: skip timer, reveal answers immediately. No schema changes needed. */
   studyMode?: boolean;
   /**
@@ -157,6 +160,7 @@ export function usePracticeEngine({
   // IMPORTANT UX: when we add ?attempt= to the URL (router.replace), we should NOT re-run the whole loader.
   // Capture the initial attempt (if any) only once for this page load.
   const initialAttemptRef = useRef<string | null>(attemptFromUrl || null);
+  const initialFreshRef = useRef<boolean>(freshFromUrl);
 
   // Cache userId from the initial auth call so choose() and finalizeAttempt()
   // never need to call supabase.auth.getUser() again during a session.
@@ -291,7 +295,10 @@ export function usePracticeEngine({
       deadlineRef.current = null;
       setReviewTab("all");
       setWrittenAnswers({});
+      setWrittenGrades({});
       setWrittenSaving(false);
+      setIsResumed(false);
+      setRetryWeakIds(null);
 
       try {
         if (!setId) throw new Error("Missing set id");
@@ -411,14 +418,14 @@ export function usePracticeEngine({
         // Answers fetch needs the validated attemptId (from Phase 1 attValidate).
         // These are the only true sequential dependencies left.
 
-        let effectiveAttemptId: string | null = initialAttemptRef.current || null;
+        let effectiveAttemptId: string | null = null;
         let startedAtMs = Date.now();
 
         if (user && initialAttemptRef.current) {
           // Use the already-validated attempt data from Phase 1
           const attData = !attValidateRes.error ? (attValidateRes as any).data : null;
 
-          if (attData?.id && String(attData.set_id) === setId) {
+          if (attData?.id && String(attData.set_id) === setId && attData.status === "in_progress") {
             effectiveAttemptId = String(attData.id);
             const st = new Date(String(attData.started_at)).getTime();
             startedAtMs = Number.isFinite(st) ? st : Date.now();
@@ -448,17 +455,19 @@ export function usePracticeEngine({
           }
         }
 
-        // Create new attempt if none was provided via URL
-        if (user && !initialAttemptRef.current) {
+        // Create new attempt if no valid in-progress attempt was restored.
+        if (user && !effectiveAttemptId) {
           // Check for existing in_progress attempt first (deduplication guard)
-          const { data: existingAttempt } = await supabase
-            .from("study_practice_attempts")
-            .select("id, started_at")
-            .eq("user_id", user.id)
-            .eq("set_id", setId)
-            .eq("status", "in_progress")
-            .order("created_at", { ascending: false })
-            .maybeSingle();
+          const { data: existingAttempt } = initialFreshRef.current
+            ? { data: null }
+            : await supabase
+                .from("study_practice_attempts")
+                .select("id, started_at")
+                .eq("user_id", user.id)
+                .eq("set_id", setId)
+                .eq("status", "in_progress")
+                .order("updated_at", { ascending: false })
+                .maybeSingle();
 
           if (existingAttempt?.id) {
             effectiveAttemptId = String(existingAttempt.id);
@@ -562,17 +571,18 @@ export function usePracticeEngine({
   // Sync URL with attempt id (without re-loading data)
   useEffect(() => {
     if (!attemptId) return;
-    if (attemptFromUrl) return;
+    if (attemptFromUrl === attemptId && !freshFromUrl) return;
 
     // Avoid a Next.js route transition (and a second loader flash) by updating the URL
     // without triggering navigation.
     if (typeof window !== "undefined") {
       const params = new URLSearchParams(window.location.search);
       params.set("attempt", attemptId);
+      params.delete("fresh");
       const next = `/study/practice/${encodeURIComponent(setId)}?${params.toString()}`;
       window.history.replaceState(null, "", next);
     }
-  }, [attemptId, attemptFromUrl, setId]);
+  }, [attemptId, attemptFromUrl, freshFromUrl, setId]);
 
   // Timer tick + auto-submit
   useEffect(() => {
@@ -628,7 +638,14 @@ export function usePracticeEngine({
       supabase
         .from("study_attempt_answers")
         .upsert(rows as any[], { onConflict: "attempt_id,question_id" })
-        .then(() => setWrittenSaving(false));
+        .then(async () => {
+          await supabase
+            .from("study_practice_attempts")
+            .update({ updated_at: now } as any)
+            .eq("id", attemptId)
+            .eq("user_id", userId);
+          setWrittenSaving(false);
+        });
     }, 650);
 
     return () => {

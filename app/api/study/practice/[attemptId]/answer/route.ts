@@ -74,6 +74,14 @@ export async function POST(
     return jsonError("Failed to save answer.", 500, "UPSERT_FAILED");
   }
 
+  const answeredAt = new Date().toISOString();
+  await admin
+    .from("study_practice_attempts")
+    .update({ updated_at: answeredAt })
+    .eq("id", attemptId)
+    .eq("user_id", user.id)
+    .eq("status", "in_progress");
+
   let pointAwarded = 0;
   if (option.is_correct) {
     pointAwarded = await awardCappedStudyPoints({
