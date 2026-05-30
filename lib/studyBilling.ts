@@ -4,6 +4,10 @@ import { randomBytes } from "node:crypto";
 import { adminSupabase } from "@/lib/supabase/admin";
 
 export const FREE_DAILY_PRACTICE_LIMIT = 40;
+
+// Promo window — all practice sets free between these WAT dates (inclusive)
+export const PROMO_START = "2026-05-30";
+export const PROMO_END   = "2026-06-07";
 export const FREE_MONTHLY_AI_GENERATIONS = 3;
 export const RECEIPT_BUCKET =
   process.env.JABUSTUDY_PAYMENT_RECEIPT_BUCKET || process.env.JABU_PAYMENT_RECEIPT_BUCKET || "payment-receipts";
@@ -213,8 +217,9 @@ export async function getFreeAiUsage(userId: string) {
 export async function getPracticeAccess(userId: string, requestedQuestions = 0) {
   const plus = await getPlusAccess(userId);
   const activityDate = watDate();
+  const isPromo = activityDate >= PROMO_START && activityDate <= PROMO_END;
 
-  if (plus.active) {
+  if (plus.active || isPromo) {
     return {
       plus,
       activityDate,
@@ -222,6 +227,7 @@ export async function getPracticeAccess(userId: string, requestedQuestions = 0) 
       used: 0,
       remaining: null as number | null,
       allowed: true,
+      isPromo,
     };
   }
 
@@ -241,6 +247,7 @@ export async function getPracticeAccess(userId: string, requestedQuestions = 0) 
     used,
     remaining,
     allowed: requestedQuestions <= remaining,
+    isPromo: false,
   };
 }
 

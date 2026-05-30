@@ -1546,7 +1546,14 @@ function PracticeHomeInner() {
       {/* Plan / quota status bar — skeleton holds space while fetch is in flight */}
       {billingStatus === null ? (
         <div className="h-[52px] animate-pulse rounded-2xl bg-muted" />
-      ) : billingStatus.plus.active ? (
+      ) : (billingStatus.practice as any).isPromo ? (
+          <div className="flex items-center gap-2 rounded-2xl border border-emerald-300/50 bg-emerald-50 px-4 py-2.5 dark:border-emerald-700/40 dark:bg-emerald-950/20">
+            <Flame className="h-4 w-4 shrink-0 text-emerald-600 dark:text-emerald-400" />
+            <p className="text-sm font-extrabold text-emerald-900 dark:text-emerald-200">
+              All practice sets are free until June 7. Enjoy!
+            </p>
+          </div>
+        ) : billingStatus.plus.active ? (
           <div className="flex items-center gap-2 rounded-2xl border border-[#5B35D5]/20 bg-[#EEEDFE] px-4 py-2.5 dark:border-[#5B35D5]/30 dark:bg-[#5B35D5]/10">
             <Star className="h-4 w-4 shrink-0 text-[#5B35D5] dark:text-indigo-300" />
             <p className="text-sm font-extrabold text-[#3B24A8] dark:text-indigo-300">
