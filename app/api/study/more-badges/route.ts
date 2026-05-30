@@ -24,6 +24,11 @@ type ApplyRepBadgeRow = BadgeRow & {
   hidden: boolean;
 };
 
+type LeaderboardRpcRow = {
+  user_id: string;
+  rank: number | null;
+};
+
 function jsonError(message: string, status: number, code: string) {
   return NextResponse.json({ ok: false, code, message }, { status });
 }
@@ -120,13 +125,15 @@ async function resolveLeaderboard(
   supabase: Awaited<ReturnType<typeof createSupabaseServerClient>>,
   userId: string
 ): Promise<BadgeRow> {
-  const [{ data: leaderboardRow, error: leaderboardError }, { count: weekSessions, error: weekError }] =
+  const [{ data: leaderboardRows, error: leaderboardError }, { count: weekSessions, error: weekError }] =
     await Promise.all([
-      supabase
-        .from("study_leaderboard_v")
-        .select("points")
-        .eq("user_id", userId)
-        .maybeSingle(),
+      supabase.rpc("get_study_leaderboard", {
+        p_scope: "all",
+        p_user_id: userId,
+        p_period: "all",
+        p_limit: 500,
+        p_offset: 0,
+      }),
       supabase
         .from("study_practice_attempts")
         .select("id", { count: "exact", head: true })
@@ -139,20 +146,12 @@ async function resolveLeaderboard(
   if (weekError) throw weekError;
 
   let rank: number | null = null;
-  if (leaderboardRow) {
-    const points = typeof leaderboardRow.points === "number" ? leaderboardRow.points : 0;
-    const { count, error: rankError } = await supabase
-      .from("study_leaderboard_v")
-      .select("user_id", { count: "exact", head: true })
-      .gt("points", points);
-
-    if (rankError) throw rankError;
-    rank = (count ?? 0) + 1;
-    if (points === 0 && rank > 100) rank = null;
+  if (Array.isArray(leaderboardRows)) {
+    rank = ((leaderboardRows as LeaderboardRpcRow[]).find((row) => row.user_id === userId)?.rank) ?? null;
   }
 
   return {
-    subtitle: rank ? `You're #${rank}` : "Climb the ranks",
+    subtitle: rank ? `You're #${rank} all-time` : "Climb the ranks",
     badge:
       (weekSessions ?? 0) > 0
         ? {

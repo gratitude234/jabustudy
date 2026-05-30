@@ -418,16 +418,16 @@ function RankCard({ userId }: { userId: string }) {
 
   return (
     <Link
-      href="/study/leaderboard"
+      href="/study/leaderboard?period=all&scope=dept"
       className="flex items-center gap-3 rounded-2xl border border-[#5B35D5]/20 bg-[#EEEDFE] px-4 py-3 no-underline transition hover:bg-[#5B35D5]/15 dark:border-[#5B35D5]/30 dark:bg-[#5B35D5]/10"
     >
       <Trophy className="h-5 w-5 shrink-0 text-[#5B35D5] dark:text-indigo-300" />
       <div className="min-w-0 flex-1">
         <p className="text-sm font-extrabold text-[#3B24A8] dark:text-indigo-200">
-          #{data.rank} in your department
+          #{data.rank} all-time in your department
         </p>
         <p className="text-xs font-semibold text-[#5B35D5]/70 dark:text-indigo-400">
-          {data.points} pts total
+          {data.points} pts
         </p>
       </div>
       <ArrowRight className="h-4 w-4 shrink-0 text-[#5B35D5] dark:text-indigo-300" />

@@ -296,7 +296,7 @@ function Drawer({
   return (
     <div
       className={cn(
-        "fixed inset-0 z-50 transition-opacity",
+        "fixed inset-0 z-[60] transition-opacity",
         open ? "opacity-100 pointer-events-auto" : "opacity-0 pointer-events-none"
       )}
       aria-hidden={!open}

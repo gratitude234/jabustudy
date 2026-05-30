@@ -48,6 +48,12 @@ type AttemptAnswerGradeRow = {
   ai_graded_at: string | null;
 };
 
+type LeaderboardRpcRow = {
+  user_id: string;
+  points: number | null;
+  rank: number | null;
+};
+
 function jsonError(message: string, status: number, code: string) {
   return NextResponse.json({ ok: false, code, message }, { status });
 }
@@ -103,6 +109,20 @@ function writtenAnswerPracticePoints(score: number) {
   return 0;
 }
 
+async function getRankPreview(admin: ReturnType<typeof createSupabaseAdminClient>, userId: string) {
+  const { data } = await admin.rpc("get_study_leaderboard", {
+    p_scope: "all",
+    p_user_id: userId,
+    p_period: "all",
+    p_limit: 500,
+    p_offset: 0,
+  });
+
+  if (!Array.isArray(data)) return null;
+  const row = (data as LeaderboardRpcRow[]).find((item) => item.user_id === userId);
+  return row ? { points: Number(row.points ?? 0), rank: row.rank ?? null } : null;
+}
+
 function computeNextDue(missCount: number, fromIso: string): string {
   const daysMap: Record<number, number> = { 1: 1, 2: 1 };
   const days = daysMap[missCount] ?? Math.min(Math.pow(2, missCount - 2), 30);
@@ -146,11 +166,7 @@ export async function POST(
   if (attempt.user_id !== user.id) return jsonError("You can only submit your own attempt.", 403, "FORBIDDEN");
 
   if (attempt.status === "submitted") {
-    const { data: rankPreview } = await admin
-      .from("study_leaderboard_v")
-      .select("points,rank")
-      .eq("user_id", user.id)
-      .maybeSingle();
+    const rankPreview = await getRankPreview(admin, user.id);
 
     return NextResponse.json({
       ok: true,
@@ -496,11 +512,7 @@ export async function POST(
     console.warn("[practice submit] SRS update skipped:", error instanceof Error ? error.message : error);
   }
 
-  const { data: rankPreview } = await admin
-    .from("study_leaderboard_v")
-    .select("points,rank")
-    .eq("user_id", user.id)
-    .maybeSingle();
+  const rankPreview = await getRankPreview(admin, user.id);
 
   return NextResponse.json({
     ok: true,

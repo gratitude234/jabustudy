@@ -23,6 +23,11 @@ type CompletedAttempt = {
   total_questions: number;
 };
 
+type LeaderboardRpcRow = {
+  user_id: string;
+  rank: number | null;
+};
+
 function getScoreClass(value: number | null) {
   if (value == null) return "text-foreground";
   if (value >= 70) return "text-[#3B6D11] dark:text-emerald-400";
@@ -41,24 +46,17 @@ export default function StatsStrip({ userId }: StatsStripProps) {
       setLoading(true);
       try {
         const rankPromise = (async () => {
-          const { data: leaderboardRow, error: leaderboardError } = await supabase
-            .from("study_leaderboard_v")
-            .select("points")
-            .eq("user_id", userId)
-            .maybeSingle();
+          const { data: rows, error } = await supabase.rpc("get_study_leaderboard", {
+            p_scope: "all",
+            p_user_id: userId,
+            p_period: "all",
+            p_limit: 500,
+            p_offset: 0,
+          });
 
-          if (leaderboardError || !leaderboardRow) return null;
-
-          const points = typeof leaderboardRow.points === "number" ? leaderboardRow.points : 0;
-          const { count, error: rankError } = await supabase
-            .from("study_leaderboard_v")
-            .select("user_id", { count: "exact", head: true })
-            .gt("points", points);
-
-          if (rankError) return null;
-          const rank = (count ?? 0) + 1;
-          if (points === 0 && rank > 100) return null;
-          return rank;
+          if (error || !Array.isArray(rows)) return null;
+          const row = (rows as LeaderboardRpcRow[]).find((item) => item.user_id === userId);
+          return row?.rank ?? null;
         })();
 
         const progressPromise = (async () => {
@@ -151,7 +149,7 @@ export default function StatsStrip({ userId }: StatsStripProps) {
           <p className="font-[family-name:var(--font-bricolage)] text-lg font-extrabold text-foreground">
             {stats.rank != null ? `#${stats.rank}` : "--"}
           </p>
-          <p className="mt-0.5 text-[10px] text-muted-brand">rank</p>
+          <p className="mt-0.5 text-[10px] text-muted-brand">global rank</p>
         </div>
         <div className="px-3 text-center">
           <p className="font-[family-name:var(--font-bricolage)] text-lg font-extrabold text-foreground">
