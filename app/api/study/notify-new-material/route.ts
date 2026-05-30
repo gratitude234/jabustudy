@@ -95,13 +95,13 @@ export async function POST(req: Request) {
 
     // Build notification rows — skip duplicates by not re-inserting same type+href
     const href = `/study/materials/${material_id}`;
-    const body_text = `${title}${course_code ? ` — ${course_code}` : ""}`;
+    const notifTitle = course_code ? `New material added to ${course_code}` : "New material in your department";
 
     const rows = users.map((u: { user_id: string }) => ({
       user_id: u.user_id,
       type: "study_new_material",
-      title: "New material in your department",
-      body: body_text,
+      title: notifTitle,
+      body: title,
       href,
     }));
 
@@ -121,11 +121,9 @@ export async function POST(req: Request) {
     try {
       const { sendUserPush, filterPushAllowed } = await import('@/lib/webPush');
       const pushPayload = {
-        title: `New material: ${title}`,
-        body:  course_code
-          ? `${course_code} — tap to download`
-          : 'New study material for your department',
-        href:  '/study/materials',
+        title: notifTitle,
+        body:  title,
+        href:  `/study/materials/${material_id}`,
         tag:   `new-material-${material_id}`,
       };
       const allUserIds = (users ?? []).map((u: StudyPreferenceUser) => u.user_id);

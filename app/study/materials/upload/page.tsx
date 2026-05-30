@@ -242,6 +242,14 @@ function parseFilename(filename: string): ParsedMeta {
   return result;
 }
 
+function looksRaw(title: string) {
+  const t = title.trim();
+  if (!t || t.length < 4) return false;
+  if (t.includes("_")) return true;
+  if (t.length > 6 && !/\s/.test(t)) return true;
+  return false;
+}
+
 function getFileIcon(mime: string) {
   if (mime.includes("pdf")) return <FileText className="h-5 w-5 text-rose-500" />;
   if (mime.startsWith("image/")) return <ImageIcon className="h-5 w-5 text-sky-500" />;
@@ -328,6 +336,9 @@ export default function UploadMaterialsPage() {
 
   // Upload queue
   const [queue, setQueue] = useState<QueueEntry[]>([]);
+
+  // Title review modal — shown when user taps Continue from Step 1
+  const [showTitleReview, setShowTitleReview] = useState(false);
 
   // Banner
   const [banner, setBanner] = useState<{ type: "error" | "success" | "info" | "warning"; text: string } | null>(null);
@@ -1154,8 +1165,8 @@ export default function UploadMaterialsPage() {
               <div className="hidden justify-end sm:flex">
                 <button
                   type="button"
-                  disabled={files.length === 0}
-                  onClick={() => setStep(2)}
+                  disabled={files.length === 0 || files.some((f) => f.hashing)}
+                  onClick={() => setShowTitleReview(true)}
                   className={cn(
                     "inline-flex items-center gap-2 rounded-2xl px-5 py-2.5 text-sm font-medium transition",
                     files.length > 0 ? "bg-primary text-white" : "bg-secondary text-muted-brand"
@@ -1169,8 +1180,8 @@ export default function UploadMaterialsPage() {
               <div className="fixed inset-x-0 bottom-0 z-[60] border-t border-border bg-background/95 px-4 pb-4 pt-3 backdrop-blur sm:hidden">
                 <button
                   type="button"
-                  disabled={files.length === 0}
-                  onClick={() => setStep(2)}
+                  disabled={files.length === 0 || files.some((f) => f.hashing)}
+                  onClick={() => setShowTitleReview(true)}
                   className={cn(
                     "w-full inline-flex items-center justify-center gap-2 rounded-2xl py-3.5 text-sm font-medium transition",
                     files.length > 0 ? "bg-primary text-white" : "bg-secondary text-muted-brand"
@@ -1802,6 +1813,80 @@ export default function UploadMaterialsPage() {
                 ))}
               </div>
             </section>
+          )}
+
+          {/* ── Title review modal ──────────────────────────────────────────── */}
+          {showTitleReview && (
+            <div
+              className="fixed inset-0 z-50 flex items-end justify-center bg-black/50 p-3 sm:items-center"
+              onMouseDown={(e) => { if (e.target === e.currentTarget) setShowTitleReview(false); }}
+            >
+              <div className="w-full max-w-lg overflow-hidden rounded-3xl border border-border bg-background">
+                <div className="flex items-start justify-between gap-3 border-b border-border px-4 py-3">
+                  <div>
+                    <p className="text-sm font-semibold text-foreground">Do these titles look right?</p>
+                    <p className="mt-0.5 text-xs text-muted-brand">
+                      These titles will appear in notifications sent to students.
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setShowTitleReview(false)}
+                    className="rounded-xl p-2 text-muted-brand hover:bg-secondary/50"
+                  >
+                    <X className="h-4 w-4" />
+                  </button>
+                </div>
+
+                <div className="max-h-[55vh] overflow-auto p-4 space-y-2">
+                  {files.map((f) => {
+                    const raw = looksRaw(f.title);
+                    return (
+                      <div key={f.id} className={cn(
+                        "rounded-2xl border p-3 space-y-1.5",
+                        raw ? "border-amber-300/60 bg-amber-50/60 dark:border-amber-700/40 dark:bg-amber-950/20" : "border-border bg-background"
+                      )}>
+                        <div className="flex items-center gap-2">
+                          <div className="shrink-0">{getFileIcon(f.file.type)}</div>
+                          <p className="truncate text-xs text-muted-brand">{f.file.name}</p>
+                          {raw && (
+                            <span className="shrink-0 rounded-full bg-amber-100 px-1.5 py-0.5 text-[10px] font-semibold text-amber-800 dark:bg-amber-950/40 dark:text-amber-300">
+                              Rename?
+                            </span>
+                          )}
+                        </div>
+                        <input
+                          value={f.title}
+                          onChange={(e) => updateFile(f.id, { title: e.target.value })}
+                          placeholder="Enter a clear title"
+                          className={cn(
+                            "w-full rounded-xl border bg-background px-3 py-2 text-sm text-foreground outline-none placeholder:text-muted-brand",
+                            raw ? "border-amber-300 focus:border-amber-400 dark:border-amber-700/60" : "border-border focus:border-border/80"
+                          )}
+                        />
+                      </div>
+                    );
+                  })}
+                </div>
+
+                <div className="flex flex-col-reverse gap-2 border-t border-border p-4 sm:flex-row sm:justify-end">
+                  <button
+                    type="button"
+                    onClick={() => setShowTitleReview(false)}
+                    className="rounded-2xl border border-border px-4 py-2.5 text-sm font-medium text-foreground hover:bg-secondary/50"
+                  >
+                    Back
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => { setShowTitleReview(false); setStep(2); }}
+                    className="inline-flex items-center justify-center gap-2 rounded-2xl bg-primary px-5 py-2.5 text-sm font-medium text-white hover:opacity-90"
+                  >
+                    Looks good, continue <ArrowRight className="h-4 w-4" />
+                  </button>
+                </div>
+              </div>
+            </div>
           )}
 
           {/* ── Create course modal ─────────────────────────────────────────── */}
