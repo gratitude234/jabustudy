@@ -107,6 +107,33 @@ export async function GET() {
             semester: cleanString(course.semester) || null,
           }));
       }
+
+    }
+
+    // GNS (General Studies) sets are university-wide — every student at a given
+    // level takes them regardless of department. Collect their course codes from
+    // actual published sets so the "For you" filter includes them even when the
+    // student's department hasn't registered those courses.
+    let gnsCourseCodes: string[] = [];
+    if (profileStatus === "complete" && prefs && isFiniteLevel(prefs.level)) {
+      const { data: gnsSets } = await supabase
+        .from("study_quiz_sets")
+        .select("course_code")
+        .ilike("course_code", "GNS%")
+        .eq("published", true)
+        .eq("level", prefs.level);
+
+      if (Array.isArray(gnsSets)) {
+        const existingCodes = new Set(courses.map((c) => c.course_code));
+        const seen = new Set<string>();
+        for (const s of gnsSets) {
+          const code = cleanString(s.course_code).toUpperCase();
+          if (code && !existingCodes.has(code) && !seen.has(code)) {
+            seen.add(code);
+            gnsCourseCodes.push(code);
+          }
+        }
+      }
     }
 
     const scopeBits = [
@@ -125,7 +152,7 @@ export async function GET() {
       scopeLabel: scopeBits.length ? scopeBits.join(" - ") : null,
       courses,
       courseIds: courses.map((course) => course.id),
-      courseCodes: courses.map((course) => course.course_code),
+      courseCodes: [...courses.map((course) => course.course_code), ...gnsCourseCodes],
     });
   } catch (e: any) {
     return NextResponse.json(

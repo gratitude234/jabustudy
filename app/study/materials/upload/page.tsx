@@ -583,7 +583,6 @@ export default function UploadMaterialsPage() {
   const filesWithErrors = useMemo(() =>
     files.filter((f) => {
       if (f.materialType === "past_question") {
-        if (!f.pqYear || typeof f.pqYear !== "number") return true;
         if (!f.pqSession || !f.pqSession.includes("/")) return true;
       }
       return false;
@@ -1539,34 +1538,26 @@ export default function UploadMaterialsPage() {
                           </div>
 
                           {f.materialType === "past_question" && (
-                            <div className="grid grid-cols-2 gap-3">
-                              <label className="block space-y-1.5">
-                                <span className="text-xs font-medium text-muted-brand">Year</span>
-                                <input
-                                  inputMode="numeric"
-                                  value={f.pqYear}
-                                  onChange={(e) => updateFile(f.id, { pqYear: e.target.value ? Number(e.target.value) : "" })}
-                                  placeholder="e.g. 2021"
-                                  className={cn(
-                                    "w-full rounded-2xl border bg-background px-3 py-2 text-sm text-foreground outline-none placeholder:text-muted-brand",
-                                    !f.pqYear ? "border-amber-400" : "border-border"
-                                  )}
-                                />
-                              </label>
-                              <label className="block space-y-1.5">
-                                <span className="text-xs font-medium text-muted-brand">Session</span>
-                                <input
-                                  value={f.pqSession}
-                                  onChange={(e) => updateFile(f.id, { pqSession: e.target.value })}
-                                  placeholder="2022/2023"
-                                  className={cn(
-                                    "w-full rounded-2xl border bg-background px-3 py-2 text-sm text-foreground outline-none placeholder:text-muted-brand",
-                                    !f.pqSession.includes("/") ? "border-amber-400" : "border-border"
-                                  )}
-                                />
-                                <p className="text-[11px] text-muted-brand">Format: 2022/2023</p>
-                              </label>
-                            </div>
+                            <label className="block space-y-1.5">
+                              <span className="text-xs font-medium text-muted-brand">Session</span>
+                              <input
+                                value={f.pqSession}
+                                onChange={(e) => {
+                                  const session = e.target.value;
+                                  const year = parseInt(session.split("/")[0], 10);
+                                  updateFile(f.id, {
+                                    pqSession: session,
+                                    pqYear: Number.isFinite(year) ? year : "",
+                                  });
+                                }}
+                                placeholder="e.g. 2022/2023"
+                                className={cn(
+                                  "w-full rounded-2xl border bg-background px-3 py-2 text-sm text-foreground outline-none placeholder:text-muted-brand",
+                                  !f.pqSession.includes("/") ? "border-amber-400" : "border-border"
+                                )}
+                              />
+                              <p className="text-[11px] text-muted-brand">Format: 2022/2023</p>
+                            </label>
                           )}
                         </div>
                       )}

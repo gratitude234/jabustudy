@@ -29,6 +29,7 @@ import {
   History,
   Flame,
   Layers,
+  RotateCcw,
 } from "lucide-react";
 
 type SortKey = "newest" | "oldest";
@@ -1484,11 +1485,37 @@ function PracticeHomeInner() {
     setPreviewOpen(true);
   }
 
-  function startSet(id: string, mode: "exam" | "study" = "study") {
-    const url = mode === "study"
-      ? `/study/practice/${id}?mode=study`
-      : `/study/practice/${id}?mode=exam`;
-    router.push(url);
+  const [resumeSheet, setResumeSheet] = useState<{
+    setId: string;
+    inProgressId: string;
+    title: string;
+  } | null>(null);
+
+  function startSet(id: string, mode: "exam" | "study" = "study", resumeAttemptId?: string) {
+    const params = new URLSearchParams({ mode });
+    if (resumeAttemptId) params.set("attempt", resumeAttemptId);
+    router.push(`/study/practice/${encodeURIComponent(id)}?${params.toString()}`);
+  }
+
+  function handleSetStart(s: QuizSetRow) {
+    const summary = setAttemptMap[s.id];
+    if (summary?.inProgressId) {
+      setResumeSheet({
+        setId: s.id,
+        inProgressId: summary.inProgressId,
+        title: (s.title ?? "Untitled set").trim() || "Untitled set",
+      });
+    } else {
+      startSet(s.id);
+    }
+  }
+
+  function handleStartFresh(inProgressId: string, setId: string) {
+    setResumeSheet(null);
+    fetch(`/api/study/practice/${encodeURIComponent(inProgressId)}/abandon`, {
+      method: "POST",
+    }).catch(() => {});
+    startSet(setId);
   }
 
   return (
@@ -1781,7 +1808,7 @@ function PracticeHomeInner() {
                 <QuizSetCard
                   key={s.id}
                   s={s}
-                  onStart={() => startSet(s.id)}
+                  onStart={() => handleSetStart(s)}
                   summary={setAttemptMap[s.id] ?? null}
                   currentUserId={authedUserId}
                 />
@@ -2066,6 +2093,42 @@ function PracticeHomeInner() {
         ) : (
           <p className="text-sm text-muted-foreground">Nothing to preview.</p>
         )}
+      </Drawer>
+
+      {/* Resume / Start Fresh sheet */}
+      <Drawer
+        open={Boolean(resumeSheet)}
+        onClose={() => setResumeSheet(null)}
+        title="Resume session?"
+        footer={
+          <div className="flex flex-col gap-2">
+            <button
+              type="button"
+              onClick={() => {
+                if (!resumeSheet) return;
+                setResumeSheet(null);
+                startSet(resumeSheet.setId, "study", resumeSheet.inProgressId);
+              }}
+              className="inline-flex items-center justify-center gap-2 rounded-2xl bg-[#5B35D5] px-4 py-3 text-sm font-extrabold text-white hover:bg-[#4526B8] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-card"
+            >
+              <Play className="h-4 w-4" /> Resume
+            </button>
+            <button
+              type="button"
+              onClick={() => resumeSheet && handleStartFresh(resumeSheet.inProgressId, resumeSheet.setId)}
+              className="inline-flex items-center justify-center gap-2 rounded-2xl border border-border bg-background px-4 py-3 text-sm font-semibold text-foreground hover:bg-secondary/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-card"
+            >
+              <RotateCcw className="h-4 w-4" /> Start Fresh
+            </button>
+          </div>
+        }
+      >
+        <div className="space-y-2">
+          <p className="text-sm font-semibold text-foreground">{resumeSheet?.title}</p>
+          <p className="text-sm text-muted-foreground">
+            You have an unfinished session for this set. Pick up where you left off, or start over.
+          </p>
+        </div>
       </Drawer>
 
     </div>

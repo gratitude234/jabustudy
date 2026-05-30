@@ -181,6 +181,9 @@ export function usePracticeEngine({
   // a router.refresh() page wipe. This is the dependency that replaces router.
   const [resetKey, setResetKey] = useState(0);
 
+  // True when the load effect detected and restored an existing in-progress attempt.
+  const [isResumed, setIsResumed] = useState(false);
+
   // Retry-weak mode — when set, the active question list is filtered to only
   // these IDs. The full questions/options data is still held in memory.
   const [retryWeakIds, setRetryWeakIds] = useState<Set<string> | null>(null);
@@ -438,6 +441,9 @@ export function usePracticeEngine({
               setWrittenAnswers(wmap);
               setWrittenGrades(gmap);
               if (local.flagged) setFlagged(local.flagged);
+              if (Object.keys(amap).length > 0 || Object.keys(wmap).length > 0) {
+                setIsResumed(true);
+              }
             }
           }
         }
@@ -466,6 +472,9 @@ export function usePracticeEngine({
               setAnswers(restored.answers);
               setWrittenAnswers(restored.writtenAnswers);
               setWrittenGrades(restored.writtenGrades);
+              if (Object.keys(restored.answers).length > 0 || Object.keys(restored.writtenAnswers).length > 0) {
+                setIsResumed(true);
+              }
             }
           } else {
             // No existing attempt — create new one
@@ -631,19 +640,17 @@ export function usePracticeEngine({
     if (submitted) return;
     setAnswers((prev) => ({ ...prev, [qid]: oid }));
 
-    // Persist answer (best-effort)
+    // Persist answer + award point if correct (best-effort — localStorage is the fallback)
     (async () => {
       try {
-        const userId = userIdRef.current;
-        if (!userId || !attemptId) return;
-        await supabase.from("study_attempt_answers").upsert(
+        if (!attemptId) return;
+        await fetch(
+          `/api/study/practice/${encodeURIComponent(attemptId)}/answer`,
           {
-            attempt_id: attemptId,
-            question_id: qid,
-            selected_option_id: oid,
-            answered_at: new Date().toISOString(),
-          } as any,
-          { onConflict: "attempt_id,question_id" }
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ questionId: qid, selectedOptionId: oid }),
+          }
         );
       } catch {
         // ignore
@@ -678,14 +685,18 @@ export function usePracticeEngine({
    * No router navigation, no full-page wipe. Works well on slow campus networks.
    */
   function softReset() {
-    // Clear retry-weak filter so the full set is shown again
+    const idToAbandon = attemptId;
     setRetryWeakIds(null);
-    // Clear per-question UI state (revealed answers, etc.) by resetting
-    // session-level state. The load useEffect will re-run on resetKey change
-    // and reset answers/flags/timer itself.
+    setIsResumed(false);
     initialAttemptRef.current = null;
     setAttemptId(null);
     setResetKey((k) => k + 1);
+
+    if (idToAbandon) {
+      fetch(`/api/study/practice/${encodeURIComponent(idToAbandon)}/abandon`, {
+        method: "POST",
+      }).catch(() => {});
+    }
   }
 
   /**
@@ -903,6 +914,7 @@ export function usePracticeEngine({
     isRetryMode: retryWeakIds !== null && !isDueMode,
     isDueMode,
     studyMode,
+    isResumed,
 
     // review
     reviewTab,

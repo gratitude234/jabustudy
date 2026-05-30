@@ -324,13 +324,14 @@ export async function POST(
     void notifyPracticePerfectScore({ userId: user.id, setId, score: correct });
   }
 
-  const rawPracticePoints = correct + STUDY_POINT_RULES.practiceCompletion;
+  // Per-question points are already awarded via /answer as each MCQ is tapped.
+  // Only award the completion bonus here.
   const practicePointsAwarded = await awardCappedStudyPoints({
     userId: user.id,
     eventType: "practice_attempt_scored",
     sourceTable: "study_practice_attempts",
     sourceId: attemptId,
-    points: rawPracticePoints,
+    points: STUDY_POINT_RULES.practiceCompletion,
     dailyCap: STUDY_POINT_RULES.practiceDailyCap,
     occurredAt: submittedIso,
     metadata: {

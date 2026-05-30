@@ -377,6 +377,7 @@ export default function PracticeTakeClient() {
     isRetryMode,
     isDueMode,
     studyMode,
+    isResumed,
     goToQuestion,
   } = engine;
 
@@ -397,6 +398,20 @@ export default function PracticeTakeClient() {
   // Review answer filtering + collapse state
   const [reviewFilter, setReviewFilter] = useState<"all" | "wrong" | "correct">("all");
   const [openReviews, setOpenReviews] = useState<Set<string>>(new Set());
+
+  // Resume notice — fires once when an existing session is detected
+  const [resumeNotice, setResumeNotice] = useState(false);
+  const resumeNoticeDismissRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    if (!isResumed || loading) return;
+    setResumeNotice(true);
+    if (resumeNoticeDismissRef.current) clearTimeout(resumeNoticeDismissRef.current);
+    resumeNoticeDismissRef.current = setTimeout(() => setResumeNotice(false), 5000);
+    return () => {
+      if (resumeNoticeDismissRef.current) clearTimeout(resumeNoticeDismissRef.current);
+    };
+  }, [isResumed, loading]);
 
   // Milestone toast — fires once when finalization completes
   const [milestone, setMilestone] = useState<Milestone | null>(null);
@@ -940,13 +955,27 @@ if (err || !meta) {
       {/* Sticky mobile header */}
       <div className="sticky top-0 z-20 -mx-4 bg-background/85 px-4 pb-3 pt-2 backdrop-blur border-b border-border">
         <div className="flex items-center justify-between gap-2">
-          <button
-            type="button"
-            onClick={() => router.back()}
-            className="inline-flex items-center gap-2 rounded-2xl border border-border bg-background px-3 py-2 text-sm font-extrabold text-foreground hover:bg-secondary/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-          >
-            <ArrowLeft className="h-4 w-4" /> Back
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => router.back()}
+              className="inline-flex items-center gap-2 rounded-2xl border border-border bg-background px-3 py-2 text-sm font-extrabold text-foreground hover:bg-secondary/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+            >
+              <ArrowLeft className="h-4 w-4" /> Back
+            </button>
+            {isResumed && !submitted && (
+              <button
+                type="button"
+                onClick={() => {
+                  setResumeNotice(false);
+                  resetAll();
+                }}
+                className="inline-flex items-center gap-1.5 rounded-2xl border border-border bg-background px-3 py-2 text-xs font-extrabold text-muted-foreground hover:bg-secondary/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+              >
+                <RotateCcw className="h-3.5 w-3.5" /> Start Fresh
+              </button>
+            )}
+          </div>
 
           <div className="flex items-center gap-2">
             {learningMode ? (
@@ -2009,6 +2038,35 @@ if (err || !meta) {
                 )}
               </button>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* ── Resume notice toast ── */}
+      {resumeNotice && !submitted && (
+        <div
+          role="status"
+          aria-live="polite"
+          className="pointer-events-none fixed inset-x-0 bottom-28 z-50 flex justify-center px-4"
+        >
+          <div
+            className={cn(
+              "pointer-events-auto flex w-full max-w-sm items-center gap-3 rounded-3xl border border-[#5B35D5]/25 bg-[#EEEDFE] px-4 py-3 shadow-lg dark:border-[#5B35D5]/30 dark:bg-[#5B35D5]/10",
+              "animate-in slide-in-from-bottom-4 fade-in duration-300"
+            )}
+          >
+            <BookOpen className="h-5 w-5 shrink-0 text-[#5B35D5] dark:text-indigo-300" aria-hidden="true" />
+            <p className="min-w-0 flex-1 text-sm font-extrabold text-[#3B24A8] dark:text-indigo-300">
+              Resuming — {Object.keys(answers).length} of {questions.length} answered
+            </p>
+            <button
+              type="button"
+              onClick={() => setResumeNotice(false)}
+              aria-label="Dismiss"
+              className="grid h-6 w-6 shrink-0 place-items-center rounded-xl opacity-60 transition-opacity hover:opacity-100 text-[#3B24A8] dark:text-indigo-300"
+            >
+              <X className="h-3.5 w-3.5" />
+            </button>
           </div>
         </div>
       )}
