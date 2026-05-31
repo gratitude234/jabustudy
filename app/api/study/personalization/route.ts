@@ -15,6 +15,57 @@ function semesterToDb(value: unknown) {
   return raw;
 }
 
+function normalizedCourseCode(value: unknown) {
+  return cleanString(value).toUpperCase();
+}
+
+function isUniversalPracticeSet(row: any) {
+  const config = row?.generation_config;
+  if (!config || typeof config !== "object" || Array.isArray(config)) return false;
+
+  const scope = cleanString(
+    config.scope ??
+      config.audience ??
+      config.visibility_scope ??
+      config.department_scope
+  ).toLowerCase();
+
+  if (
+    scope === "universal" ||
+    scope === "university" ||
+    scope === "all" ||
+    scope === "all_departments" ||
+    scope === "cross_department" ||
+    scope === "cross-department"
+  ) {
+    return true;
+  }
+
+  if (
+    Object.prototype.hasOwnProperty.call(config, "department") &&
+    (config.department === null || cleanString(config.department).toLowerCase() === "all")
+  ) {
+    return true;
+  }
+
+  if (
+    Object.prototype.hasOwnProperty.call(config, "department_id") &&
+    (config.department_id === null || cleanString(config.department_id).toLowerCase() === "all")
+  ) {
+    return true;
+  }
+
+  if (
+    Object.prototype.hasOwnProperty.call(config, "departments") &&
+    Array.isArray(config.departments) &&
+    config.departments.length === 0
+  ) {
+    return true;
+  }
+
+  return false;
+}
+
 function isFiniteLevel(value: unknown): value is number {
   return typeof value === "number" && Number.isFinite(value);
 }
@@ -101,7 +152,7 @@ export async function GET() {
           .filter((course: any) => cleanString(course.course_code))
           .map((course: any) => ({
             id: String(course.id),
-            course_code: cleanString(course.course_code).toUpperCase(),
+            course_code: normalizedCourseCode(course.course_code),
             course_title: cleanString(course.course_title) || null,
             level: isFiniteLevel(course.level) ? course.level : null,
             semester: cleanString(course.semester) || null,
@@ -127,10 +178,48 @@ export async function GET() {
         const existingCodes = new Set(courses.map((c) => c.course_code));
         const seen = new Set<string>();
         for (const s of gnsSets) {
-          const code = cleanString(s.course_code).toUpperCase();
+          const code = normalizedCourseCode(s.course_code);
           if (code && !existingCodes.has(code) && !seen.has(code)) {
             seen.add(code);
             gnsCourseCodes.push(code);
+          }
+        }
+      }
+    }
+
+    // Cross-department practice sets: if a published set is marked as universal
+    // in generation_config, include its course code for every matching level and
+    // semester. This supports shared 100L courses like PHY 122 without duplicating
+    // the same quiz set into every department.
+    let universalCourseCodes: string[] = [];
+    if (profileStatus === "complete" && prefs && isFiniteLevel(prefs.level)) {
+      let universalSetsQuery = supabase
+        .from("study_quiz_sets")
+        .select("course_code,semester,generation_config")
+        .eq("published", true)
+        .eq("level", prefs.level);
+
+      const semester = semesterToDb(prefs.semester);
+      if (semester) {
+        universalSetsQuery = universalSetsQuery.or(`semester.eq.${semester},semester.is.null`);
+      }
+
+      const { data: universalSets } = await universalSetsQuery.limit(200);
+
+      if (Array.isArray(universalSets)) {
+        const existingCodes = new Set([
+          ...courses.map((c) => c.course_code),
+          ...gnsCourseCodes,
+        ]);
+        const seen = new Set<string>();
+
+        for (const set of universalSets) {
+          if (!isUniversalPracticeSet(set)) continue;
+
+          const code = normalizedCourseCode((set as any).course_code);
+          if (code && !existingCodes.has(code) && !seen.has(code)) {
+            seen.add(code);
+            universalCourseCodes.push(code);
           }
         }
       }
@@ -152,7 +241,7 @@ export async function GET() {
       scopeLabel: scopeBits.length ? scopeBits.join(" - ") : null,
       courses,
       courseIds: courses.map((course) => course.id),
-      courseCodes: [...courses.map((course) => course.course_code), ...gnsCourseCodes],
+      courseCodes: [...courses.map((course) => course.course_code), ...gnsCourseCodes, ...universalCourseCodes],
     });
   } catch (e: any) {
     return NextResponse.json(
