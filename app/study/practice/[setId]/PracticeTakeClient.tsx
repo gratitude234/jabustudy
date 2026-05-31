@@ -390,6 +390,9 @@ export default function PracticeTakeClient() {
   const [revealed, setRevealed] = useState<Record<string, boolean>>({});
   const [writtenGradeStates, setWrittenGradeStates] = useState<Record<string, WrittenGradeState>>({});
   const clearedGradeRef = useRef<Set<string>>(new Set());
+  const questionTopRef = useRef<HTMLDivElement | null>(null);
+  const explanationRef = useRef<HTMLDivElement | null>(null);
+  const bottomNavRef = useRef<HTMLDivElement | null>(null);
 
   // Question navigator drawer
   const [navOpen, setNavOpen] = useState(false);
@@ -674,12 +677,54 @@ export default function PracticeTakeClient() {
     }
   }
 
+  function afterNextPaint(callback: () => void) {
+    window.requestAnimationFrame(() => {
+      window.requestAnimationFrame(callback);
+    });
+  }
+
+  function scrollToElementTop(element: HTMLElement, behavior: ScrollBehavior = "smooth") {
+    const stickyHeaderOffset = 112;
+    const top = Math.max(0, window.scrollY + element.getBoundingClientRect().top - stickyHeaderOffset);
+    window.scrollTo({ top, behavior });
+  }
+
+  function scrollToQuestionTop() {
+    afterNextPaint(() => {
+      if (!questionTopRef.current) return;
+      scrollToElementTop(questionTopRef.current);
+    });
+  }
+
+  function scrollToExplanationPanel() {
+    afterNextPaint(() => {
+      const panel = explanationRef.current;
+      if (!panel) return;
+
+      const stickyHeaderOffset = 112;
+      const bottomNavHeight = bottomNavRef.current?.getBoundingClientRect().height ?? 76;
+      const visibleBottom = window.innerHeight - bottomNavHeight - 16;
+      const rect = panel.getBoundingClientRect();
+
+      if (rect.top >= stickyHeaderOffset && rect.top <= visibleBottom) return;
+      scrollToElementTop(panel);
+    });
+  }
+
   function goNext() {
+    if (idx < questions.length - 1) scrollToQuestionTop();
     setIdx((v) => Math.min(questions.length - 1, v + 1));
   }
 
   function goPrev() {
+    if (idx > 0) scrollToQuestionTop();
     setIdx((v) => Math.max(0, v - 1));
+  }
+
+  function jumpToQuestion(questionIndex: number) {
+    goToQuestion(questionIndex);
+    setNavOpen(false);
+    scrollToQuestionTop();
   }
 
   function onPick(optionId: string) {
@@ -691,7 +736,10 @@ export default function PracticeTakeClient() {
     if (learningMode && revealed[current.id]) return;
 
     choose(current.id, optionId);
-    if (learningMode) setRevealed((m) => ({ ...m, [current.id]: true }));
+    if (learningMode) {
+      setRevealed((m) => ({ ...m, [current.id]: true }));
+      scrollToExplanationPanel();
+    }
   }
 
   function clearStoredWrittenGrade(questionId: string) {
@@ -785,14 +833,13 @@ export default function PracticeTakeClient() {
         const option = opts[optionIndex] as AnyOption | undefined;
         if (!option) return;
         if (current && learningMode && revealed[current.id]) return;
-        choose(current!.id, option.id);
-        if (learningMode) setRevealed((m) => ({ ...m, [current!.id]: true }));
+        onPick(option.id);
         return;
       }
 
       if (e.key === "ArrowRight" || (e.key === "Enter" && current && (learningMode ? revealed[current.id] : answers[current.id]) && current.question_type !== "short_answer" && current.question_type !== "theory")) {
         if (!isLast) {
-          setIdx((v) => Math.min(questions.length - 1, v + 1));
+          goNext();
         } else {
           handleSubmitClick();
         }
@@ -800,7 +847,7 @@ export default function PracticeTakeClient() {
       }
 
       if (e.key === "ArrowLeft") {
-        setIdx((v) => Math.max(0, v - 1));
+        goPrev();
       }
     }
 
@@ -1644,7 +1691,7 @@ if (err || !meta) {
         </div>
       ) : (
         /* Question */
-        <div className="mt-4 space-y-3">
+        <div ref={questionTopRef} className="mt-4 scroll-mt-32 space-y-3">
           {submitErr && (
             <div className="rounded-2xl border border-rose-300/50 bg-rose-50 px-4 py-3 dark:border-rose-800/40 dark:bg-rose-950/20">
               <p className="text-sm font-semibold text-rose-900 dark:text-rose-200">
@@ -1717,7 +1764,7 @@ if (err || !meta) {
                     ? "Write your answer, then let AI grade it against the marking points."
                     : "Type a concise answer, then let AI grade it against the model answer."
                   : isRevealed
-                  ? "Scroll down for the explanation, then tap Next."
+                  ? "Review the explanation or tap Next."
                   : learningMode
                   ? "Pick an answer to reveal feedback and explanation."
                   : "Choose an answer. Feedback appears after you submit."}
@@ -1953,7 +2000,7 @@ if (err || !meta) {
 
           {/* ── Explanation Panel — appears after student answers ────────── */}
           {isRevealed && current ? (
-            <div className="space-y-2">
+            <div ref={explanationRef} className="scroll-mt-32 space-y-2">
               {current.explanation ? (
                 <div className="rounded-2xl border border-[#5B35D5]/20 bg-[#EEEDFE] px-3 py-3 dark:border-[#5B35D5]/30 dark:bg-[#5B35D5]/10">
                   <p className="text-xs font-extrabold text-[#3B24A8] dark:text-indigo-300 mb-1">Explanation</p>
@@ -1985,7 +2032,7 @@ if (err || !meta) {
 
       {/* ── Sticky bottom navigation ── */}
       {!submitted && questions.length > 0 && current && (
-        <div className="fixed bottom-0 left-0 right-0 z-30 border-t border-border bg-background/95 backdrop-blur-sm px-4 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-3">
+        <div ref={bottomNavRef} className="fixed bottom-0 left-0 right-0 z-30 border-t border-border bg-background/95 backdrop-blur-sm px-4 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-3">
           <div className="mx-auto flex max-w-2xl items-center gap-3">
             <button
               type="button"
@@ -2127,7 +2174,7 @@ if (err || !meta) {
                   <button
                     key={q.id}
                     type="button"
-                    onClick={() => { goToQuestion(i); setNavOpen(false); }}
+                    onClick={() => jumpToQuestion(i)}
                     className={cn(
                       "grid h-9 w-full place-items-center rounded-xl border text-xs font-semibold transition",
                       isCurrent
