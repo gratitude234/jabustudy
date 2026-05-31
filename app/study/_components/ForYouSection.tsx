@@ -137,7 +137,7 @@ export function ForYouSection({
   setChips,
   onClearFilters,
 }: ForYouSectionProps) {
-  const { prefs, isProfileComplete, courseIds, loading: prefsLoading } = useStudyPrefs();
+  const { prefs, isProfileComplete, courses, courseIds, loading: prefsLoading } = useStudyPrefs();
   const quickLevel = prefs?.level ?? 100;
   const [items, setItems] = useState<MaterialMini[]>([]);
   const [fetching, setFetching] = useState(false);
@@ -171,13 +171,22 @@ export function ForYouSection({
 
   useEffect(() => {
     if (prefsLoading || weakLoading || attemptsCount === null || !isProfileComplete || !prefs) return;
-    const activePrefs = prefs;
     let cancelled = false;
 
     async function fetchForYou() {
       setFetching(true);
 
-      if (courseIds.length === 0) {
+      const activeCourseIds = courses.length
+        ? courses
+            .filter((course) => {
+              if (chips.level && course.level !== chips.level) return false;
+              if (chips.semester && course.semester !== chips.semester) return false;
+              return true;
+            })
+            .map((course) => course.id)
+        : courseIds;
+
+      if (activeCourseIds.length === 0) {
         setItems([]);
         setFetching(false);
         return;
@@ -187,22 +196,9 @@ export function ForYouSection({
         .from("study_materials")
         .select("id,title,course_code,level,semester,material_type,downloads,created_at")
         .eq("approved", true)
-        .in("course_id", courseIds);
+        .eq("upload_status", "live")
+        .in("course_id", activeCourseIds);
 
-      if (activePrefs.department_id) {
-        query = query.eq("department_id", activePrefs.department_id);
-      } else if (activePrefs.department) {
-        query = query.ilike("department", `%${activePrefs.department}%`);
-      }
-
-      if (!activePrefs.department_id) {
-        if (activePrefs.faculty_id) query = query.eq("faculty_id", activePrefs.faculty_id);
-        else if (activePrefs.faculty) query = query.ilike("faculty", `%${activePrefs.faculty}%`);
-      }
-
-      if (activePrefs.level) query = query.eq("level", String(activePrefs.level));
-      if (chips.level) query = query.eq("level", String(chips.level));
-      if (chips.semester) query = query.eq("semester", chips.semester);
       if (chips.type) query = query.eq("material_type", chips.type);
 
       if (attemptsCount === 0) {
@@ -232,6 +228,7 @@ export function ForYouSection({
     chips.level,
     chips.semester,
     chips.type,
+    courses,
     courseIds,
     isProfileComplete,
     prefs,
