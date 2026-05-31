@@ -28,6 +28,8 @@ type Course = {
   course_code: string;
   course_title: string | null;
   level: number | null;
+  department_id?: string | null;
+  semester?: string | null;
   study_departments?: {
     id: string;
     name: string;
@@ -82,6 +84,15 @@ type QuestionRow = {
 // â”€â”€ Helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 function norm(v: string) {
   return v.trim().replace(/\s+/g, " ");
+}
+
+function courseChoiceLabel(course: Course) {
+  return [
+    course.study_departments?.name,
+    course.level ? `${course.level}L` : null,
+    course.semester ? `${course.semester} semester` : null,
+    course.study_departments?.study_faculties?.name,
+  ].filter(Boolean).join(" / ");
 }
 
 function timeAgoShort(iso?: string | null) {
@@ -212,6 +223,8 @@ export default function CourseHubPage() {
   const [materials, setMaterials]   = useState<Material[]>([]);
   const [practiceSets, setPracticeSets] = useState<PracticeSet[]>([]);
   const [questions, setQuestions]   = useState<QuestionRow[]>([]);
+  const [courseChoices, setCourseChoices] = useState<Course[]>([]);
+  const [selectedCourseId, setSelectedCourseId] = useState<string | null>(null);
   const [loading, setLoading]       = useState(true);
   const [error, setError]           = useState<string | null>(null);
 
@@ -219,24 +232,47 @@ export default function CourseHubPage() {
   const [showAllMaterials, setShowAllMaterials] = useState(false);
 
   useEffect(() => {
+    setSelectedCourseId(null);
+  }, [code]);
+
+  useEffect(() => {
     let mounted = true;
     async function run() {
       setLoading(true);
       setError(null);
+      setCourseChoices([]);
       if (!code) { setError("Invalid course code."); setLoading(false); return; }
 
       const cRes = await supabase
         .from("study_courses")
-        .select("id,course_code,course_title,level,department_id,study_departments:department_id(id,name,faculty_id,study_faculties:faculty_id(id,name))")
+        .select("id,course_code,course_title,level,semester,department_id,study_departments:department_id(id,name,faculty_id,study_faculties:faculty_id(id,name))")
         .eq("course_code", code)
         .eq("status", "approved")
-        .maybeSingle();
+        .order("level", { ascending: true, nullsFirst: false })
+        .limit(50);
 
       if (!mounted) return;
       if (cRes.error) { setError(cRes.error.message); setLoading(false); return; }
-      if (!cRes.data) { setCourse(null); setLoading(false); return; }
+      const courseRows = (((cRes.data as any[]) ?? []) as Course[]).filter(Boolean);
+      if (courseRows.length === 0) { setCourse(null); setLoading(false); return; }
 
-      const courseRow = cRes.data as any as Course;
+      const selectedCourse = selectedCourseId
+        ? courseRows.find((row) => row.id === selectedCourseId) ?? null
+        : courseRows.length === 1
+          ? courseRows[0]
+          : null;
+
+      if (!selectedCourse) {
+        setCourse(null);
+        setCourseChoices(courseRows);
+        setMaterials([]);
+        setPracticeSets([]);
+        setQuestions([]);
+        setLoading(false);
+        return;
+      }
+
+      const courseRow = selectedCourse;
       setCourse(courseRow);
 
       const [mRes, pRes, qRes] = await Promise.all([
@@ -289,7 +325,7 @@ export default function CourseHubPage() {
     }
     run();
     return () => { mounted = false; };
-  }, [code]);
+  }, [code, selectedCourseId]);
 
   const dept    = course?.study_departments?.name ?? "";
   const faculty = course?.study_departments?.study_faculties?.name ?? "";
@@ -391,7 +427,7 @@ export default function CourseHubPage() {
           <div className="m-4 rounded-2xl border border-rose-300/40 bg-rose-100/30 p-4 text-sm text-foreground">{error}</div>
         )}
 
-        {!error && !course && !loading && (
+        {!error && !course && !loading && courseChoices.length === 0 && (
           <div className="p-5 text-center space-y-2">
             <p className="font-extrabold text-foreground">Course not found</p>
             <p className="text-sm text-muted-brand">No course matches "{code}".</p>
@@ -401,6 +437,37 @@ export default function CourseHubPage() {
             >
               Search library <ArrowRight className="h-4 w-4" />
             </Link>
+          </div>
+        )}
+
+        {!error && !course && !loading && courseChoices.length > 0 && (
+          <div className="p-5 space-y-3">
+            <div className="space-y-1 text-center">
+              <p className="font-extrabold text-foreground">Choose your {code} course</p>
+              <p className="text-sm text-muted-brand">
+                This course code exists in more than one department or level.
+              </p>
+            </div>
+            <div className="space-y-2">
+              {courseChoices.map((choice) => (
+                <button
+                  key={choice.id}
+                  type="button"
+                  onClick={() => setSelectedCourseId(choice.id)}
+                  className="flex w-full items-center justify-between gap-3 rounded-2xl border border-border bg-background px-4 py-3 text-left transition hover:bg-secondary/40"
+                >
+                  <span className="min-w-0">
+                    <span className="block truncate text-sm font-extrabold text-foreground">
+                      {choice.course_title ? norm(choice.course_title) : choice.course_code}
+                    </span>
+                    <span className="mt-0.5 block text-xs leading-snug text-muted-brand">
+                      {courseChoiceLabel(choice) || "General course"}
+                    </span>
+                  </span>
+                  <ChevronRight className="h-4 w-4 shrink-0 text-muted-brand" />
+                </button>
+              ))}
+            </div>
           </div>
         )}
       </div>
