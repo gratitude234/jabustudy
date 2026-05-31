@@ -81,9 +81,52 @@ type QuestionRow = {
   solved: boolean | null;
 };
 
+type StudyPrefsLite = {
+  department_id?: string | null;
+  level?: number | null;
+  semester?: string | null;
+} | null;
+
+type PersonalizationLite = {
+  ok?: boolean;
+  prefs?: StudyPrefsLite;
+  courseIds?: string[];
+} | null;
+
 // â”€â”€ Helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 function norm(v: string) {
   return v.trim().replace(/\s+/g, " ");
+}
+
+function sameText(a?: string | null, b?: string | null) {
+  return norm(String(a ?? "")).toLowerCase() === norm(String(b ?? "")).toLowerCase();
+}
+
+function choosePreferredCourse(
+  courses: Course[],
+  personalization: PersonalizationLite
+) {
+  if (courses.length <= 1) return courses[0] ?? null;
+
+  const courseIds = new Set((personalization?.courseIds ?? []).filter(Boolean));
+  const fromScope = courses.find((course) => courseIds.has(course.id));
+  if (fromScope) return fromScope;
+
+  const prefs = personalization?.prefs ?? null;
+  if (!prefs) return null;
+
+  const matchesDept = (course: Course) => !!prefs.department_id && course.department_id === prefs.department_id;
+  const matchesLevel = (course: Course) => prefs.level != null && Number(course.level) === Number(prefs.level);
+  const matchesSemester = (course: Course) => !!prefs.semester && sameText(course.semester, prefs.semester);
+
+  return (
+    courses.find((course) => matchesDept(course) && matchesLevel(course) && matchesSemester(course)) ??
+    courses.find((course) => matchesDept(course) && matchesLevel(course)) ??
+    courses.find((course) => matchesDept(course) && matchesSemester(course)) ??
+    courses.find((course) => matchesDept(course)) ??
+    courses.find((course) => matchesLevel(course) && matchesSemester(course)) ??
+    null
+  );
 }
 
 function courseChoiceLabel(course: Course) {
@@ -243,13 +286,18 @@ export default function CourseHubPage() {
       setCourseChoices([]);
       if (!code) { setError("Invalid course code."); setLoading(false); return; }
 
-      const cRes = await supabase
-        .from("study_courses")
-        .select("id,course_code,course_title,level,semester,department_id,study_departments:department_id(id,name,faculty_id,study_faculties:faculty_id(id,name))")
-        .eq("course_code", code)
-        .eq("status", "approved")
-        .order("level", { ascending: true, nullsFirst: false })
-        .limit(50);
+      const [cRes, personalization] = await Promise.all([
+        supabase
+          .from("study_courses")
+          .select("id,course_code,course_title,level,semester,department_id,study_departments:department_id(id,name,faculty_id,study_faculties:faculty_id(id,name))")
+          .eq("course_code", code)
+          .eq("status", "approved")
+          .order("level", { ascending: true, nullsFirst: false })
+          .limit(50),
+        fetch("/api/study/personalization", { cache: "no-store" })
+          .then((res) => res.ok ? res.json() as Promise<PersonalizationLite> : null)
+          .catch(() => null),
+      ]);
 
       if (!mounted) return;
       if (cRes.error) { setError(cRes.error.message); setLoading(false); return; }
@@ -260,7 +308,7 @@ export default function CourseHubPage() {
         ? courseRows.find((row) => row.id === selectedCourseId) ?? null
         : courseRows.length === 1
           ? courseRows[0]
-          : null;
+          : choosePreferredCourse(courseRows, personalization);
 
       if (!selectedCourse) {
         setCourse(null);
