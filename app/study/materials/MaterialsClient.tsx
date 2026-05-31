@@ -928,6 +928,10 @@ export default function MaterialsClient() {
           courseQuery = courseQuery.eq("level", scopeLevel);
         }
 
+        if (scopeSemesterDb) {
+          courseQuery = courseQuery.eq("semester", scopeSemesterDb);
+        }
+
         if (scopeDeptId) {
           courseQuery = courseQuery.eq("department_id", scopeDeptId);
         } else if (scopeDept) {
@@ -943,11 +947,21 @@ export default function MaterialsClient() {
         const nextCourses = await Promise.all(
           (courseData as Array<Pick<FastLaneCourse, "id" | "course_code" | "course_title">>).map(
             async (course) => {
-              const { count } = await supabase
+              let countQuery = supabase
                 .from("study_materials")
                 .select("id", { count: "exact", head: true })
                 .eq("course_id", course.id)
-                .eq("approved", true);
+                .eq("approved", true)
+                .eq("upload_status", "live");
+
+              if (typeParam && typeParam !== "all") {
+                countQuery = countQuery.eq("material_type", typeParam);
+              }
+              if (verifiedOnly) countQuery = countQuery.eq("verified", true);
+              if (featuredOnly) countQuery = countQuery.eq("featured", true);
+              if (sessionParam.trim()) countQuery = countQuery.ilike("session", `%${sessionParam.trim()}%`);
+
+              const { count } = await countQuery;
 
               return {
                 ...course,
@@ -968,7 +982,18 @@ export default function MaterialsClient() {
     return () => {
       cancelled = true;
     };
-  }, [hasFastLanePrefs, prefsLoaded, scopeDept, scopeDeptId, scopeLevel]);
+  }, [
+    featuredOnly,
+    hasFastLanePrefs,
+    prefsLoaded,
+    scopeDept,
+    scopeDeptId,
+    scopeLevel,
+    scopeSemesterDb,
+    sessionParam,
+    typeParam,
+    verifiedOnly,
+  ]);
 
   // Load filter options
   useEffect(() => {
