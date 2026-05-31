@@ -137,15 +137,28 @@ export async function GET() {
     }> = [];
 
     if (profileStatus === "complete" && prefs) {
-      const { data: courseRows, error: coursesError } = await supabase
-        .from("study_courses")
-        .select("id,course_code,course_title,level,semester")
-        .eq("status", "approved")
-        .eq("department_id", prefs.department_id)
-        .eq("level", prefs.level)
-        .eq("semester", semesterToDb(prefs.semester))
-        .order("course_code", { ascending: true })
-        .limit(80);
+      const semester = semesterToDb(prefs.semester);
+      const buildCourseQuery = (withSemester: boolean) => {
+        let query = supabase
+          .from("study_courses")
+          .select("id,course_code,course_title,level,semester")
+          .eq("status", "approved")
+          .eq("department_id", prefs.department_id)
+          .eq("level", prefs.level)
+          .order("course_code", { ascending: true })
+          .limit(80);
+
+        if (withSemester && semester) query = query.eq("semester", semester);
+        return query;
+      };
+
+      let { data: courseRows, error: coursesError } = await buildCourseQuery(Boolean(semester));
+
+      if (!coursesError && semester && Array.isArray(courseRows) && courseRows.length === 0) {
+        const fallback = await buildCourseQuery(false);
+        courseRows = fallback.data;
+        coursesError = fallback.error;
+      }
 
       if (!coursesError && Array.isArray(courseRows)) {
         courses = courseRows

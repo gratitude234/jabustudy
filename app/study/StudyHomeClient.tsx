@@ -523,7 +523,8 @@ function MyCourses({ scopeLabel }: { scopeLabel: string | null }) {
                   .from("study_materials")
                   .select("id", { count: "exact", head: true })
                   .eq("course_id", course.id)
-                  .eq("approved", true);
+                  .eq("approved", true)
+                  .or("upload_status.eq.live,upload_status.is.null");
                 return { ...course, materialCount: count ?? 0 };
               }
             )

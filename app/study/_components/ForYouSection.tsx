@@ -196,7 +196,7 @@ export function ForYouSection({
         .from("study_materials")
         .select("id,title,course_code,level,semester,material_type,downloads,created_at")
         .eq("approved", true)
-        .eq("upload_status", "live")
+        .or("upload_status.eq.live,upload_status.is.null")
         .in("course_id", activeCourseIds);
 
       if (chips.type) query = query.eq("material_type", chips.type);

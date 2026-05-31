@@ -244,7 +244,7 @@ export default function CourseHubPage() {
           .from("study_materials")
           .select("id,title,description,file_path,level,session,semester,created_at,downloads,material_type")
           .eq("approved", true)
-          .eq("upload_status", "live")
+          .or("upload_status.eq.live,upload_status.is.null")
           .eq("course_id", courseRow.id)
           .order("downloads", { ascending: false, nullsFirst: false })
           .order("created_at", { ascending: false })

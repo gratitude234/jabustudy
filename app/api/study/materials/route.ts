@@ -123,7 +123,8 @@ async function resolveCourseIdsForFilters(
     ? (Number.isFinite(explicitLevel) ? explicitLevel : null)
     : scope?.level ?? null;
   const explicitSemester = mapSemesterParamToDb(semester);
-  const effectiveSemester = explicitSemester || (scope?.semester ? mapSemesterParamToDb(scope.semester) : "");
+  const implicitSemester = !explicitSemester && scope?.semester ? mapSemesterParamToDb(scope.semester) : "";
+  const effectiveSemester = explicitSemester || implicitSemester;
   const effectiveFacultyId = faculty_id || scope?.faculty_id || "";
   const effectiveDeptId = dept_id || scope?.department_id || "";
 
@@ -139,34 +140,49 @@ async function resolveCourseIdsForFilters(
 
   if (!hasCourseScope) return null;
 
-  let courseQuery = supabase
-    .from("study_courses")
-    .select("id")
-    .eq("status", "approved")
-    .limit(5000);
+  const buildCourseQuery = (withSemester: boolean) => {
+    let courseQuery = supabase
+      .from("study_courses")
+      .select("id")
+      .eq("status", "approved")
+      .limit(5000);
 
-  if (course) courseQuery = courseQuery.eq("course_code", course.trim().toUpperCase());
-  if (effectiveLevel != null) courseQuery = courseQuery.eq("level", effectiveLevel);
-  if (effectiveSemester) courseQuery = courseQuery.eq("semester", effectiveSemester);
+    if (course) courseQuery = courseQuery.eq("course_code", course.trim().toUpperCase());
+    if (effectiveLevel != null) courseQuery = courseQuery.eq("level", effectiveLevel);
+    if (withSemester && effectiveSemester) courseQuery = courseQuery.eq("semester", effectiveSemester);
 
-  if (faculty_id) courseQuery = courseQuery.eq("faculty_id", faculty_id);
-  else if (faculty) courseQuery = courseQuery.eq("faculty", faculty);
-  else if (scope?.faculty_id) courseQuery = courseQuery.eq("faculty_id", scope.faculty_id);
+    if (faculty_id) courseQuery = courseQuery.eq("faculty_id", faculty_id);
+    else if (faculty) courseQuery = courseQuery.eq("faculty", faculty);
+    else if (scope?.faculty_id) courseQuery = courseQuery.eq("faculty_id", scope.faculty_id);
 
-  if (dept_id) courseQuery = courseQuery.eq("department_id", dept_id);
-  else if (dept) courseQuery = courseQuery.eq("department", dept);
-  else if (scope?.department_id) courseQuery = courseQuery.eq("department_id", scope.department_id);
+    if (dept_id) courseQuery = courseQuery.eq("department_id", dept_id);
+    else if (dept) courseQuery = courseQuery.eq("department", dept);
+    else if (scope?.department_id) courseQuery = courseQuery.eq("department_id", scope.department_id);
 
-  const { data, error } = await courseQuery;
-  if (error) return null;
+    return courseQuery;
+  };
 
-  return Array.from(
-    new Set(
-      ((data as Array<{ id?: string | null }> | null) ?? [])
-        .map((row) => String(row.id ?? "").trim())
-        .filter(Boolean)
-    )
-  );
+  const readIds = async (withSemester: boolean) => {
+    const { data, error } = await buildCourseQuery(withSemester);
+    if (error) return null;
+    return Array.from(
+      new Set(
+        ((data as Array<{ id?: string | null }> | null) ?? [])
+          .map((row) => String(row.id ?? "").trim())
+          .filter(Boolean)
+      )
+    );
+  };
+
+  const ids = await readIds(Boolean(effectiveSemester));
+  if (ids && ids.length > 0) return ids;
+
+  if (ids && implicitSemester) {
+    const fallbackIds = await readIds(false);
+    if (fallbackIds) return fallbackIds;
+  }
+
+  return ids;
 }
 
 export async function GET(req: Request) {
@@ -306,7 +322,7 @@ export async function GET(req: Request) {
         { count: "exact" }
       )
       .eq("approved", true)
-      .eq("upload_status", "live");
+      .or("upload_status.eq.live,upload_status.is.null");
 
     if (q) {
       // PostgREST `.or()` logic strings are whitespace-sensitive.

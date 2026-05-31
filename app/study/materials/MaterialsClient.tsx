@@ -917,28 +917,43 @@ export default function MaterialsClient() {
     (async () => {
       setFastLaneLoading(true);
       try {
-        let courseQuery = supabase
-          .from("study_courses")
-          .select("id,course_code,course_title")
-          .eq("status", "approved")
-          .order("course_code", { ascending: true })
-          .limit(8);
+        const buildCourseQuery = (withSemester: boolean) => {
+          let courseQuery = supabase
+            .from("study_courses")
+            .select("id,course_code,course_title")
+            .eq("status", "approved")
+            .order("course_code", { ascending: true })
+            .limit(8);
 
-        if (typeof scopeLevel === "number" && Number.isFinite(scopeLevel)) {
-          courseQuery = courseQuery.eq("level", scopeLevel);
+          if (typeof scopeLevel === "number" && Number.isFinite(scopeLevel)) {
+            courseQuery = courseQuery.eq("level", scopeLevel);
+          }
+
+          if (withSemester && scopeSemesterDb) {
+            courseQuery = courseQuery.eq("semester", scopeSemesterDb);
+          }
+
+          if (scopeDeptId) {
+            courseQuery = courseQuery.eq("department_id", scopeDeptId);
+          } else if (scopeDept) {
+            courseQuery = courseQuery.ilike("department", `%${scopeDept}%`);
+          }
+
+          return courseQuery;
+        };
+
+        let { data: courseData, error: courseError } = await buildCourseQuery(Boolean(scopeSemesterDb));
+        if (
+          !courseError &&
+          scopeSemesterDb &&
+          !semesterParam &&
+          Array.isArray(courseData) &&
+          courseData.length === 0
+        ) {
+          const fallback = await buildCourseQuery(false);
+          courseData = fallback.data;
+          courseError = fallback.error;
         }
-
-        if (scopeSemesterDb) {
-          courseQuery = courseQuery.eq("semester", scopeSemesterDb);
-        }
-
-        if (scopeDeptId) {
-          courseQuery = courseQuery.eq("department_id", scopeDeptId);
-        } else if (scopeDept) {
-          courseQuery = courseQuery.ilike("department", `%${scopeDept}%`);
-        }
-
-        const { data: courseData, error: courseError } = await courseQuery;
         if (cancelled || courseError || !Array.isArray(courseData) || courseData.length === 0) {
           if (!cancelled) setFastLaneCourses([]);
           return;
@@ -952,7 +967,7 @@ export default function MaterialsClient() {
                 .select("id", { count: "exact", head: true })
                 .eq("course_id", course.id)
                 .eq("approved", true)
-                .eq("upload_status", "live");
+                .or("upload_status.eq.live,upload_status.is.null");
 
               if (typeParam && typeParam !== "all") {
                 countQuery = countQuery.eq("material_type", typeParam);
@@ -990,6 +1005,7 @@ export default function MaterialsClient() {
     scopeDeptId,
     scopeLevel,
     scopeSemesterDb,
+    semesterParam,
     sessionParam,
     typeParam,
     verifiedOnly,
