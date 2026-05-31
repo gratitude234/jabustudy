@@ -8,6 +8,8 @@ type LatestRestore = {
   answers?: Record<string, string>;
   writtenAnswers?: Record<string, string>;
   flagged?: Record<string, boolean>;
+  currentQuestionId?: string;
+  questionIndex?: number;
 };
 
 type SubmitPointSummary = {
@@ -111,10 +113,51 @@ function readLocalDraft(key: string): LatestRestore {
           ? parsed.writtenAnswers
           : undefined,
       flagged: parsed?.flagged && typeof parsed.flagged === "object" ? parsed.flagged : undefined,
+      currentQuestionId:
+        typeof parsed?.currentQuestionId === "string" ? parsed.currentQuestionId : undefined,
+      questionIndex:
+        typeof parsed?.questionIndex === "number" && Number.isFinite(parsed.questionIndex)
+          ? parsed.questionIndex
+          : typeof parsed?.idx === "number" && Number.isFinite(parsed.idx)
+            ? parsed.idx
+            : undefined,
     };
   } catch {
     return {};
   }
+}
+
+function resolveResumeIndex({
+  questions,
+  answers,
+  writtenAnswers,
+  local,
+}: {
+  questions: QuizQuestion[];
+  answers: Record<string, string>;
+  writtenAnswers: Record<string, string>;
+  local?: LatestRestore;
+}) {
+  if (!questions.length) return 0;
+
+  if (local?.currentQuestionId) {
+    const byIdIndex = questions.findIndex((q) => q.id === local.currentQuestionId);
+    if (byIdIndex >= 0) return byIdIndex;
+  }
+
+  if (
+    typeof local?.questionIndex === "number" &&
+    local.questionIndex >= 0 &&
+    local.questionIndex < questions.length
+  ) {
+    return local.questionIndex;
+  }
+
+  const firstUnanswered = questions.findIndex((q) =>
+    isWrittenQuestion(q) ? !writtenAnswers[q.id]?.trim() : !answers[q.id]
+  );
+
+  return firstUnanswered >= 0 ? firstUnanswered : questions.length - 1;
 }
 
 export function usePracticeEngine({
@@ -249,6 +292,7 @@ export function usePracticeEngine({
   );
 
   const current = activeQuestions[idx];
+  const currentQuestionId = current?.id ?? null;
   const opts = current ? optionsByQ[current.id] ?? [] : [];
 
   const stats = useMemo(() => {
@@ -413,6 +457,27 @@ export function usePracticeEngine({
           position: typeof rest.position === "number" ? rest.position : null,
         }));
 
+        // Cap questions to the user's remaining free quota.
+        // Skip for due-mode sessions (SRS review of specific weak questions).
+        // Skip when remaining = 0 — the gate handles that case instead of an empty quiz.
+        let finalQuestions = cleanQData;
+        const practiceRemaining = billingData?.practice?.remaining;
+        const practiceLimit = billingData?.practice?.limit;
+        if (
+          !isDueMode &&
+          practiceLimit !== null && practiceLimit !== undefined &&
+          typeof practiceRemaining === "number" &&
+          practiceRemaining > 0 &&
+          cleanQData.length > practiceRemaining
+        ) {
+          finalQuestions = cleanQData.slice(0, practiceRemaining);
+        }
+
+        const resumeQuestions =
+          dueQuestionIds && dueQuestionIds.length > 0
+            ? finalQuestions.filter((q) => dueQuestionIds.includes(q.id))
+            : finalQuestions;
+
         // ─── PHASE 2: attempt restore / create ───────────────────────────
         // Attempt creation needs userId (from Phase 1 auth).
         // Answers fetch needs the validated attemptId (from Phase 1 attValidate).
@@ -420,6 +485,7 @@ export function usePracticeEngine({
 
         let effectiveAttemptId: string | null = null;
         let startedAtMs = Date.now();
+        let resumeIdx = 0;
 
         if (user && initialAttemptRef.current) {
           // Use the already-validated attempt data from Phase 1
@@ -442,13 +508,19 @@ export function usePracticeEngine({
             const local = readLocalDraft(`jabu:practiceDraft:${setId}:${effectiveAttemptId}`);
             if (local.answers) Object.assign(amap, local.answers);
             if (local.writtenAnswers) Object.assign(wmap, local.writtenAnswers);
+            resumeIdx = resolveResumeIndex({
+              questions: resumeQuestions,
+              answers: amap,
+              writtenAnswers: wmap,
+              local,
+            });
 
             if (!cancelled) {
               setAnswers(amap);
               setWrittenAnswers(wmap);
               setWrittenGrades(gmap);
               if (local.flagged) setFlagged(local.flagged);
-              if (Object.keys(amap).length > 0 || Object.keys(wmap).length > 0) {
+              if (Object.keys(amap).length > 0 || Object.keys(wmap).length > 0 || resumeIdx > 0) {
                 setIsResumed(true);
               }
             }
@@ -477,11 +549,26 @@ export function usePracticeEngine({
 
             // Restore saved answers from the existing attempt
             const restored = await loadAttemptAnswers(effectiveAttemptId);
+            const local = readLocalDraft(`jabu:practiceDraft:${setId}:${effectiveAttemptId}`);
+            if (local.answers) Object.assign(restored.answers, local.answers);
+            if (local.writtenAnswers) Object.assign(restored.writtenAnswers, local.writtenAnswers);
+            resumeIdx = resolveResumeIndex({
+              questions: resumeQuestions,
+              answers: restored.answers,
+              writtenAnswers: restored.writtenAnswers,
+              local,
+            });
+
             if (!cancelled) {
               setAnswers(restored.answers);
               setWrittenAnswers(restored.writtenAnswers);
               setWrittenGrades(restored.writtenGrades);
-              if (Object.keys(restored.answers).length > 0 || Object.keys(restored.writtenAnswers).length > 0) {
+              if (local.flagged) setFlagged(local.flagged);
+              if (
+                Object.keys(restored.answers).length > 0 ||
+                Object.keys(restored.writtenAnswers).length > 0 ||
+                resumeIdx > 0
+              ) {
                 setIsResumed(true);
               }
             }
@@ -522,27 +609,12 @@ export function usePracticeEngine({
 
         if (cancelled) return;
 
-        // Cap questions to the user's remaining free quota.
-        // Skip for due-mode sessions (SRS review of specific weak questions).
-        // Skip when remaining = 0 — the gate handles that case instead of an empty quiz.
-        let finalQuestions = cleanQData;
-        const practiceRemaining = billingData?.practice?.remaining;
-        const practiceLimit = billingData?.practice?.limit;
-        if (
-          !isDueMode &&
-          practiceLimit !== null && practiceLimit !== undefined &&
-          typeof practiceRemaining === "number" &&
-          practiceRemaining > 0 &&
-          cleanQData.length > practiceRemaining
-        ) {
-          finalQuestions = cleanQData.slice(0, practiceRemaining);
-        }
-
         setMeta(setRes.data as any);
         setOriginalQuestionCount(cleanQData.length);
         setQuestions(finalQuestions);
         setOptionsByQ(grouped);
         setAttemptId(effectiveAttemptId);
+        setIdx(Math.max(0, Math.min(Math.max(0, resumeQuestions.length - 1), resumeIdx)));
 
         // Apply Due Today pre-filter immediately after questions load.
         // Reuses the retryWeakIds mechanism so the rest of the engine is unchanged.
@@ -603,19 +675,27 @@ export function usePracticeEngine({
     return () => clearInterval(t);
   }, [submitted]);
 
-  // Autosave to localStorage (answers + written answers + flags)
+  // Autosave to localStorage (answers + written answers + flags + last viewed question)
   useEffect(() => {
     if (typeof window === "undefined") return;
     if (!setId || !attemptId) return;
+    if (activeQuestions.length > 0 && !currentQuestionId) return;
     try {
       window.localStorage.setItem(
         draftKey,
-        JSON.stringify({ answers, writtenAnswers, flagged, updatedAt: Date.now() })
+        JSON.stringify({
+          answers,
+          writtenAnswers,
+          flagged,
+          currentQuestionId,
+          questionIndex: idx,
+          updatedAt: Date.now(),
+        })
       );
     } catch {
       // ignore
     }
-  }, [answers, writtenAnswers, flagged, draftKey, setId, attemptId]);
+  }, [answers, writtenAnswers, flagged, currentQuestionId, idx, activeQuestions.length, draftKey, setId, attemptId]);
 
   // Debounced Supabase autosave for written answers. MCQs still persist immediately on tap.
   useEffect(() => {
@@ -694,7 +774,7 @@ export function usePracticeEngine({
   }
 
   function goToQuestion(i: number) {
-    setIdx(Math.max(0, Math.min(questions.length - 1, i)));
+    setIdx(Math.max(0, Math.min(activeQuestions.length - 1, i)));
   }
 
   /**
