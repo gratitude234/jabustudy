@@ -381,6 +381,7 @@ export default function PracticeTakeClient() {
     studyMode,
     isResumed,
     goToQuestion,
+    persistProgress,
   } = engine;
 
   // Inline submit confirmation (replaces window.confirm)
@@ -711,6 +712,11 @@ export default function PracticeTakeClient() {
     });
   }
 
+  function leavePractice() {
+    persistProgress();
+    router.back();
+  }
+
   function goNext() {
     if (idx < questions.length - 1) scrollToQuestionTop();
     setIdx((v) => Math.min(questions.length - 1, v + 1));
@@ -895,7 +901,7 @@ if (err || !meta) {
       <div className="pb-32">
         <button
           type="button"
-          onClick={() => router.back()}
+          onClick={leavePractice}
           className="inline-flex items-center gap-2 rounded-2xl border border-border bg-background px-4 py-2 text-sm font-extrabold text-foreground hover:bg-secondary/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
         >
           <ArrowLeft className="h-4 w-4" /> Back
@@ -940,7 +946,7 @@ if (err || !meta) {
         <div className="sticky top-0 z-20 -mx-4 bg-background/85 px-4 pb-3 pt-2 backdrop-blur border-b border-border md:-mx-6 md:px-6">
           <button
             type="button"
-            onClick={() => router.back()}
+            onClick={leavePractice}
             className="inline-flex items-center gap-2 rounded-2xl border border-border bg-background px-3 py-2 text-sm font-extrabold text-foreground hover:bg-secondary/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           >
             <ArrowLeft className="h-4 w-4" /> Back
@@ -1007,7 +1013,7 @@ if (err || !meta) {
           <div className="flex items-center gap-2">
             <button
               type="button"
-              onClick={() => router.back()}
+              onClick={leavePractice}
               className="inline-flex items-center gap-2 rounded-2xl border border-border bg-background px-3 py-2 text-sm font-extrabold text-foreground hover:bg-secondary/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
             >
               <ArrowLeft className="h-4 w-4" /> Back

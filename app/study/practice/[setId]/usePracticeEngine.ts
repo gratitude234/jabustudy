@@ -294,6 +294,49 @@ export function usePracticeEngine({
   const current = activeQuestions[idx];
   const currentQuestionId = current?.id ?? null;
   const opts = current ? optionsByQ[current.id] ?? [] : [];
+  const idxRef = useRef(0);
+
+  useEffect(() => {
+    idxRef.current = idx;
+  }, [idx]);
+
+  function clampQuestionIndex(value: number, questionList = activeQuestions) {
+    const maxIndex = Math.max(0, questionList.length - 1);
+    if (!Number.isFinite(value)) return 0;
+    return Math.max(0, Math.min(maxIndex, Math.trunc(value)));
+  }
+
+  function persistProgress(nextIndex = idxRef.current, questionList = activeQuestions) {
+    if (typeof window === "undefined") return;
+    if (!setId || !attemptId) return;
+
+    const questionIndex = clampQuestionIndex(nextIndex, questionList);
+    const nextQuestionId = questionList[questionIndex]?.id ?? currentQuestionId;
+
+    try {
+      window.localStorage.setItem(
+        draftKey,
+        JSON.stringify({
+          answers,
+          writtenAnswers,
+          flagged,
+          currentQuestionId: nextQuestionId,
+          questionIndex,
+          updatedAt: Date.now(),
+        })
+      );
+    } catch {
+      // ignore
+    }
+  }
+
+  function setPersistedIdx(value: number | ((currentIndex: number) => number)) {
+    const nextValue = typeof value === "function" ? value(idxRef.current) : value;
+    const nextIndex = clampQuestionIndex(nextValue);
+    idxRef.current = nextIndex;
+    persistProgress(nextIndex);
+    setIdx(nextIndex);
+  }
 
   const stats = useMemo(() => {
     const total = activeQuestions.length;
@@ -677,25 +720,13 @@ export function usePracticeEngine({
 
   // Autosave to localStorage (answers + written answers + flags + last viewed question)
   useEffect(() => {
+    if (loading) return;
     if (typeof window === "undefined") return;
     if (!setId || !attemptId) return;
     if (activeQuestions.length > 0 && !currentQuestionId) return;
-    try {
-      window.localStorage.setItem(
-        draftKey,
-        JSON.stringify({
-          answers,
-          writtenAnswers,
-          flagged,
-          currentQuestionId,
-          questionIndex: idx,
-          updatedAt: Date.now(),
-        })
-      );
-    } catch {
-      // ignore
-    }
-  }, [answers, writtenAnswers, flagged, currentQuestionId, idx, activeQuestions.length, draftKey, setId, attemptId]);
+    persistProgress(idx, activeQuestions);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [answers, writtenAnswers, flagged, currentQuestionId, idx, activeQuestions.length, draftKey, setId, attemptId, loading]);
 
   // Debounced Supabase autosave for written answers. MCQs still persist immediately on tap.
   useEffect(() => {
@@ -774,7 +805,7 @@ export function usePracticeEngine({
   }
 
   function goToQuestion(i: number) {
-    setIdx(Math.max(0, Math.min(activeQuestions.length - 1, i)));
+    setPersistedIdx(i);
   }
 
   /**
@@ -996,7 +1027,7 @@ export function usePracticeEngine({
 
     // state
     idx,
-    setIdx,
+    setIdx: setPersistedIdx,
     current,
     opts,
     answers,
@@ -1031,6 +1062,7 @@ export function usePracticeEngine({
     setWrittenGrade,
     toggleFlag,
     goToQuestion,
+    persistProgress,
     softReset,
     retryWeakQuestions,
     finalizeAttempt,
