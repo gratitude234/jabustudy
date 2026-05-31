@@ -13,6 +13,8 @@ import { LeaderboardFilters } from "./LeaderboardFilters";
 // 5-min revalidation — swap for MATERIALIZED VIEW + pg_cron when user base grows.
 export const revalidate = 300;
 
+const LEADERBOARD_VISIBLE_LIMIT = 100;
+
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 type LeaderRow = {
@@ -286,7 +288,7 @@ async function fetchLeaderboard(
     points: Number(row.points ?? 0),
     rank: row.rank ?? null,
   }));
-  const rows = allRows.slice(0, 50);
+  const rows = allRows.slice(0, LEADERBOARD_VISIBLE_LIMIT);
 
   let outsideTopNRow: { row: LeaderRow; rank: number } | null = null;
   if (currentUserId && !rows.some((r) => r.user_id === currentUserId)) {
