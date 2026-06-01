@@ -136,6 +136,18 @@ type GenerationTrustStatus = {
     remaining: number;
     retryAfterSeconds: number;
   };
+  freeTrial?: {
+    limit: number;
+    used: number;
+    remaining: number;
+    periodKey: string;
+    questionCount?: number;
+  };
+  effectiveRequest?: {
+    count: number;
+    questionFormat: QuestionFormat;
+    chargeMode: "free_trial" | "credits" | "none";
+  };
   matchingDraft: ActiveAiDraft | null;
   latestDraft: ActiveAiDraft | null;
 };
@@ -403,6 +415,8 @@ export default function PracticeMaterialClient({
         const nextStatus: GenerationTrustStatus = {
           credits: data.credits,
           dailyLimit: data.dailyLimit,
+          freeTrial: data.freeTrial,
+          effectiveRequest: data.effectiveRequest,
           matchingDraft: data.matchingDraft ?? null,
           latestDraft: data.latestDraft ?? null,
         };
@@ -867,13 +881,17 @@ export default function PracticeMaterialClient({
   // ── Render ───────────────────────────────────────────────────────────────────
 
   const creditCost = generationTrust?.credits.cost ?? Math.ceil(config.count / 5);
-  const monthlyFreeRemaining = generationTrust?.dailyLimit.remaining ?? 3;
+  const trial = generationTrust?.freeTrial ?? generationTrust?.dailyLimit;
+  const freeTrialRemaining = trial?.remaining ?? 0;
+  const isTrialChargeMode = generationTrust?.effectiveRequest?.chargeMode === "free_trial";
+  const trialQuestionCount = generationTrust?.freeTrial?.questionCount ?? 10;
+  const effectiveQuestionCount = generationTrust?.effectiveRequest?.count ?? config.count;
   const hasMatchingDraft = Boolean(matchingDraft?.setId);
   const canGenerate = hasMatchingDraft || (generationTrust?.credits.canAfford ?? credits >= creditCost);
   const generationAvailabilityCopy = hasMatchingDraft
     ? "Saved draft ready - no credits charged"
-    : monthlyFreeRemaining > 0
-      ? `${monthlyFreeRemaining} free AI generation${monthlyFreeRemaining === 1 ? "" : "s"} left this month`
+    : isTrialChargeMode && freeTrialRemaining > 0
+      ? `Free trial: ${trialQuestionCount} OBJ questions`
       : `${creditCost} credit${creditCost === 1 ? "" : "s"} needed`;
 
   const currentQ = batchQuestions[currentIndex];
@@ -923,12 +941,12 @@ export default function PracticeMaterialClient({
           hasMatchingDraft ? "border-primary/25 bg-primary-light text-primary-text" : "border-amber-300 bg-amber-50 text-amber-800 dark:bg-amber-950/40 dark:border-amber-900 dark:text-amber-400"
         )}>
           <span className="font-semibold">{generationAvailabilityCopy}</span>
-          <span className="font-extrabold">{hasMatchingDraft || monthlyFreeRemaining > 0 ? "Free" : `${credits} left`}</span>
+          <span className="font-extrabold">{hasMatchingDraft || isTrialChargeMode ? "Free" : `${credits} left`}</span>
         </div>
 
         {error && <p className="text-center text-xs text-red-500">{error}</p>}
-        {!hasMatchingDraft && monthlyFreeRemaining <= 0 && !(generationTrust?.credits.canAfford ?? credits >= creditCost) && (
-          <p className="text-center text-xs font-semibold text-amber-700">Free AI generations used. Buy credits or upgrade.</p>
+        {!hasMatchingDraft && freeTrialRemaining <= 0 && !(generationTrust?.credits.canAfford ?? credits >= creditCost) && (
+          <p className="text-center text-xs font-semibold text-amber-700">Free AI trial used. Buy credits or upgrade.</p>
         )}
         {!hasMatchingDraft && !(generationTrust?.credits.canAfford ?? credits >= creditCost) && (
           <p className="text-center text-xs font-semibold text-amber-700">
@@ -947,7 +965,7 @@ export default function PracticeMaterialClient({
           </span>
           <span className="min-w-0 flex-1">
             <span className="block text-base font-extrabold">
-              {hasMatchingDraft ? "Resume saved draft" : `Generate ${config.count} questions`}
+              {hasMatchingDraft ? "Resume saved draft" : `Generate ${effectiveQuestionCount} questions`}
             </span>
             <span className="text-xs font-medium text-white/75">
               {hasMatchingDraft ? "No credits charged" : "Opens practice immediately"}

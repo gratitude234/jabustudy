@@ -3,6 +3,8 @@
 import { createContext, useContext, useEffect, useRef, useState } from "react";
 import { supabase } from "@/lib/supabase";
 
+const NOTIFICATIONS_POLL_MS = 60_000;
+
 type NotificationsContextValue = {
   count: number;
 };
@@ -17,23 +19,26 @@ export function NotificationsProvider({
   children: React.ReactNode;
 }) {
   const [count, setCount] = useState(0);
-  const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
   const currentUserIdRef = useRef<string | null>(null);
+  const inFlightRef = useRef<string | null>(null);
   const requestIdRef = useRef(0);
 
   useEffect(() => {
     let mounted = true;
+    let pollTimer: ReturnType<typeof setInterval> | null = null;
 
-    async function removeCurrentChannel() {
-      const channel = channelRef.current;
-      channelRef.current = null;
-
-      if (channel) {
-        await supabase.removeChannel(channel);
+    function stopPolling() {
+      if (pollTimer) {
+        clearInterval(pollTimer);
+        pollTimer = null;
       }
     }
 
     async function fetchCount(uid: string, requestId: number) {
+      const requestKey = `${uid}:${requestId}`;
+      if (inFlightRef.current === requestKey) return;
+      inFlightRef.current = requestKey;
+
       try {
         const { count, error } = await supabase
           .from("notifications")
@@ -49,20 +54,37 @@ export function NotificationsProvider({
         if (mounted && requestIdRef.current === requestId) {
           setCount(0);
         }
+      } finally {
+        if (inFlightRef.current === requestKey) {
+          inFlightRef.current = null;
+        }
       }
     }
 
-    async function syncForUser(uid: string | null) {
-      if (currentUserIdRef.current === uid && (!uid || channelRef.current)) {
-        return;
-      }
+    function startPolling(uid: string, requestId: number) {
+      stopPolling();
+      pollTimer = setInterval(() => {
+        if (document.visibilityState !== "hidden") {
+          void fetchCount(uid, requestId);
+        }
+      }, NOTIFICATIONS_POLL_MS);
+    }
+
+    function refreshCurrentUser() {
+      const uid = currentUserIdRef.current;
+      if (!uid || document.visibilityState === "hidden") return;
+      void fetchCount(uid, requestIdRef.current);
+    }
+
+    async function syncForUser(uid: string | null, force = false) {
+      if (!force && currentUserIdRef.current === uid) return;
 
       const requestId = requestIdRef.current + 1;
       requestIdRef.current = requestId;
       currentUserIdRef.current = uid;
+      inFlightRef.current = null;
 
-      await removeCurrentChannel();
-      if (!mounted || requestIdRef.current !== requestId) return;
+      stopPolling();
 
       if (!uid) {
         setCount(0);
@@ -71,25 +93,13 @@ export function NotificationsProvider({
 
       await fetchCount(uid, requestId);
       if (!mounted || requestIdRef.current !== requestId) return;
-
-      const channel = supabase
-        .channel(`notifications:provider:${uid}`)
-        .on(
-          "postgres_changes",
-          { event: "*", schema: "public", table: "notifications", filter: `user_id=eq.${uid}` },
-          () => {
-            void fetchCount(uid, requestIdRef.current);
-          }
-        );
-
-      channelRef.current = channel;
-      channel.subscribe();
+      startPolling(uid, requestId);
     }
 
     void (async () => {
       const { data } = await supabase.auth.getUser();
       if (!mounted) return;
-      await syncForUser(data.user?.id ?? null);
+      await syncForUser(data.user?.id ?? null, true);
     })();
 
     const {
@@ -98,11 +108,16 @@ export function NotificationsProvider({
       void syncForUser(session?.user?.id ?? null);
     });
 
+    window.addEventListener("focus", refreshCurrentUser);
+    document.addEventListener("visibilitychange", refreshCurrentUser);
+
     return () => {
       mounted = false;
       requestIdRef.current += 1;
       subscription.unsubscribe();
-      void removeCurrentChannel();
+      stopPolling();
+      window.removeEventListener("focus", refreshCurrentUser);
+      document.removeEventListener("visibilitychange", refreshCurrentUser);
     };
   }, []);
 

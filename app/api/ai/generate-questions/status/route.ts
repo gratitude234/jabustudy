@@ -6,7 +6,7 @@ import {
   getActiveGenerationDrafts,
   normalizeQuestionGenerationRequest,
 } from "@/lib/aiQuestionGenerationTrust";
-import { getAiGenerationAccess } from "@/lib/studyBilling";
+import { FREE_AI_TRIAL_QUESTION_COUNT, getAiGenerationAccess } from "@/lib/studyBilling";
 
 export async function GET(req: NextRequest) {
   const supabase = await createSupabaseServerClient();
@@ -29,31 +29,55 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ ok: false, message: "Missing materialId" }, { status: 400 });
   }
 
-  const [access, drafts] = await Promise.all([
-    getAiGenerationAccess(user.id, requestConfig.creditCost),
-    getActiveGenerationDrafts({
-      userId: user.id,
+  let effectiveConfig = requestConfig;
+  let access = await getAiGenerationAccess(user.id, requestConfig.creditCost);
+  if (access.chargeMode === "free_trial") {
+    const trialConfig = normalizeQuestionGenerationRequest({
       materialId: requestConfig.materialId,
-      signature: requestConfig.signature,
-    }),
-  ]);
+      count: FREE_AI_TRIAL_QUESTION_COUNT,
+      difficulty: requestConfig.difficulty,
+      questionFormat: "mcq",
+      generationIntent: requestConfig.generationIntent,
+      focus: requestConfig.focus,
+      topicId: requestConfig.topicId,
+      subtopicId: requestConfig.subtopicId,
+      forceQuestionCount: true,
+    });
+    if (trialConfig) {
+      effectiveConfig = trialConfig;
+      access = await getAiGenerationAccess(user.id, trialConfig.creditCost);
+    }
+  }
 
-  const remaining = access.freeAi.remaining;
+  const drafts = await getActiveGenerationDrafts({
+    userId: user.id,
+    materialId: effectiveConfig.materialId,
+    signature: effectiveConfig.signature,
+  });
+
+  const remaining = access.freeTrial.remaining;
+  const isTrial = access.chargeMode === "free_trial";
 
   return NextResponse.json({
     ok: true,
     credits: {
       balance: access.credits.balance,
-      cost: requestConfig.creditCost,
+      cost: isTrial ? 0 : effectiveConfig.creditCost,
       canAfford: access.credits.canAfford,
     },
     plus: access.plus,
-    freeAi: access.freeAi,
+    freeTrial: access.freeTrial,
+    freeAi: access.freeTrial,
     dailyLimit: {
-      limit: access.freeAi.limit,
-      used: access.freeAi.used,
+      limit: access.freeTrial.limit,
+      used: access.freeTrial.used,
       remaining,
       retryAfterSeconds: 0,
+    },
+    effectiveRequest: {
+      count: effectiveConfig.questionCount,
+      questionFormat: effectiveConfig.questionFormat,
+      chargeMode: access.chargeMode,
     },
     matchingDraft: drafts.matchingDraft,
     latestDraft: drafts.latestDraft,

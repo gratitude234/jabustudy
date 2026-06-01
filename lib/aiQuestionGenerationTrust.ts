@@ -111,6 +111,7 @@ export function normalizeQuestionGenerationRequest(args: {
   focus?: unknown;
   topicId?: unknown;
   subtopicId?: unknown;
+  forceQuestionCount?: boolean;
 }): QuestionGenerationRequest | null {
   const materialId = cleanOptionalString(args.materialId);
   if (!materialId) return null;
@@ -120,7 +121,7 @@ export function normalizeQuestionGenerationRequest(args: {
     Math.min(MAX_QUESTION_COUNT, parsePositiveInt(args.count, 10))
   );
   const questionFormat = normalizeQuestionFormat(args.questionFormat);
-  const questionCount = questionFormat === "mcq"
+  const questionCount = args.forceQuestionCount ? requestedQuestionCount : questionFormat === "mcq"
     ? Math.min(requestedQuestionCount, aiLimitFromEnv("AI_MAX_MCQ_QUESTIONS_PER_REQUEST", 6))
     : requestedQuestionCount;
   const difficulty = normalizeDifficulty(args.difficulty);

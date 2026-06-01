@@ -8,7 +8,9 @@ export const FREE_DAILY_PRACTICE_LIMIT = 40;
 // Promo window — all practice sets free between these WAT dates (inclusive)
 export const PROMO_START = "2026-05-30";
 export const PROMO_END   = "2026-06-07";
-export const FREE_MONTHLY_AI_GENERATIONS = 3;
+export const FREE_AI_TRIAL_GENERATIONS = 1;
+export const FREE_AI_TRIAL_PERIOD_KEY = "lifetime";
+export const FREE_AI_TRIAL_QUESTION_COUNT = 10;
 export const RECEIPT_BUCKET =
   process.env.JABUSTUDY_PAYMENT_RECEIPT_BUCKET || process.env.JABU_PAYMENT_RECEIPT_BUCKET || "payment-receipts";
 
@@ -125,10 +127,6 @@ function watDate() {
   return new Date(Date.now() + 3_600_000).toISOString().slice(0, 10);
 }
 
-function watMonthKey() {
-  return new Date(Date.now() + 3_600_000).toISOString().slice(0, 7);
-}
-
 function cleanText(value: unknown, maxLength: number) {
   return typeof value === "string" ? value.trim().slice(0, maxLength) : "";
 }
@@ -195,22 +193,22 @@ export async function getPlusAccess(userId: string) {
   };
 }
 
-export async function getFreeAiUsage(userId: string) {
-  const periodKey = watMonthKey();
+export async function getFreeAiTrialUsage(userId: string) {
   const { data } = await adminSupabase
     .from("study_monetization_usage")
     .select("used_count")
     .eq("user_id", userId)
-    .eq("usage_type", "free_ai_generation")
-    .eq("period_key", periodKey)
+    .eq("usage_type", "free_ai_trial_generation")
+    .eq("period_key", FREE_AI_TRIAL_PERIOD_KEY)
     .maybeSingle();
 
   const used = Number(data?.used_count ?? 0);
   return {
-    periodKey,
-    limit: FREE_MONTHLY_AI_GENERATIONS,
+    periodKey: FREE_AI_TRIAL_PERIOD_KEY,
+    limit: FREE_AI_TRIAL_GENERATIONS,
     used,
-    remaining: Math.max(0, FREE_MONTHLY_AI_GENERATIONS - used),
+    remaining: Math.max(0, FREE_AI_TRIAL_GENERATIONS - used),
+    questionCount: FREE_AI_TRIAL_QUESTION_COUNT,
   };
 }
 
@@ -252,49 +250,50 @@ export async function getPracticeAccess(userId: string, requestedQuestions = 0) 
 }
 
 export async function getAiGenerationAccess(userId: string, creditCost: number) {
-  const [plus, freeAi, balance] = await Promise.all([
+  const [plus, freeTrial, balance] = await Promise.all([
     getPlusAccess(userId),
-    getFreeAiUsage(userId),
+    getFreeAiTrialUsage(userId),
     ensureCreditBalance(userId, 0),
   ]);
   const cost = Math.max(0, Math.trunc(creditCost));
-  const canUseFree = !plus.active && cost > 0 && freeAi.remaining > 0;
   const canUseCredits = cost === 0 || balance >= cost;
+  const canUseTrial = !plus.active && cost > 0 && !canUseCredits && freeTrial.remaining > 0;
 
   return {
     plus,
-    freeAi,
+    freeTrial,
+    freeAi: freeTrial,
     credits: {
       balance,
       cost,
-      canAfford: canUseFree || canUseCredits,
+      canAfford: canUseCredits || canUseTrial,
     },
-    chargeMode: canUseFree ? "free_monthly" as const : "credits" as const,
-    allowed: canUseFree || canUseCredits,
+    chargeMode: canUseCredits ? "credits" as const : canUseTrial ? "free_trial" as const : "credits" as const,
+    allowed: canUseCredits || canUseTrial,
   };
 }
 
-export async function recordFreeAiGeneration(userId: string, metadata: Record<string, unknown>) {
-  const freeAi = await getFreeAiUsage(userId);
+export async function recordFreeAiTrialGeneration(userId: string, metadata: Record<string, unknown>) {
+  const freeTrial = await getFreeAiTrialUsage(userId);
   const { data, error } = await adminSupabase.rpc("increment_study_monetization_usage", {
     p_user_id: userId,
-    p_usage_type: "free_ai_generation",
-    p_period_key: freeAi.periodKey,
+    p_usage_type: "free_ai_trial_generation",
+    p_period_key: freeTrial.periodKey,
     p_amount: 1,
-    p_limit: FREE_MONTHLY_AI_GENERATIONS,
+    p_limit: FREE_AI_TRIAL_GENERATIONS,
     p_metadata: metadata,
   });
 
   if (error) {
-    throw Object.assign(new Error("Free AI allowance could not be recorded."), {
-      code: "FREE_AI_RECORD_FAILED",
+    throw Object.assign(new Error("Free AI trial could not be recorded."), {
+      code: "FREE_AI_TRIAL_RECORD_FAILED",
       cause: error,
     });
   }
 
   const row = Array.isArray(data) ? data[0] : data;
   if (!row?.ok) {
-    throw Object.assign(new Error("Free AI allowance has been used up."), {
+    throw Object.assign(new Error("Free AI trial has already been used."), {
       code: row?.code || "AI_LIMIT_REACHED",
     });
   }
@@ -304,17 +303,17 @@ export async function recordFreeAiGeneration(userId: string, metadata: Record<st
     user_id: userId,
     delta: 0,
     balance_after: balance,
-    reason: "free_monthly_generation",
+    reason: "free_trial_generation",
     metadata: {
       ...metadata,
-      periodKey: freeAi.periodKey,
+      periodKey: freeTrial.periodKey,
       usedCount: row.used_count,
     },
   } as never);
 
   return {
-    used: Number(row.used_count ?? freeAi.used + 1),
-    remaining: Number(row.remaining ?? Math.max(0, freeAi.remaining - 1)),
+    used: Number(row.used_count ?? freeTrial.used + 1),
+    remaining: Number(row.remaining ?? Math.max(0, freeTrial.remaining - 1)),
   };
 }
 
@@ -572,9 +571,9 @@ async function notifyBillingUser(userId: string, message: { title: string; body:
 }
 
 export async function getBillingSnapshot(userId: string) {
-  const [plus, freeAi, practice, creditBalance, ordersResult] = await Promise.all([
+  const [plus, freeTrial, practice, creditBalance, ordersResult] = await Promise.all([
     getPlusAccess(userId),
-    getFreeAiUsage(userId),
+    getFreeAiTrialUsage(userId),
     getPracticeAccess(userId),
     ensureCreditBalance(userId, 0),
     adminSupabase
@@ -588,7 +587,8 @@ export async function getBillingSnapshot(userId: string) {
   return {
     plus,
     credits: { balance: creditBalance },
-    freeAi,
+    freeTrial,
+    freeAi: freeTrial,
     practice,
     bank: getBankDetails(),
     plans: Object.values(BILLING_PLANS),

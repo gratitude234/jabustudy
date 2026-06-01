@@ -34,7 +34,11 @@ import {
   normalizeQuestionGenerationRequest,
   spendStudyCredits,
 } from "@/lib/aiQuestionGenerationTrust";
-import { getAiGenerationAccess, recordFreeAiGeneration } from "@/lib/studyBilling";
+import {
+  FREE_AI_TRIAL_QUESTION_COUNT,
+  getAiGenerationAccess,
+  recordFreeAiTrialGeneration,
+} from "@/lib/studyBilling";
 
 const QUESTION_GEN_TEXT_CHARS = 24_000;
 const AI_QUESTION_TIMEOUT_MS =
@@ -589,7 +593,7 @@ async function handleGenerateQuestionsRequest(req: NextRequest) {
   const { coveredQuestions = [] } = body;
   const persistDraft = body.persistDraft === true;
   const ignoreMatchingDraft = body.ignoreMatchingDraft === true;
-  const requestConfig = normalizeQuestionGenerationRequest({
+  const rawRequestConfig = normalizeQuestionGenerationRequest({
     materialId: body.materialId,
     count: body.count,
     difficulty: body.difficulty,
@@ -599,17 +603,9 @@ async function handleGenerateQuestionsRequest(req: NextRequest) {
     topicId: body.topicId,
     subtopicId: body.subtopicId,
   });
-  if (!requestConfig) return NextResponse.json({ error: "Missing materialId" }, { status: 400 });
+  if (!rawRequestConfig) return NextResponse.json({ error: "Missing materialId" }, { status: 400 });
 
-  const materialId = requestConfig.materialId;
-  const questionCount = requestConfig.questionCount;
-  const questionFormat = requestConfig.questionFormat;
-  const effectiveDifficulty = requestConfig.effectiveDifficulty;
-  const focus = requestConfig.focus ?? undefined;
-  const generationIntent = requestConfig.generationIntent;
-  const topicId = requestConfig.topicId;
-  const subtopicId = requestConfig.subtopicId;
-  const estimatedCreditCost = requestConfig.creditCost;
+  const materialId = rawRequestConfig.materialId;
   const canReuseDraft = persistDraft && !ignoreMatchingDraft && coveredQuestions.length === 0;
 
   // ── Fetch material ─────────────────────────────────────────────────────────
@@ -630,7 +626,7 @@ async function handleGenerateQuestionsRequest(req: NextRequest) {
     const { matchingDraft } = await getActiveGenerationDrafts({
       userId: user.id,
       materialId,
-      signature: requestConfig.signature,
+      signature: rawRequestConfig.signature,
     });
 
     if (matchingDraft) {
@@ -674,6 +670,83 @@ async function handleGenerateQuestionsRequest(req: NextRequest) {
     }
   }
 
+  let requestConfig = rawRequestConfig;
+  let generationAccess = await getAiGenerationAccess(user.id, rawRequestConfig.creditCost);
+  if (generationAccess.chargeMode === "free_trial") {
+    const trialConfig = normalizeQuestionGenerationRequest({
+      materialId,
+      count: FREE_AI_TRIAL_QUESTION_COUNT,
+      difficulty: body.difficulty,
+      focus: body.focus,
+      questionFormat: "mcq",
+      generationIntent: body.generationIntent,
+      topicId: body.topicId,
+      subtopicId: body.subtopicId,
+      forceQuestionCount: true,
+    });
+    if (!trialConfig) return NextResponse.json({ error: "Missing materialId" }, { status: 400 });
+
+    requestConfig = trialConfig;
+    generationAccess = await getAiGenerationAccess(user.id, trialConfig.creditCost);
+
+    if (canReuseDraft && trialConfig.signature !== rawRequestConfig.signature) {
+      const { matchingDraft } = await getActiveGenerationDrafts({
+        userId: user.id,
+        materialId,
+        signature: trialConfig.signature,
+      });
+
+      if (matchingDraft) {
+        const balance = await ensureStudyCreditBalance(user.id);
+        const receiptMessage = generationReceipt({
+          savedCount: matchingDraft.questionsCount,
+          creditCost: 0,
+          creditsRemaining: balance,
+          reusedDraft: true,
+        });
+        const encoder = new TextEncoder();
+        const stream = new ReadableStream({
+          start(controller) {
+            controller.enqueue(encoder.encode(JSON.stringify({
+              type: "status",
+              message: "Found a matching saved draft. No credits charged.",
+              phase: "reuse-draft",
+            }) + "\n"));
+            controller.enqueue(encoder.encode(JSON.stringify({
+              type: "done",
+              draftSetId: matchingDraft.setId,
+              savedCount: matchingDraft.questionsCount,
+              requestedCount: matchingDraft.questionsCount,
+              reusedDraft: true,
+              charged: false,
+              creditCost: 0,
+              creditsRemaining: balance,
+              receiptMessage,
+            }) + "\n"));
+            controller.close();
+          },
+        });
+
+        return new Response(stream, {
+          headers: {
+            "Content-Type": "application/x-ndjson",
+            "Cache-Control": "no-cache",
+            "X-Content-Type-Options": "nosniff",
+          },
+        });
+      }
+    }
+  }
+
+  const questionCount = requestConfig.questionCount;
+  const questionFormat = requestConfig.questionFormat;
+  const effectiveDifficulty = requestConfig.effectiveDifficulty;
+  const focus = requestConfig.focus ?? undefined;
+  const generationIntent = requestConfig.generationIntent;
+  const topicId = requestConfig.topicId;
+  const subtopicId = requestConfig.subtopicId;
+  const estimatedCreditCost = requestConfig.creditCost;
+
   const pooledQuestions = persistDraft
     ? await selectReusablePoolQuestions({
       userId: user.id,
@@ -716,18 +789,16 @@ async function handleGenerateQuestionsRequest(req: NextRequest) {
       reusedPool: pooledCount > 0,
     },
   };
-  const generationAccess = await getAiGenerationAccess(user.id, estimatedAiCreditCost);
-
   // ── Credits check ─────────────────────────────────────────────────────────
   const currentBalance = generationAccess.credits.balance;
   if (!generationAccess.allowed) {
     return NextResponse.json(
       {
         ok: false,
-        code: generationAccess.freeAi.remaining <= 0 ? "AI_LIMIT_REACHED" : "INSUFFICIENT_CREDITS",
-        message: generationAccess.freeAi.remaining <= 0
-          ? "You have used your free AI generations for this month. Upgrade or buy credits to continue."
-          : "Not enough credits to generate questions",
+        code: generationAccess.freeTrial.remaining <= 0 ? "AI_TRIAL_USED" : "INSUFFICIENT_CREDITS",
+        message: generationAccess.freeTrial.remaining <= 0
+          ? "Your free AI trial has been used. Upgrade to Plus or buy credits to continue."
+          : "Not enough credits to generate questions.",
         chargeStatus: "not_charged",
       },
       { status: 402 }
@@ -872,13 +943,18 @@ Return ONLY a valid JSON object with no markdown, no backticks, no preamble:
         if (persistDraft && (!draft?.setId || savedCount <= 0)) {
           throw new Error("Questions generated, but the draft could not be saved. No credits charged.");
         }
+        if (generationAccess.chargeMode === "free_trial" && savedCount !== FREE_AI_TRIAL_QUESTION_COUNT) {
+          if (draft?.setId) await discardDraftSet(draft.setId);
+          throw new Error(`The free AI trial must save exactly ${FREE_AI_TRIAL_QUESTION_COUNT} OBJ questions. No credits charged.`);
+        }
 
         const savedGeneratedCount = Math.max(0, draft?.generatedCount ?? chargeableCount);
         const finalCreditCost = savedCount > 0 ? Math.max(1, Math.ceil(savedCount / 5)) : 0;
-        if (finalCreditCost > 0 && generationAccess.chargeMode === "free_monthly") {
-          emitStatus("Confirming free monthly generation.", "free-ai-allowance");
+        let billedCreditCost = finalCreditCost;
+        if (finalCreditCost > 0 && generationAccess.chargeMode === "free_trial") {
+          emitStatus("Confirming free AI trial.", "free-ai-trial");
           try {
-            await recordFreeAiGeneration(user.id, {
+            await recordFreeAiTrialGeneration(user.id, {
               materialId,
               savedCount,
               generatedCount: savedGeneratedCount,
@@ -887,10 +963,11 @@ Return ONLY a valid JSON object with no markdown, no backticks, no preamble:
           } catch (freeError) {
             if (draft?.setId) await discardDraftSet(draft.setId);
             throw Object.assign(
-              new Error("Your free AI generations are used up. No credits charged."),
+              new Error("Your free AI trial has already been used. No credits charged."),
               { code: "AI_LIMIT_REACHED", cause: freeError }
             );
           }
+          billedCreditCost = 0;
         } else if (finalCreditCost > 0) {
           emitStatus("Confirming credits.", "charge-credits");
           const spend = await spendStudyCredits({ userId: user.id, cost: finalCreditCost });
@@ -904,11 +981,11 @@ Return ONLY a valid JSON object with no markdown, no backticks, no preamble:
 
           creditsRemaining = spend.balance;
         }
-        const receiptMessage = generationAccess.chargeMode === "free_monthly" && finalCreditCost > 0
-          ? `${savedCount} question${savedCount === 1 ? "" : "s"} saved - free monthly AI generation used - ${creditsRemaining} credits left.`
+        const receiptMessage = generationAccess.chargeMode === "free_trial" && finalCreditCost > 0
+          ? `${savedCount} free OBJ questions saved - upgrade to Plus or buy credits for more AI practice.`
           : generationReceipt({
             savedCount,
-            creditCost: finalCreditCost,
+            creditCost: billedCreditCost,
             creditsRemaining,
           });
 
@@ -927,8 +1004,9 @@ Return ONLY a valid JSON object with no markdown, no backticks, no preamble:
               .update({
                 generation_config: buildGenerationConfig(ai, {
                   estimatedCost: estimatedAiCreditCost,
-                  cost: finalCreditCost,
-                  charged: finalCreditCost > 0 && generationAccess.chargeMode !== "free_monthly",
+                  cost: billedCreditCost,
+                  creditEquivalent: finalCreditCost,
+                  charged: billedCreditCost > 0 && generationAccess.chargeMode === "credits",
                   chargeMode: finalCreditCost > 0 ? generationAccess.chargeMode : "none",
                   chargedAt: new Date().toISOString(),
                   balanceAfter: creditsRemaining,
@@ -945,7 +1023,7 @@ Return ONLY a valid JSON object with no markdown, no backticks, no preamble:
         }
 
         return {
-          creditCost: finalCreditCost,
+          creditCost: billedCreditCost,
           creditsRemaining,
           receiptMessage,
           savedCount,

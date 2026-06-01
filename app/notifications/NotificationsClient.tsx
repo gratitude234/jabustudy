@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "@/lib/supabase";
 import {
   ArrowLeft,
@@ -25,6 +25,8 @@ import {
   UserCheck,
   UserX,
 } from "lucide-react";
+
+const NOTIFICATIONS_PAGE_POLL_MS = 20_000;
 
 type NotificationRow = {
   id: string;
@@ -213,6 +215,8 @@ export default function NotificationsClient() {
   const [loading, setLoading] = useState(true);
   const [rows, setRows] = useState<NotificationRow[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const inFlightRef = useRef<string | null>(null);
+  const requestIdRef = useRef(0);
 
   const unread = useMemo(() => rows.filter((r) => !r.is_read).length, [rows]);
 
@@ -226,8 +230,14 @@ export default function NotificationsClient() {
     return Array.from(map.entries());
   }, [rows]);
 
-  async function loadNotifications(uid: string) {
-    setLoading(true);
+  const loadNotifications = useCallback(async (uid: string, showLoading = true) => {
+    if (inFlightRef.current === uid) return;
+
+    const requestId = requestIdRef.current + 1;
+    requestIdRef.current = requestId;
+    inFlightRef.current = uid;
+
+    if (showLoading) setLoading(true);
     setError(null);
     try {
       const { data } = await supabase
@@ -236,14 +246,24 @@ export default function NotificationsClient() {
         .eq("user_id", uid)
         .order("created_at", { ascending: false })
         .limit(60);
-      setRows((data as NotificationRow[]) ?? []);
+
+      if (requestIdRef.current === requestId) {
+        setRows((data as NotificationRow[]) ?? []);
+      }
     } catch {
-      setRows([]);
-      setError("Couldn't load notifications");
+      if (requestIdRef.current === requestId) {
+        setRows([]);
+        setError("Couldn't load notifications");
+      }
     } finally {
-      setLoading(false);
+      if (inFlightRef.current === uid) {
+        inFlightRef.current = null;
+      }
+      if (requestIdRef.current === requestId) {
+        setLoading(false);
+      }
     }
-  }
+  }, []);
 
   async function markAllRead() {
     if (!userId || unread === 0) return;
@@ -266,26 +286,40 @@ export default function NotificationsClient() {
   }
 
   useEffect(() => {
+    let mounted = true;
+    let pollTimer: ReturnType<typeof setInterval> | null = null;
+    let uid: string | null = null;
+
+    function refreshVisible() {
+      if (!uid || document.visibilityState === "hidden") return;
+      void loadNotifications(uid, false);
+    }
+
     (async () => {
       const { data } = await supabase.auth.getUser();
-      const uid = data.user?.id ?? null;
+      if (!mounted) return;
+
+      uid = data.user?.id ?? null;
       setUserId(uid);
       if (!uid) { setLoading(false); return; }
 
       await loadNotifications(uid);
+      if (!mounted) return;
 
-      const channel = supabase
-        .channel(`notifications:list:${uid}`)
-        .on(
-          "postgres_changes",
-          { event: "*", schema: "public", table: "notifications", filter: `user_id=eq.${uid}` },
-          () => loadNotifications(uid)
-        )
-        .subscribe();
-
-      return () => { supabase.removeChannel(channel); };
+      pollTimer = setInterval(refreshVisible, NOTIFICATIONS_PAGE_POLL_MS);
     })();
-  }, []);
+
+    window.addEventListener("focus", refreshVisible);
+    document.addEventListener("visibilitychange", refreshVisible);
+
+    return () => {
+      mounted = false;
+      requestIdRef.current += 1;
+      if (pollTimer) clearInterval(pollTimer);
+      window.removeEventListener("focus", refreshVisible);
+      document.removeEventListener("visibilitychange", refreshVisible);
+    };
+  }, [loadNotifications]);
 
   if (!userId && !loading) {
     return (

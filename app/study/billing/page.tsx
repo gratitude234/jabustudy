@@ -53,7 +53,8 @@ type BillingSnapshot = {
   ok: boolean;
   plus: { active: boolean; planKey: string | null; activeUntil: string | null };
   credits: { balance: number };
-  freeAi: { limit: number; used: number; remaining: number; periodKey: string };
+  freeTrial: { limit: number; used: number; remaining: number; periodKey: string; questionCount?: number };
+  freeAi?: { limit: number; used: number; remaining: number; periodKey: string; questionCount?: number };
   practice: { limit: number | null; used: number; remaining: number | null; activityDate: string };
   bank: { bankName: string; accountNumber: string; accountName: string };
   plans: Plan[];
@@ -287,7 +288,7 @@ export default function StudyBillingPage() {
     );
   }
 
-  const { plus, credits, freeAi, practice } = snapshot ?? {};
+  const { plus, credits, freeTrial, practice } = snapshot ?? {};
 
   return (
     <div className="space-y-6 pb-24">
@@ -360,7 +361,11 @@ export default function StudyBillingPage() {
           <span className="flex items-center gap-1.5 text-muted-foreground">
             <Zap className="h-3.5 w-3.5 text-amber-500" />
             {credits?.balance ?? 0} credit{credits?.balance !== 1 ? "s" : ""}
-            {!plus?.active ? <span className="text-xs">({freeAi?.remaining ?? 0} free AI left)</span> : null}
+            {!plus?.active ? (
+              <span className="text-xs">
+                {freeTrial?.remaining ? `(free trial: ${freeTrial.questionCount ?? 10} OBJ)` : "(trial used)"}
+              </span>
+            ) : null}
           </span>
           <span className="hidden text-border sm:block">|</span>
           <span className="text-muted-foreground">

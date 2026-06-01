@@ -198,6 +198,18 @@ type GenerationTrustStatus = {
     remaining: number;
     retryAfterSeconds?: number | null;
   };
+  freeTrial?: {
+    limit: number;
+    used: number;
+    remaining: number;
+    periodKey: string;
+    questionCount?: number;
+  };
+  effectiveRequest?: {
+    count: number;
+    questionFormat: QuestionFormat;
+    chargeMode: "free_trial" | "credits" | "none";
+  };
   matchingDraft?: ActiveAiDraft | null;
   latestDraft?: ActiveAiDraft | null;
 };
@@ -1022,10 +1034,15 @@ export default function MaterialDetailClient({
       : generatingMore ? "Generating..."
         : generationTrust?.credits && !generationTrust.credits.canAfford ? "Not enough credits"
           : null;
-  const dailyLimitLabel = generationTrust?.dailyLimit
-    ? generationTrust.dailyLimit.remaining <= 0
-      ? `Free AI used (${generationTrust.dailyLimit.used}/${generationTrust.dailyLimit.limit} this month)`
-      : `Free AI: ${generationTrust.dailyLimit.remaining} left this month`
+  const freeTrial = generationTrust?.freeTrial ?? generationTrust?.dailyLimit;
+  const trialQuestionCount = generationTrust?.freeTrial?.questionCount ?? 10;
+  const isTrialChargeMode = generationTrust?.effectiveRequest?.chargeMode === "free_trial";
+  const dailyLimitLabel = freeTrial
+    ? freeTrial.remaining <= 0
+      ? "Free AI trial used"
+      : isTrialChargeMode
+        ? `Free trial: ${trialQuestionCount} OBJ questions`
+        : "Free AI trial unused"
     : null;
 
   function signInForWorkspace() {
@@ -2259,7 +2276,9 @@ export default function MaterialDetailClient({
                       {/* Cost / credit summary card — shown at the top before any options */}
                       {generationTrust?.credits && !generationStatusLoading ? (() => {
                         const { balance, cost, canAfford } = generationTrust.credits;
-                        const isFree = (generationTrust.dailyLimit?.remaining ?? 0) > 0;
+                        const trial = generationTrust.freeTrial ?? generationTrust.dailyLimit;
+                        const isFree = generationTrust.effectiveRequest?.chargeMode === "free_trial" && (trial?.remaining ?? 0) > 0;
+                        const effectiveCount = generationTrust.effectiveRequest?.count ?? quizConfig.count;
                         return (
                           <div className={cn(
                             "flex items-center justify-between gap-3 rounded-2xl border px-4 py-3",
@@ -2280,15 +2299,15 @@ export default function MaterialDetailClient({
                                 </>
                               ) : isFree ? (
                                 <>
-                                  <p className="text-sm font-bold text-emerald-700">Free — {quizConfig.count} questions</p>
+                                  <p className="text-sm font-bold text-emerald-700">Free trial - {trialQuestionCount} OBJ questions</p>
                                   <p className="mt-0.5 text-xs text-emerald-600">
-                                    {generationTrust.dailyLimit!.remaining} of {generationTrust.dailyLimit!.limit} free generations left this month
+                                    Your first AI-generated practice set is on us. Upgrade or buy credits for more.
                                   </p>
                                 </>
                               ) : (
                                 <>
                                   <p className="text-sm font-bold text-foreground">
-                                    {cost} credit{cost !== 1 ? "s" : ""} — {quizConfig.count} questions
+                                    {cost} credit{cost !== 1 ? "s" : ""} - {effectiveCount} questions
                                   </p>
                                   <p className="mt-0.5 text-xs text-muted-brand">
                                     {balance - cost} credit{(balance - cost) !== 1 ? "s" : ""} left after · 1 credit = 5 questions
@@ -2745,8 +2764,8 @@ export default function MaterialDetailClient({
                           Generate new questions
                           {generationTrust?.credits && !generatingMore ? (
                             <span className="ml-1 rounded-full bg-primary/15 px-2 py-0.5 text-[10px] font-bold">
-                              {(generationTrust.dailyLimit?.remaining ?? 0) > 0
-                                ? "free"
+                              {generationTrust.effectiveRequest?.chargeMode === "free_trial"
+                                ? "trial"
                                 : `${generationTrust.credits.cost} credit${generationTrust.credits.cost !== 1 ? "s" : ""}`}
                             </span>
                           ) : null}
@@ -2797,8 +2816,8 @@ export default function MaterialDetailClient({
                               ? `New questions on ${missedTopicsForDisplay.join(" & ")}`
                               : `New questions on what I got wrong`}
                             <span className="ml-auto rounded-full bg-primary/15 px-2 py-0.5 text-[10px] font-bold">
-                              {(generationTrust?.dailyLimit?.remaining ?? 0) > 0
-                                ? "free"
+                              {generationTrust?.effectiveRequest?.chargeMode === "free_trial"
+                                ? "trial"
                                 : generationTrust?.credits
                                   ? `${generationTrust.credits.cost} credit${generationTrust.credits.cost !== 1 ? "s" : ""}`
                                   : "credits"}
