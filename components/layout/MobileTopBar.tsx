@@ -17,6 +17,7 @@ function buildNextUrl(pathname: string, sp: URLSearchParams, nextQ: string) {
 
   const qs = copy.toString();
   if (pathname.startsWith("/study/library")) return qs ? `/study/library?${qs}` : "/study/library";
+  if (pathname === "/study/practice") return qs ? `/study/practice?${qs}` : "/study/practice";
   if (q) return `/study/library?q=${encodeURIComponent(q)}`;
   return qs ? `${pathname}?${qs}` : pathname;
 }
@@ -32,6 +33,7 @@ export default function MobileTopBar() {
 
   const initialQ = useMemo(() => sp.get("q") ?? "", [sp]);
   const [q, setQ] = useState(initialQ);
+  const searchPlaceholder = pathname === "/study/practice" ? "Search practice sets..." : "Search materials, courses...";
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
@@ -110,7 +112,7 @@ export default function MobileTopBar() {
               <input
                 value={q}
                 onChange={(e) => setQ(e.target.value)}
-                placeholder="Search materials, courses..."
+                placeholder={searchPlaceholder}
                 className="w-full bg-transparent text-sm outline-none placeholder:text-muted-foreground/70"
               />
               {q.trim().length > 0 ? (

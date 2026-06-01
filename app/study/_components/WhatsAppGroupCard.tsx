@@ -17,7 +17,7 @@ export default function WhatsAppGroupCard() {
       </div>
       <div className="min-w-0 flex-1">
         <p className="text-sm font-semibold text-foreground">Join the JabuStudy WhatsApp group</p>
-        <p className="text-xs text-muted-foreground">Request CBT questions, share materials, and get study updates.</p>
+        <p className="text-xs text-muted-foreground">Request CBT questions, share materials, report issues, and get updates.</p>
       </div>
       <ArrowRight className="h-4 w-4 shrink-0 text-muted-foreground" />
     </a>

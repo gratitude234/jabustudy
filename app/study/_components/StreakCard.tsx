@@ -181,7 +181,7 @@ export default function StreakCard({
   const todayStr     = now.toISOString().slice(0, 10);
   const yesterdayStr = new Date(Date.now() + 3_600_000 - 86_400_000).toISOString().slice(0, 10);
 
-  const activeDates = new Set<string>();
+  const activeDates = activeDays ?? new Set<string>();
   const prompt = getRecoveryPrompt(
     currentStreak,
     activeDates,

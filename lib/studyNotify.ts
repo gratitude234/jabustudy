@@ -213,6 +213,7 @@ export async function notifyAnswerUpvoteMilestone({
 
 // ─── Streak milestone ─────────────────────────────────────────────────────────
 
+const STREAK_LOOKBACK_DAYS = 400;
 const STREAK_MILESTONES = new Set([7, 14, 30]);
 
 const STREAK_LABELS: Record<number, { title: string; body: string }> = {
@@ -230,7 +231,7 @@ export async function notifyStreakMilestone({ userId }: { userId: string }): Pro
   try {
     const admin = createSupabaseAdminClient();
 
-    const since = new Date(Date.now() - 90 * 86_400_000).toISOString().slice(0, 10);
+    const since = new Date(Date.now() + 3_600_000 - STREAK_LOOKBACK_DAYS * 86_400_000).toISOString().slice(0, 10);
     const { data, error } = await admin
       .from("study_daily_activity")
       .select("activity_date, attempts_count")
@@ -248,7 +249,7 @@ export async function notifyStreakMilestone({ userId }: { userId: string }): Pro
     const todayWAT = new Date(Date.now() + 3_600_000).toISOString().slice(0, 10);
     let streak = 0;
     let cursorMs = Date.now() + 3_600_000; // WAT now
-    for (let i = 0; i < 90; i++) {
+    for (let i = 0; i < STREAK_LOOKBACK_DAYS; i++) {
       const k = new Date(cursorMs).toISOString().slice(0, 10);
       if (map.get(k) === true) { streak += 1; cursorMs -= 86_400_000; }
       else break;

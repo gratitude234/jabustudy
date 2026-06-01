@@ -369,7 +369,7 @@ export default function QuickMoreSheet({ open, onClose }: QuickMoreSheetProps) {
                           </span>
                         </div>
                         <p className="mt-0.5 line-clamp-1 text-xs text-muted-foreground">
-                          CBT requests, materials and updates
+                          CBT requests, materials and issue reports
                         </p>
                       </div>
 

@@ -19,6 +19,55 @@ function normalizedCourseCode(value: unknown) {
   return cleanString(value).toUpperCase();
 }
 
+function normalizedDepartmentName(value: unknown) {
+  return cleanString(value)
+    .toLowerCase()
+    .replace(/&/g, "and")
+    .replace(/[^a-z0-9]+/g, " ")
+    .replace(/^(department|dept)\s+of\s+/, "")
+    .replace(/^department\s+/, "")
+    .trim();
+}
+
+function practiceSetTargetsDepartment(row: any, departmentName: string | null, departmentId: string | null) {
+  const config = row?.generation_config;
+  if (!config || typeof config !== "object" || Array.isArray(config)) return false;
+
+  const expectedName = normalizedDepartmentName(departmentName);
+  const expectedId = cleanString(departmentId).toLowerCase();
+  const configDeptId = cleanString(config.department_id ?? config.target_department_id).toLowerCase();
+
+  if (expectedId && configDeptId && expectedId === configDeptId) return true;
+
+  const candidates: unknown[] = [
+    config.department,
+    config.department_name,
+    config.target_department,
+    config.audience_department,
+  ];
+
+  if (Array.isArray(config.departments)) {
+    for (const item of config.departments) {
+      if (typeof item === "string") {
+        candidates.push(item);
+      } else if (item && typeof item === "object") {
+        candidates.push(
+          (item as any).name,
+          (item as any).department,
+          (item as any).department_name,
+          (item as any).id,
+          (item as any).department_id
+        );
+      }
+    }
+  }
+
+  return candidates.some((candidate) => {
+    const normalized = normalizedDepartmentName(candidate);
+    return Boolean(normalized && expectedName && normalized === expectedName);
+  });
+}
+
 function isUniversalPracticeSet(row: any) {
   const config = row?.generation_config;
   if (!config || typeof config !== "object" || Array.isArray(config)) return false;
@@ -238,6 +287,44 @@ export async function GET() {
       }
     }
 
+    // Some useful practice sets are intentionally not registered as current
+    // courses because the official course name/code has changed. If their
+    // metadata still targets the student's department, include them in For You.
+    let metadataCourseCodes: string[] = [];
+    if (profileStatus === "complete" && prefs && isFiniteLevel(prefs.level)) {
+      let metadataSetsQuery = supabase
+        .from("study_quiz_sets")
+        .select("course_code,semester,generation_config")
+        .eq("published", true)
+        .eq("level", prefs.level);
+
+      const semester = semesterToDb(prefs.semester);
+      if (semester) {
+        metadataSetsQuery = metadataSetsQuery.or(`semester.eq.${semester},semester.is.null`);
+      }
+
+      const { data: metadataSets } = await metadataSetsQuery.limit(200);
+
+      if (Array.isArray(metadataSets)) {
+        const existingCodes = new Set([
+          ...courses.map((c) => c.course_code),
+          ...gnsCourseCodes,
+          ...universalCourseCodes,
+        ]);
+        const seen = new Set<string>();
+
+        for (const set of metadataSets) {
+          if (!practiceSetTargetsDepartment(set, departmentName, prefs.department_id)) continue;
+
+          const code = normalizedCourseCode((set as any).course_code);
+          if (code && !existingCodes.has(code) && !seen.has(code)) {
+            seen.add(code);
+            metadataCourseCodes.push(code);
+          }
+        }
+      }
+    }
+
     const scopeBits = [
       departmentName,
       isFiniteLevel(row?.level) ? `${row.level}L` : null,
@@ -254,7 +341,12 @@ export async function GET() {
       scopeLabel: scopeBits.length ? scopeBits.join(" - ") : null,
       courses,
       courseIds: courses.map((course) => course.id),
-      courseCodes: [...courses.map((course) => course.course_code), ...gnsCourseCodes, ...universalCourseCodes],
+      courseCodes: [
+        ...courses.map((course) => course.course_code),
+        ...gnsCourseCodes,
+        ...universalCourseCodes,
+        ...metadataCourseCodes,
+      ],
     });
   } catch (e: any) {
     return NextResponse.json(

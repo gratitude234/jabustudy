@@ -4,6 +4,8 @@
 import { supabase } from "@/lib/supabase";
 import { getAuthedUserId } from "@/lib/studySaved";
 
+const STREAK_LOOKBACK_DAYS = 400;
+
 /** Returns today's date string (YYYY-MM-DD) in WAT (UTC+1) */
 function watToday(): string {
   return new Date(Date.now() + 3_600_000).toISOString().slice(0, 10);
@@ -125,9 +127,8 @@ export async function getPracticeStreak(): Promise<{ streak: number; didPractice
   const userId = await getAuthedUserId();
   if (!userId) return { streak: 0, didPracticeToday: false };
 
-  // Fetch enough days to cover the longest realistic streak without truncating.
-  const STREAK_LOOKBACK_DAYS = 90;
-  const since = new Date(Date.now() - STREAK_LOOKBACK_DAYS * 24 * 60 * 60 * 1000);
+  // Fetch enough days to cover long streak milestones without truncating.
+  const since = new Date(Date.now() + 3_600_000 - STREAK_LOOKBACK_DAYS * 86_400_000);
   const sinceDate = since.toISOString().slice(0, 10);
 
   const { data, error } = await supabase
@@ -144,8 +145,7 @@ export async function getPracticeStreak(): Promise<{ streak: number; didPractice
     if (r?.activity_date) map.set(String(r.activity_date), Number(r.attempts_count ?? 0) > 0);
   }
 
-  const todayKey     = watToday();
-  const yesterdayKey = new Date(Date.now() + 3_600_000 - 86_400_000).toISOString().slice(0, 10);
+  const todayKey = watToday();
   const didToday = map.get(todayKey) === true;
 
   let streak = 0;
@@ -153,7 +153,6 @@ export async function getPracticeStreak(): Promise<{ streak: number; didPractice
   let cursorMs = didToday
     ? Date.now() + 3_600_000
     : Date.now() + 3_600_000 - 86_400_000;
-  void yesterdayKey; // used above for clarity
 
   for (let i = 0; i < STREAK_LOOKBACK_DAYS; i++) {
     const k = new Date(cursorMs).toISOString().slice(0, 10);

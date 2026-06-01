@@ -19,6 +19,7 @@ import {
 } from "lucide-react";
 import { Drawer } from "@/components/ui/Drawer";
 import { SelectRow } from "@/components/ui/study-filters";
+import { getPracticeStreak } from "@/lib/studyPractice";
 
 // ─── Utilities ────────────────────────────────────────────────────────────────
 
@@ -719,7 +720,7 @@ export default function HistoryClient() {
 
         const thirtyDaysAgo = new Date(Date.now() - 30 * 86_400_000).toISOString().slice(0, 10);
 
-        const [submittedRes, trendRes, actRes] = await Promise.all([
+        const [submittedRes, trendRes, actRes, streakRes] = await Promise.all([
           // All submitted attempts for stats
           supabase
             .from(TABLE_ATTEMPTS)
@@ -748,6 +749,8 @@ export default function HistoryClient() {
             .eq("user_id", uid)
             .gte("activity_date", thirtyDaysAgo)
             .order("activity_date", { ascending: true }),
+
+          getPracticeStreak().catch(() => ({ streak: 0, didPracticeToday: false })),
         ]);
 
         if (cancelled) return;
@@ -839,21 +842,8 @@ export default function HistoryClient() {
         }));
         if (!cancelled) setActivityDays(parsedAct);
 
-        // ── Streak (consecutive days ending today, WAT) ──
-        const today = watToday();
-        const actMap = new Map(parsedAct.map((d) => [d.date, d.did_practice]));
-        let s = 0;
-        let cursor = new Date(today);
-        while (true) {
-          const key = cursor.toISOString().slice(0, 10);
-          if (actMap.get(key)) {
-            s++;
-            cursor = new Date(cursor.getTime() - 86_400_000);
-          } else {
-            break;
-          }
-        }
-        if (!cancelled) setStreak(s);
+        // ── Streak (WAT, includes an alive yesterday streak before today's practice) ──
+        if (!cancelled) setStreak(streakRes.streak);
 
         // ── Weekly bars (Mon–Sun of current week) ──
         const DAY_NAMES = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
@@ -883,7 +873,7 @@ export default function HistoryClient() {
             ptsList.length > 0
               ? Math.round(ptsList.reduce((s, p) => s + p, 0) / ptsList.length)
               : null;
-          const active = actMap.get(date) ?? false;
+          const active = parsedAct.some((day) => day.date === date && day.did_practice);
           return { label, date, avgPct, active };
         });
         if (!cancelled) setWeekBars(bars);

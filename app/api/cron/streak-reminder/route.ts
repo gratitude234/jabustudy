@@ -31,6 +31,7 @@ import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 const WHATSAPP_API_VERSION = "v19.0";
 const WHATSAPP_API_BASE = `https://graph.facebook.com/${WHATSAPP_API_VERSION}`;
 const SEND_LIMIT = 200;
+const STREAK_LOOKBACK_DAYS = 400;
 
 type AtRiskRow = {
   user_id: string;
@@ -90,10 +91,9 @@ function buildMessage(to: string, streak: number) {
 async function fetchAtRiskUsers(): Promise<AtRiskRow[]> {
   const admin = createSupabaseAdminClient();
 
-  const today = new Date();
-  const todayKey = today.toISOString().slice(0, 10);
-  const yesterday = new Date(today.getTime() - 86_400_000);
-  const yestKey = yesterday.toISOString().slice(0, 10);
+  const watNowMs = Date.now() + 3_600_000;
+  const todayKey = new Date(watNowMs).toISOString().slice(0, 10);
+  const yestKey = new Date(watNowMs - 86_400_000).toISOString().slice(0, 10);
 
   const { data: ystRows, error: ystErr } = await admin
     .from("study_daily_activity")
@@ -118,7 +118,7 @@ async function fetchAtRiskUsers(): Promise<AtRiskRow[]> {
   const atRiskIds = ystUserIds.filter((id) => !doneToday.has(id));
   if (!atRiskIds.length) return [];
 
-  const since = new Date(today.getTime() - 90 * 86_400_000)
+  const since = new Date(watNowMs - STREAK_LOOKBACK_DAYS * 86_400_000)
     .toISOString()
     .slice(0, 10);
 
@@ -141,12 +141,12 @@ async function fetchAtRiskUsers(): Promise<AtRiskRow[]> {
     );
 
     let streak = 0;
-    let cursor = new Date(yesterday);
-    for (let i = 0; i < 90; i++) {
-      const key = cursor.toISOString().slice(0, 10);
+    let cursorMs = watNowMs - 86_400_000;
+    for (let i = 0; i < STREAK_LOOKBACK_DAYS; i++) {
+      const key = new Date(cursorMs).toISOString().slice(0, 10);
       if (practicedDays.has(key)) {
         streak++;
-        cursor = new Date(cursor.getTime() - 86_400_000);
+        cursorMs -= 86_400_000;
       } else {
         break;
       }

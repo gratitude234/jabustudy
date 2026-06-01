@@ -18,7 +18,7 @@ const links = [
 function buildNextUrl(pathname: string, sp: URLSearchParams, nextQ: string) {
   const q = nextQ.trim();
 
-  if (pathname.startsWith("/study/library")) {
+  if (pathname.startsWith("/study/library") || pathname === "/study/practice") {
     const copy = new URLSearchParams(sp.toString());
     if (q) copy.set("q", q);
     else copy.delete("q");
@@ -41,6 +41,7 @@ export default function TopNav() {
 
   const initialQ = useMemo(() => sp.get("q") ?? "", [sp]);
   const [q, setQ] = useState(initialQ);
+  const searchPlaceholder = pathname === "/study/practice" ? "Search practice sets..." : "Search materials...";
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
@@ -110,7 +111,7 @@ export default function TopNav() {
               <input
                 value={q}
                 onChange={(e) => setQ(e.target.value)}
-                placeholder="Search materials..."
+                placeholder={searchPlaceholder}
                 className="w-64 bg-transparent text-sm outline-none placeholder:text-muted-foreground/70"
               />
               {q.trim().length > 0 ? (

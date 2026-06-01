@@ -448,7 +448,7 @@ export default function PracticeTakeClient() {
         const { data: { user } } = await supabase.auth.getUser();
         if (!user) return;
         const today = new Date(Date.now() + 3_600_000).toISOString().slice(0, 10);
-        const since = new Date(Date.now() + 3_600_000 - 90 * 86_400_000).toISOString().slice(0, 10);
+        const since = new Date(Date.now() + 3_600_000 - 400 * 86_400_000).toISOString().slice(0, 10);
         const { data } = await supabase
           .from("study_daily_activity")
           .select("activity_date,attempts_count")
