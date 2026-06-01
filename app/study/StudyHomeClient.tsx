@@ -11,6 +11,7 @@ import { ForYouSection, type Chips } from "./_components/ForYouSection";
 import CourseSearch from "./_components/CourseSearch";
 import { HeroCard } from "./_components/HeroCard";
 import { QuickActions } from "./_components/QuickActions";
+import WhatsAppCommunityCard from "./_components/WhatsAppCommunityCard";
 import BannerSlot from "./_components/BannerSlot";
 import StatsStrip from "./_components/StatsStrip";
 
@@ -309,6 +310,8 @@ function StudyHomeInner() {
       <ForYouSection chips={chips} setChips={setChips} onClearFilters={clearFilters} />
 
       <MyCourses scopeLabel={scopeLabel} />
+
+      <WhatsAppCommunityCard />
 
       <a
         href="https://wa.me/2347041022336"

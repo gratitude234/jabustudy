@@ -6,11 +6,14 @@ import { useRouter } from "next/navigation";
 import {
   Calculator,
   ChevronRight,
+  ExternalLink,
   MessagesSquare,
   ShieldCheck,
   Trophy,
+  UsersRound,
   X,
 } from "lucide-react";
+import { WHATSAPP_COMMUNITY_URL } from "@/lib/community";
 import { supabase } from "@/lib/supabase";
 import { track } from "@/lib/studyAnalytics";
 import type { StudyHomeMoreBadgeTone } from "@/lib/studyAnalytics.types";
@@ -238,8 +241,9 @@ export default function QuickMoreSheet({ open, onClose }: QuickMoreSheetProps) {
               if (row.key === "apply_rep" && badges.apply_rep.hidden) return false;
               return true;
             });
+            const showWhatsAppCommunity = group === "COMMUNITY" && Boolean(WHATSAPP_COMMUNITY_URL);
 
-            if (rows.length === 0) return null;
+            if (rows.length === 0 && !showWhatsAppCommunity) return null;
 
             return (
               <section key={group} className={cn(index > 0 && "mt-4")}>
@@ -333,6 +337,45 @@ export default function QuickMoreSheet({ open, onClose }: QuickMoreSheetProps) {
                       </Link>
                     );
                   })}
+
+                  {showWhatsAppCommunity ? (
+                    <a
+                      href={WHATSAPP_COMMUNITY_URL}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      onClick={() => {
+                        track("study_home_more_item_tapped", {
+                          item: "whatsapp_community",
+                          had_badge: false,
+                        });
+                        closeSheet();
+                      }}
+                      className={cn(
+                        "flex items-center gap-3.5 rounded-2xl border border-[#25D366]/30 bg-[#25D366]/5 p-3.5 no-underline transition-all duration-150",
+                        "hover:border-[#25D366]/50 hover:bg-[#25D366]/10",
+                        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-card",
+                        "active:scale-[0.98]"
+                      )}
+                    >
+                      <div className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-[#25D366]/15 text-[#128C4A] dark:text-[#25D366]">
+                        <UsersRound className="h-5 w-5" />
+                      </div>
+
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-2">
+                          <p className="text-sm font-bold text-foreground">WhatsApp community</p>
+                          <span className="rounded-full bg-[#25D366]/15 px-2 py-0.5 text-[10px] font-bold text-[#128C4A] dark:text-[#25D366]">
+                            Join
+                          </span>
+                        </div>
+                        <p className="mt-0.5 line-clamp-1 text-xs text-muted-foreground">
+                          Updates, classmates and study groups
+                        </p>
+                      </div>
+
+                      <ExternalLink className="h-4 w-4 shrink-0 text-muted-foreground" />
+                    </a>
+                  ) : null}
                 </div>
               </section>
             );
