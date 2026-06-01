@@ -49,7 +49,8 @@ WHATSAPP_TOKEN=              # Meta Cloud API token (streak reminder cron)
 WHATSAPP_PHONE_NUMBER_ID=
 CRON_SECRET=                 # Bearer token for /api/cron/* routes
 NEXT_PUBLIC_SITE_URL=        # or VERCEL_URL — used to self-call internal API routes
-NEXT_PUBLIC_WHATSAPP_COMMUNITY_URL= # WhatsApp community invite link shown in Study Hub
+NEXT_PUBLIC_WHATSAPP_GROUP_URL= # WhatsApp group invite link shown in Study Hub
+NEXT_PUBLIC_WHATSAPP_COMMUNITY_URL= # Legacy alias for the same Study Hub WhatsApp group link
 ```
 
 ## Architecture Overview

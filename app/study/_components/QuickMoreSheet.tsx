@@ -13,7 +13,7 @@ import {
   UsersRound,
   X,
 } from "lucide-react";
-import { WHATSAPP_COMMUNITY_URL } from "@/lib/community";
+import { WHATSAPP_GROUP_URL } from "@/lib/community";
 import { supabase } from "@/lib/supabase";
 import { track } from "@/lib/studyAnalytics";
 import type { StudyHomeMoreBadgeTone } from "@/lib/studyAnalytics.types";
@@ -241,9 +241,9 @@ export default function QuickMoreSheet({ open, onClose }: QuickMoreSheetProps) {
               if (row.key === "apply_rep" && badges.apply_rep.hidden) return false;
               return true;
             });
-            const showWhatsAppCommunity = group === "COMMUNITY" && Boolean(WHATSAPP_COMMUNITY_URL);
+            const showWhatsAppGroup = group === "COMMUNITY" && Boolean(WHATSAPP_GROUP_URL);
 
-            if (rows.length === 0 && !showWhatsAppCommunity) return null;
+            if (rows.length === 0 && !showWhatsAppGroup) return null;
 
             return (
               <section key={group} className={cn(index > 0 && "mt-4")}>
@@ -338,14 +338,14 @@ export default function QuickMoreSheet({ open, onClose }: QuickMoreSheetProps) {
                     );
                   })}
 
-                  {showWhatsAppCommunity ? (
+                  {showWhatsAppGroup ? (
                     <a
-                      href={WHATSAPP_COMMUNITY_URL}
+                      href={WHATSAPP_GROUP_URL}
                       target="_blank"
                       rel="noopener noreferrer"
                       onClick={() => {
                         track("study_home_more_item_tapped", {
-                          item: "whatsapp_community",
+                          item: "whatsapp_group",
                           had_badge: false,
                         });
                         closeSheet();
@@ -363,13 +363,13 @@ export default function QuickMoreSheet({ open, onClose }: QuickMoreSheetProps) {
 
                       <div className="min-w-0 flex-1">
                         <div className="flex items-center gap-2">
-                          <p className="text-sm font-bold text-foreground">WhatsApp community</p>
+                          <p className="text-sm font-bold text-foreground">WhatsApp group</p>
                           <span className="rounded-full bg-[#25D366]/15 px-2 py-0.5 text-[10px] font-bold text-[#128C4A] dark:text-[#25D366]">
                             Join
                           </span>
                         </div>
                         <p className="mt-0.5 line-clamp-1 text-xs text-muted-foreground">
-                          Updates, classmates and study groups
+                          CBT requests, materials and updates
                         </p>
                       </div>
 
