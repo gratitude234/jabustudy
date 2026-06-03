@@ -5,10 +5,41 @@ import { supabase } from "@/lib/supabase";
 import { getAuthedUserId } from "@/lib/studySaved";
 
 const STREAK_LOOKBACK_DAYS = 400;
+const WAT_OFFSET_MS = 3_600_000;
+const DAY_MS = 86_400_000;
 
 /** Returns today's date string (YYYY-MM-DD) in WAT (UTC+1) */
 function watToday(): string {
-  return new Date(Date.now() + 3_600_000).toISOString().slice(0, 10);
+  return watDateFromMs(Date.now());
+}
+
+function watDateFromMs(ms: number): string {
+  return new Date(ms + WAT_OFFSET_MS).toISOString().slice(0, 10);
+}
+
+function watDateFromIso(value: string | null | undefined): string | null {
+  if (!value) return null;
+  const ms = new Date(value).getTime();
+  if (!Number.isFinite(ms)) return null;
+  return watDateFromMs(ms);
+}
+
+function calculateStreak(activeDates: Set<string>) {
+  const todayKey = watToday();
+  const didToday = activeDates.has(todayKey);
+
+  let streak = 0;
+  // Streak counts consecutive days through today, or through yesterday before today's practice.
+  let cursorMs = didToday ? Date.now() : Date.now() - DAY_MS;
+
+  for (let i = 0; i < STREAK_LOOKBACK_DAYS; i++) {
+    const key = watDateFromMs(cursorMs);
+    if (!activeDates.has(key)) break;
+    streak += 1;
+    cursorMs -= DAY_MS;
+  }
+
+  return { streak, didPracticeToday: didToday };
 }
 
 export type PracticeAttemptRow = {
@@ -27,6 +58,43 @@ export type PracticeAttemptRow = {
     course_code: string | null;
   } | null;
 };
+
+type DailyActivityStreakRow = {
+  activity_date: string | null;
+  attempts_count: number | null;
+  questions_answered?: number | null;
+};
+
+type SubmittedAttemptStreakRow = {
+  submitted_at: string | null;
+};
+
+type PracticeStreakResult = {
+  streak: number;
+  didPracticeToday: boolean;
+};
+
+async function getPracticeStreakFromApi(): Promise<PracticeStreakResult | null> {
+  try {
+    const res = await fetch("/api/study/practice/streak", { cache: "no-store" });
+    const json = await res.json().catch(() => null) as
+      | {
+          ok?: boolean;
+          streak?: unknown;
+          didPracticeToday?: unknown;
+        }
+      | null;
+
+    if (!res.ok || !json?.ok) return null;
+
+    return {
+      streak: Math.max(0, Math.trunc(Number(json.streak ?? 0))),
+      didPracticeToday: json.didPracticeToday === true,
+    };
+  } catch {
+    return null;
+  }
+}
 
 export async function getLatestAttempt(): Promise<PracticeAttemptRow | null> {
   const userId = await getAuthedUserId();
@@ -123,46 +191,51 @@ export async function get14DayActivity(days = 14): Promise<Set<string>> {
   return active;
 }
 
-export async function getPracticeStreak(): Promise<{ streak: number; didPracticeToday: boolean }> {
+export async function getPracticeStreak(): Promise<PracticeStreakResult> {
+  const apiResult = await getPracticeStreakFromApi();
+  if (apiResult) return apiResult;
+
   const userId = await getAuthedUserId();
   if (!userId) return { streak: 0, didPracticeToday: false };
 
   // Fetch enough days to cover long streak milestones without truncating.
-  const since = new Date(Date.now() + 3_600_000 - STREAK_LOOKBACK_DAYS * 86_400_000);
+  const since = new Date(Date.now() + WAT_OFFSET_MS - STREAK_LOOKBACK_DAYS * DAY_MS);
   const sinceDate = since.toISOString().slice(0, 10);
 
-  const { data, error } = await supabase
-    .from("study_daily_activity")
-    .select("activity_date,attempts_count")
-    .eq("user_id", userId)
-    .gte("activity_date", sinceDate)
-    .order("activity_date", { ascending: false });
+  const activeDates = new Set<string>();
 
-  if (error || !Array.isArray(data)) return { streak: 0, didPracticeToday: false };
+  const [activityRes, attemptsRes] = await Promise.all([
+    supabase
+      .from("study_daily_activity")
+      .select("activity_date,attempts_count,questions_answered")
+      .eq("user_id", userId)
+      .gte("activity_date", sinceDate)
+      .order("activity_date", { ascending: false }),
+    supabase
+      .from("study_practice_attempts")
+      .select("submitted_at")
+      .eq("user_id", userId)
+      .eq("status", "submitted")
+      .gte("submitted_at", new Date(Date.now() - (STREAK_LOOKBACK_DAYS + 1) * DAY_MS).toISOString())
+      .order("submitted_at", { ascending: false }),
+  ]);
 
-  const map = new Map<string, boolean>();
-  for (const r of data as any[]) {
-    if (r?.activity_date) map.set(String(r.activity_date), Number(r.attempts_count ?? 0) > 0);
-  }
-
-  const todayKey = watToday();
-  const didToday = map.get(todayKey) === true;
-
-  let streak = 0;
-  // streak counts consecutive days up to today (or yesterday if not practiced today)
-  let cursorMs = didToday
-    ? Date.now() + 3_600_000
-    : Date.now() + 3_600_000 - 86_400_000;
-
-  for (let i = 0; i < STREAK_LOOKBACK_DAYS; i++) {
-    const k = new Date(cursorMs).toISOString().slice(0, 10);
-    if (map.get(k) === true) {
-      streak += 1;
-      cursorMs -= 86_400_000;
-    } else {
-      break;
+  if (!activityRes.error && Array.isArray(activityRes.data)) {
+    for (const row of activityRes.data as DailyActivityStreakRow[]) {
+      const key = row?.activity_date ? String(row.activity_date).slice(0, 10) : "";
+      const hadActivity =
+        Number(row?.attempts_count ?? 0) > 0 ||
+        Number(row?.questions_answered ?? 0) > 0;
+      if (key && hadActivity) activeDates.add(key);
     }
   }
 
-  return { streak, didPracticeToday: didToday };
+  if (!attemptsRes.error && Array.isArray(attemptsRes.data)) {
+    for (const row of attemptsRes.data as SubmittedAttemptStreakRow[]) {
+      const key = watDateFromIso(row?.submitted_at);
+      if (key) activeDates.add(key);
+    }
+  }
+
+  return calculateStreak(activeDates);
 }

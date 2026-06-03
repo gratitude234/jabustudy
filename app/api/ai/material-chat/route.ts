@@ -125,7 +125,7 @@ async function uploadFileToGemini(
     const fileUri = uploadData.file?.uri?.trim();
     if (!fileUri) throw new Error("Gemini file URI missing.");
     return fileUri;
-  });
+  }, "study");
 
   return { fileUri: result.value, keyAlias: result.keyAlias };
 }
@@ -186,7 +186,7 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  if (!isGeminiConfigured()) return NextResponse.json({ error: "AI service not configured." }, { status: 500 });
+  if (!isGeminiConfigured("study")) return NextResponse.json({ error: "AI service not configured." }, { status: 500 });
 
   // ── Resolve file content ───────────────────────────────────────────────────
   // For PDF/images: upload to Gemini Files API (or use cached URI) → file_data part
@@ -360,7 +360,7 @@ For lists, put each item on its own line with a dash prefix (e.g. "- item").`;
       }
 
       return res;
-    });
+    }, "study");
     geminiRes = streamResult.value;
     streamKeyAlias = streamResult.keyAlias;
   } catch (e: unknown) {

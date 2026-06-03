@@ -379,6 +379,7 @@ Return ONLY JSON:
     maxTokens: 3600,
     timeoutMs: MAP_TIMEOUT_MS,
     modelRole: "generation",
+    workload: "question_generation",
   });
 
   if (!result.ok) return fallbackMap(catalogued);

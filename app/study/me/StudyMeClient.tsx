@@ -13,6 +13,7 @@ import {
   Banknote,
   Calculator,
   ClipboardList,
+  ExternalLink,
   FileText,
   GraduationCap,
   History,
@@ -25,7 +26,10 @@ import {
   Target,
   UploadCloud,
   UserRound,
+  UsersRound,
 } from "lucide-react";
+import { saveLocalWhatsAppCommunityStatus } from "@/lib/communityStatus";
+import { WHATSAPP_GROUP_URL } from "@/lib/community";
 import { supabase } from "@/lib/supabase";
 import { cn } from "@/lib/utils";
 import { subscribeToPush } from "@/components/ServiceWorkerRegister";
@@ -176,6 +180,41 @@ function ToolRow({
       ) : null}
       <ArrowRight className="h-4 w-4 shrink-0 text-muted-brand" />
     </Link>
+  );
+}
+
+function ExternalToolRow({
+  href,
+  title,
+  desc,
+  icon,
+  tone,
+  onClick,
+}: {
+  href: string;
+  title: string;
+  desc: string;
+  icon: ReactNode;
+  tone: Tone;
+  onClick?: () => void;
+}) {
+  return (
+    <a
+      href={href}
+      target="_blank"
+      rel="noopener noreferrer"
+      onClick={onClick}
+      className="flex items-center gap-3 rounded-2xl border border-border bg-card p-3.5 no-underline shadow-sm transition hover:bg-secondary/20"
+    >
+      <span className={cn("grid h-10 w-10 shrink-0 place-items-center rounded-xl border", toneClass[tone])}>
+        {icon}
+      </span>
+      <span className="min-w-0 flex-1">
+        <span className="block truncate text-sm font-bold text-foreground">{title}</span>
+        <span className="mt-0.5 block truncate text-xs text-muted-brand">{desc}</span>
+      </span>
+      <ExternalLink className="h-4 w-4 shrink-0 text-muted-brand" />
+    </a>
   );
 }
 
@@ -485,6 +524,27 @@ function StudyMeInner() {
     router.refresh();
   }
 
+  function markWhatsAppCommunityClicked() {
+    if (!userId) return;
+
+    const now = new Date().toISOString();
+    saveLocalWhatsAppCommunityStatus(userId, {
+      whatsapp_join_clicked_at: now,
+      whatsapp_dismissed_until: null,
+    });
+    void supabase
+      .from("user_community_status")
+      .upsert(
+        {
+          user_id: userId,
+          whatsapp_join_clicked_at: now,
+          updated_at: now,
+        },
+        { onConflict: "user_id" }
+      )
+      .then(() => {}, () => {});
+  }
+
   return (
     <div className="space-y-4 pb-28 md:pb-6">
       <StudyTabs contributorStatus={loading ? undefined : rep.status} />
@@ -633,6 +693,16 @@ function StudyMeInner() {
             icon={<MessageCircleQuestion className="h-4 w-4" />}
             tone="amber"
           />
+          {WHATSAPP_GROUP_URL ? (
+            <ExternalToolRow
+              href={WHATSAPP_GROUP_URL}
+              title="JabuStudy Community"
+              desc="Course updates and announcements"
+              icon={<UsersRound className="h-4 w-4" />}
+              tone="green"
+              onClick={markWhatsAppCommunityClicked}
+            />
+          ) : null}
           <ToolRow
             href="/study/library"
             title="Find Materials"

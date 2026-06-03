@@ -11,7 +11,7 @@ import { ForYouSection, type Chips } from "./_components/ForYouSection";
 import CourseSearch from "./_components/CourseSearch";
 import { HeroCard } from "./_components/HeroCard";
 import { QuickActions } from "./_components/QuickActions";
-import WhatsAppGroupCard from "./_components/WhatsAppGroupCard";
+import WhatsAppCommunityCTA from "./_components/WhatsAppCommunityCTA";
 import BannerSlot from "./_components/BannerSlot";
 import StatsStrip from "./_components/StatsStrip";
 
@@ -277,6 +277,8 @@ function StudyHomeInner() {
         onDismissSetupNudge={() => setNudgeDismissed(true)}
       />
 
+      <WhatsAppCommunityCTA userId={userId} />
+
       <div className="hidden md:block">
         <CourseSearch />
       </div>
@@ -310,8 +312,6 @@ function StudyHomeInner() {
       <ForYouSection chips={chips} setChips={setChips} onClearFilters={clearFilters} />
 
       <MyCourses scopeLabel={scopeLabel} />
-
-      <WhatsAppGroupCard />
         </>
       )}
       </div>

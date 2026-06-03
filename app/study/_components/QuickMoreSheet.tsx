@@ -13,6 +13,7 @@ import {
   UsersRound,
   X,
 } from "lucide-react";
+import { saveLocalWhatsAppCommunityStatus } from "@/lib/communityStatus";
 import { WHATSAPP_GROUP_URL } from "@/lib/community";
 import { supabase } from "@/lib/supabase";
 import { track } from "@/lib/studyAnalytics";
@@ -348,6 +349,24 @@ export default function QuickMoreSheet({ open, onClose }: QuickMoreSheetProps) {
                           item: "whatsapp_group",
                           had_badge: false,
                         });
+                        if (userId) {
+                          const now = new Date().toISOString();
+                          saveLocalWhatsAppCommunityStatus(userId, {
+                            whatsapp_join_clicked_at: now,
+                            whatsapp_dismissed_until: null,
+                          });
+                          void supabase
+                            .from("user_community_status")
+                            .upsert(
+                              {
+                                user_id: userId,
+                                whatsapp_join_clicked_at: now,
+                                updated_at: now,
+                              },
+                              { onConflict: "user_id" }
+                            )
+                            .then(() => {}, () => {});
+                        }
                         closeSheet();
                       }}
                       className={cn(
@@ -363,13 +382,13 @@ export default function QuickMoreSheet({ open, onClose }: QuickMoreSheetProps) {
 
                       <div className="min-w-0 flex-1">
                         <div className="flex items-center gap-2">
-                          <p className="text-sm font-bold text-foreground">WhatsApp group</p>
+                          <p className="text-sm font-bold text-foreground">JabuStudy Community</p>
                           <span className="rounded-full bg-[#25D366]/15 px-2 py-0.5 text-[10px] font-bold text-[#128C4A] dark:text-[#25D366]">
                             Join
                           </span>
                         </div>
                         <p className="mt-0.5 line-clamp-1 text-xs text-muted-foreground">
-                          CBT requests, materials and issue reports
+                          Course updates and announcements
                         </p>
                       </div>
 

@@ -455,6 +455,7 @@ async function callRepairAi(source: RepairSource, prompt: string, maxTokens: num
     maxTokens,
     timeoutMs: REPAIR_TIMEOUT_MS,
     modelRole: source.kind === "text" ? "generation" : "document",
+    workload: "question_generation",
   });
 
   if (!result.ok || !Array.isArray(result.data.questions)) return [];

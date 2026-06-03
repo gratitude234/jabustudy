@@ -333,6 +333,7 @@ Return ONLY JSON:
     maxTokens: 2400,
     timeoutMs: OUTLINE_TIMEOUT_MS,
     modelRole: "generation",
+    workload: "question_generation",
   });
 
   if (!result.ok) {
@@ -608,6 +609,7 @@ Return ONLY JSON:
     maxTokens: 1150,
     timeoutMs: QUESTION_TIMEOUT_MS,
     modelRole: "generation",
+    workload: "question_generation",
   });
 
   if (!result.ok) return null;

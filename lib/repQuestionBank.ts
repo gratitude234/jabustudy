@@ -123,6 +123,7 @@ async function callAiJson<T>(parts: AiContentBlock[], maxOutputTokens: number, t
     maxTokens: maxOutputTokens,
     timeoutMs,
     modelRole: "document",
+    workload: "question_generation",
   });
   if (!result.ok) throw new Error(result.error);
   return result.data;
@@ -153,6 +154,7 @@ Return ONLY JSON:
       maxTokens: 1200,
       timeoutMs: OUTLINE_TIMEOUT_MS,
       modelRole: "generation",
+      workload: "question_generation",
     });
     if (!result.ok) throw new Error(result.error);
 
@@ -243,6 +245,7 @@ Return ONLY JSON:
       maxTokens: Math.min(4096, args.count * 360),
       timeoutMs: QUESTION_TIMEOUT_MS,
       modelRole: "generation",
+      workload: "question_generation",
     });
     if (!result.ok) throw new Error(result.error);
 

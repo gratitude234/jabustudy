@@ -395,6 +395,7 @@ async function runDirectGeneration(args: {
         maxTokens,
         timeoutMs: AI_QUESTION_TIMEOUT_MS,
         modelRole: "document",
+        workload: "question_generation",
       });
       if (!result.ok) {
         if (allQuestions.length > 0) break;
@@ -479,6 +480,7 @@ async function runDirectGeneration(args: {
         maxTokens,
         timeoutMs: AI_QUESTION_TIMEOUT_MS,
         modelRole: "generation",
+        workload: "question_generation",
       });
       if (!result.ok) {
         if (allQuestions.length > 0) break;
@@ -527,6 +529,7 @@ async function runDirectGeneration(args: {
     maxTokens: inlineMaxTokens,
     timeoutMs: AI_QUESTION_TIMEOUT_MS,
     modelRole: "document",
+    workload: "question_generation",
   });
   if (!result.ok) throw new Error(result.error ?? "AI request failed.");
   if (!Array.isArray(result.data.questions) || result.data.questions.length === 0) {

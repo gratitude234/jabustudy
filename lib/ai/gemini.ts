@@ -5,6 +5,7 @@ const DEFAULT_DOCUMENT_MODEL = "gemini-2.5-flash";
 const DEFAULT_FAST_MODEL = "gemini-2.5-flash-lite";
 
 export type AiModelRole = "generation" | "fast" | "document";
+export type AiWorkload = "study" | "question_generation";
 
 export type AiTextBlock = { type: "text"; text: string };
 export type AiInlineBlock = {
@@ -32,6 +33,7 @@ export type GeminiTextConfig = {
   timeoutMs?: number;
   model?: string;
   modelRole?: AiModelRole;
+  workload?: AiWorkload;
   thinkingBudget?: number;
   responseMimeType?: "application/json";
 };
@@ -46,27 +48,46 @@ type GeminiKeyedResult<T> = {
   keyAlias: string;
 };
 
-function configuredGeminiKeys(): GeminiKeyLease[] {
-  const multi = (process.env.GEMINI_API_KEYS ?? "")
+function splitKeys(value: string | undefined) {
+  return (value ?? "")
     .split(",")
     .map((key) => key.trim())
     .filter(Boolean);
+}
+
+function keysForWorkload(workload: AiWorkload) {
+  const workloadKeys = workload === "question_generation"
+    ? splitKeys(process.env.GEMINI_GENERATION_API_KEYS)
+    : splitKeys(process.env.GEMINI_STUDY_API_KEYS);
+  if (workloadKeys.length > 0) return workloadKeys;
+
+  const sharedKeys = splitKeys(process.env.GEMINI_API_KEYS);
+  if (sharedKeys.length > 0) return sharedKeys;
+
   const single = process.env.GEMINI_API_KEY?.trim();
-  const source = multi.length > 0 ? multi : single ? [single] : [];
+  return single ? [single] : [];
+}
+
+function configuredGeminiKeys(workload: AiWorkload = "study"): GeminiKeyLease[] {
+  const source = keysForWorkload(workload);
   const seen = new Set<string>();
   const keys: GeminiKeyLease[] = [];
+  const aliasPrefix = workload === "question_generation" ? "gemini-generation-key" : "gemini-study-key";
 
   for (const apiKey of source) {
     if (seen.has(apiKey)) continue;
     seen.add(apiKey);
-    keys.push({ apiKey, alias: `gemini-key-${keys.length + 1}` });
+    keys.push({ apiKey, alias: `${aliasPrefix}-${keys.length + 1}` });
   }
 
   return keys;
 }
 
 const exhaustedGeminiKeys = new Map<string, number>();
-let nextGeminiKeyIndex = 0;
+const nextGeminiKeyIndexByWorkload: Record<AiWorkload, number> = {
+  study: 0,
+  question_generation: 0,
+};
 
 function geminiKeyQuotaCooldownMs() {
   const parsed = Number.parseInt(process.env.GEMINI_KEY_QUOTA_COOLDOWN_MS ?? "", 10);
@@ -110,15 +131,15 @@ function isGeminiKeyAvailable(alias: string) {
   return true;
 }
 
-function nextAvailableGeminiKey(tried: Set<string>) {
-  const keys = configuredGeminiKeys();
+function nextAvailableGeminiKey(tried: Set<string>, workload: AiWorkload) {
+  const keys = configuredGeminiKeys(workload);
   if (keys.length === 0) return null;
 
   for (let offset = 0; offset < keys.length; offset++) {
-    const index = (nextGeminiKeyIndex + offset) % keys.length;
+    const index = (nextGeminiKeyIndexByWorkload[workload] + offset) % keys.length;
     const key = keys[index];
     if (tried.has(key.alias) || !isGeminiKeyAvailable(key.alias)) continue;
-    nextGeminiKeyIndex = (index + 1) % keys.length;
+    nextGeminiKeyIndexByWorkload[workload] = (index + 1) % keys.length;
     return key;
   }
 
@@ -156,18 +177,25 @@ function geminiKeysExhaustedError(lastError: unknown) {
 
 export async function withGeminiKeyFailover<T>(
   operation: string,
-  call: (key: GeminiKeyLease) => Promise<T>
+  call: (key: GeminiKeyLease) => Promise<T>,
+  workload: AiWorkload = "study"
 ): Promise<GeminiKeyedResult<T>> {
-  const keyCount = configuredGeminiKeys().length;
+  const keyCount = configuredGeminiKeys(workload).length;
   if (keyCount === 0) {
-    throw Object.assign(new Error("GEMINI_API_KEYS or GEMINI_API_KEY is not configured."), { code: "not_configured" });
+    const workloadEnv = workload === "question_generation"
+      ? "GEMINI_GENERATION_API_KEYS"
+      : "GEMINI_STUDY_API_KEYS";
+    throw Object.assign(
+      new Error(`${workloadEnv}, GEMINI_API_KEYS, or GEMINI_API_KEY is not configured.`),
+      { code: "not_configured" }
+    );
   }
 
   const tried = new Set<string>();
   let lastError: unknown = null;
 
   while (tried.size < keyCount) {
-    const key = nextAvailableGeminiKey(tried);
+    const key = nextAvailableGeminiKey(tried, workload);
     if (!key) break;
     tried.add(key.alias);
 
@@ -188,7 +216,7 @@ export async function withGeminiKeyFailover<T>(
         cooldownMs: geminiKeyQuotaCooldownMs(),
         errorMessage: rawMessage.slice(0, 400),
         tip: quotaReason === "quota_429"
-          ? "Add more keys to GEMINI_API_KEYS or wait for quota reset. Check token usage logs above."
+          ? "Add more keys to the workload-specific Gemini pool or wait for quota reset. Check token usage logs above."
           : "Check that this API key is valid and has Gemini API access.",
       });
     }
@@ -292,8 +320,8 @@ function getGenerateUrl(config: GeminiTextConfig, stream = false) {
   return `https://generativelanguage.googleapis.com/v1beta/models/${model}:${method}`;
 }
 
-export function isGeminiConfigured() {
-  return configuredGeminiKeys().length > 0;
+export function isGeminiConfigured(workload: AiWorkload = "study") {
+  return configuredGeminiKeys(workload).length > 0;
 }
 
 function unknownErrorCode(error: unknown) {
@@ -350,7 +378,7 @@ export async function geminiText(config: GeminiTextConfig): Promise<{ text: stri
       const text: string = data?.candidates?.[0]?.content?.parts?.[0]?.text ?? "";
       if (!text.trim()) throw Object.assign(new Error("Gemini returned an empty response."), { code: "empty" });
       return text.trim();
-    });
+    }, config.workload ?? "study");
     return { text: result.value, keyAlias: result.keyAlias };
   } catch (error) {
     if (unknownErrorCode(error)) throw error;
@@ -386,7 +414,7 @@ export async function geminiStream(config: GeminiTextConfig): Promise<{ stream: 
       }
 
       return res;
-    });
+    }, config.workload ?? "study");
   } catch (error) {
     if (unknownErrorCode(error)) throw error;
     const name = unknownErrorName(error);

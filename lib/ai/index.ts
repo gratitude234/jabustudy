@@ -4,6 +4,7 @@ import {
   type AiContentBlock,
   type AiChatMessage,
   type AiModelRole,
+  type AiWorkload,
   geminiErrorKeyAlias,
   geminiFallbackModelName,
   geminiModelName,
@@ -19,7 +20,7 @@ import {
 } from "./bedrock";
 import { currentAiUsageContext, recordAiUsageEvent } from "@/lib/aiUsage";
 
-export type { AiChatMessage, AiContentBlock, AiFileBlock, AiModelRole } from "./gemini";
+export type { AiChatMessage, AiContentBlock, AiFileBlock, AiModelRole, AiWorkload } from "./gemini";
 
 export type AiProvider = "bedrock" | "gemini";
 
@@ -31,6 +32,7 @@ export type AiRequestConfig = {
   provider?: AiProvider;
   model?: string;
   modelRole?: AiModelRole;
+  workload?: AiWorkload;
   thinkingBudget?: number;
   responseMimeType?: "application/json";
 };
@@ -155,9 +157,9 @@ async function logAiUsage(params: {
   });
 }
 
-function configured(provider: AiProvider) {
+function configured(provider: AiProvider, config: AiRequestConfig) {
   if (provider === "bedrock" && !isBedrockEnabled()) return false;
-  return provider === "bedrock" ? isBedrockConfigured() : isGeminiConfigured();
+  return provider === "bedrock" ? isBedrockConfigured() : isGeminiConfigured(config.workload ?? "study");
 }
 
 function isBedrockEnabled() {
@@ -179,11 +181,11 @@ function primaryProvider(config: AiRequestConfig): AiProvider {
   return provider === "bedrock" && !isBedrockEnabled() ? "gemini" : provider;
 }
 
-function fallbackProvider(primary: AiProvider): AiProvider | null {
+function fallbackProvider(primary: AiProvider, config: AiRequestConfig): AiProvider | null {
   const fallback = normalizeProvider(process.env.AI_FALLBACK_PROVIDER);
   if (fallback === "bedrock" && !isBedrockEnabled()) return null;
   if (fallback && fallback !== primary) return fallback;
-  if (primary === "bedrock" && isGeminiConfigured()) return "gemini";
+  if (primary === "bedrock" && isGeminiConfigured(config.workload ?? "study")) return "gemini";
   return null;
 }
 
@@ -288,7 +290,7 @@ async function withProviderFallback<T>(
   geminiKeyAlias?: string;
 }) | { error: string; provider?: AiProvider; model?: string; geminiKeyAlias?: string }> {
   const primary = primaryProvider(config);
-  const fallback = fallbackProvider(primary);
+  const fallback = fallbackProvider(primary, config);
   const candidates = [primary, fallback].filter(Boolean) as AiProvider[];
   let lastError: unknown = null;
   let lastProvider: AiProvider | undefined;
@@ -297,7 +299,7 @@ async function withProviderFallback<T>(
 
   for (const provider of candidates) {
     lastProvider = provider;
-    if (!configured(provider)) {
+    if (!configured(provider, config)) {
       lastError = Object.assign(new Error(`${provider} is not configured.`), { code: "not_configured" });
       if (provider === primary) {
         primaryFailureReason = "AI primary provider is not configured.";
