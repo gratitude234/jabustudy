@@ -1269,12 +1269,19 @@ function PracticeHomeInner() {
             }
           }
 
-          if (isInProgress && !s.inProgressId) {
+          if (isInProgress) {
             const attemptId = String(row.id);
-            s.inProgressId = attemptId;
-            s.inProgressPct = 0;
             inProgressAttemptIds.push(attemptId);
             setIdByAttemptId.set(attemptId, sid);
+
+            // Fallback to the newest attempt while answer counts load.
+            // A set can have multiple in-progress rows if the user started fresh
+            // or resumed from an older URL, so the answered-count pass below
+            // may replace this with the most meaningful attempt.
+            if (!s.inProgressId) {
+              s.inProgressId = attemptId;
+              s.inProgressPct = 0;
+            }
           }
         }
 
@@ -1309,7 +1316,8 @@ function PracticeHomeInner() {
           const { data: answerRows, error: answerError } = await supabase
             .from("study_attempt_answers")
             .select("attempt_id,question_id,selected_option_id,text_answer")
-            .in("attempt_id", inProgressAttemptIds);
+            .in("attempt_id", inProgressAttemptIds)
+            .range(0, Math.max(999, inProgressAttemptIds.length * 250 - 1));
 
           if (!answerError) {
             const answeredQuestionIdsByAttempt = new Map<string, Set<string>>();
@@ -1330,13 +1338,17 @@ function PracticeHomeInner() {
               answeredQuestionIdsByAttempt.get(attemptId)!.add(questionId);
             }
 
+            const bestAnsweredBySet = new Map<string, number>();
             for (const attemptId of inProgressAttemptIds) {
               const sid = setIdByAttemptId.get(attemptId);
               if (!sid) continue;
               const summary = map[sid];
               const total = setQuestionTotals.get(sid) ?? 0;
               const answered = answeredQuestionIdsByAttempt.get(attemptId)?.size ?? 0;
-              if (summary) {
+              const bestAnswered = bestAnsweredBySet.get(sid);
+              if (summary && (bestAnswered == null || answered > bestAnswered)) {
+                bestAnsweredBySet.set(sid, answered);
+                summary.inProgressId = attemptId;
                 summary.inProgressPct = total > 0 ? Math.round((answered / total) * 100) : 0;
               }
             }
