@@ -27,6 +27,7 @@ type PracticeAccessSummary = {
 };
 
 type QuestionType = "mcq" | "short_answer" | "theory";
+export type QuestionTypeFilter = "all" | "objective" | "written";
 
 function questionTypeOf(q: Pick<QuizQuestion, "question_type"> | null | undefined): QuestionType {
   return q?.question_type === "short_answer" || q?.question_type === "theory" ? q.question_type : "mcq";
@@ -34,6 +35,55 @@ function questionTypeOf(q: Pick<QuizQuestion, "question_type"> | null | undefine
 
 function isWrittenQuestion(q: Pick<QuizQuestion, "question_type"> | null | undefined) {
   return questionTypeOf(q) !== "mcq";
+}
+
+function matchesQuestionTypeFilter(
+  q: Pick<QuizQuestion, "question_type"> | null | undefined,
+  filter: QuestionTypeFilter
+) {
+  if (filter === "objective") return !isWrittenQuestion(q);
+  if (filter === "written") return isWrittenQuestion(q);
+  return true;
+}
+
+function filterQuestionsByType(questions: QuizQuestion[], filter: QuestionTypeFilter) {
+  return filter === "all" ? questions : questions.filter((q) => matchesQuestionTypeFilter(q, filter));
+}
+
+function isQuestionTypeFilter(value: unknown): value is QuestionTypeFilter {
+  return value === "all" || value === "objective" || value === "written";
+}
+
+function readQuestionTypeFilter(key: string): QuestionTypeFilter | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const value = window.localStorage.getItem(key);
+    return isQuestionTypeFilter(value) ? value : null;
+  } catch {
+    return null;
+  }
+}
+
+function writeQuestionTypeFilter(key: string, value: QuestionTypeFilter) {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.setItem(key, value);
+  } catch {
+    // ignore
+  }
+}
+
+function pickInitialQuestionTypeFilter(
+  questions: QuizQuestion[],
+  saved: QuestionTypeFilter | null
+): QuestionTypeFilter {
+  const objectiveCount = questions.filter((q) => !isWrittenQuestion(q)).length;
+  const writtenCount = questions.length - objectiveCount;
+  const isMixed = objectiveCount > 0 && writtenCount > 0;
+
+  if (!isMixed) return "all";
+  if (saved && filterQuestionsByType(questions, saved).length > 0) return saved;
+  return "objective";
 }
 
 function normalizeMarkingPoints(value: unknown): string[] {
@@ -234,6 +284,7 @@ export function usePracticeEngine({
   // Retry-weak mode — when set, the active question list is filtered to only
   // these IDs. The full questions/options data is still held in memory.
   const [retryWeakIds, setRetryWeakIds] = useState<Set<string> | null>(null);
+  const [questionTypeFilter, setQuestionTypeFilterState] = useState<QuestionTypeFilter>("all");
 
   // SRS summary surfaced to the results screen after finalize.
   // Populated by finalizeAttempt — null until the attempt is submitted.
@@ -250,6 +301,10 @@ export function usePracticeEngine({
   const draftKey = useMemo(
     () => `jabu:practiceDraft:${setId}:${attemptId ?? "noattempt"}`,
     [setId, attemptId]
+  );
+  const questionTypeFilterKey = useMemo(
+    () => `jabu:practiceQuestionFilter:${setId}`,
+    [setId]
   );
 
   async function loadAttemptAnswers(effectiveAttemptId: string) {
@@ -281,14 +336,19 @@ export function usePracticeEngine({
     return { answers: amap, writtenAnswers: wmap, writtenGrades: gmap };
   }
 
-  // The active question list — either the full set or a weak-only subset
-  // when the student has chosen "Retry Weak Questions".
-  const activeQuestions = useMemo(
+  // The base session question list — either the full set or a weak/due subset.
+  // Question-type filtering is layered on top for navigation only.
+  const baseQuestions = useMemo(
     () =>
       retryWeakIds
         ? questions.filter((q) => retryWeakIds.has(q.id))
         : questions,
     [questions, retryWeakIds]
+  );
+
+  const activeQuestions = useMemo(
+    () => filterQuestionsByType(baseQuestions, questionTypeFilter),
+    [baseQuestions, questionTypeFilter]
   );
 
   const current = activeQuestions[idx];
@@ -338,19 +398,68 @@ export function usePracticeEngine({
     setIdx(nextIndex);
   }
 
+  function setQuestionTypeFilter(nextFilter: QuestionTypeFilter) {
+    const nextQuestions = filterQuestionsByType(baseQuestions, nextFilter);
+    if (!nextQuestions.length) return;
+
+    let nextIndex = currentQuestionId
+      ? nextQuestions.findIndex((q) => q.id === currentQuestionId)
+      : -1;
+
+    if (nextIndex < 0) {
+      nextIndex = nextQuestions.findIndex((q) =>
+        isWrittenQuestion(q) ? !writtenAnswers[q.id]?.trim() : !answers[q.id]
+      );
+    }
+    if (nextIndex < 0) nextIndex = 0;
+
+    writeQuestionTypeFilter(questionTypeFilterKey, nextFilter);
+    setQuestionTypeFilterState(nextFilter);
+    idxRef.current = nextIndex;
+    persistProgress(nextIndex, nextQuestions);
+    setIdx(nextIndex);
+  }
+
+  const questionTypeCounts = useMemo(() => {
+    let objective = 0;
+    let written = 0;
+    let objectiveAnswered = 0;
+    let writtenAnswered = 0;
+
+    for (const q of baseQuestions) {
+      if (isWrittenQuestion(q)) {
+        written += 1;
+        if (writtenAnswers[q.id]?.trim()) writtenAnswered += 1;
+      } else {
+        objective += 1;
+        if (answers[q.id]) objectiveAnswered += 1;
+      }
+    }
+
+    return {
+      all: baseQuestions.length,
+      objective,
+      written,
+      allAnswered: objectiveAnswered + writtenAnswered,
+      objectiveAnswered,
+      writtenAnswered,
+    };
+  }, [baseQuestions, answers, writtenAnswers]);
+
   const stats = useMemo(() => {
-    const total = activeQuestions.length;
-    const answered = activeQuestions.filter((q) =>
+    const statQuestions = submitted ? baseQuestions : activeQuestions;
+    const total = statQuestions.length;
+    const answered = statQuestions.filter((q) =>
       isWrittenQuestion(q) ? Boolean(writtenAnswers[q.id]?.trim()) : Boolean(answers[q.id])
     ).length;
-    const flaggedCount = activeQuestions.filter((q) => flagged[q.id]).length;
-    const scoredTotal = activeQuestions.filter((q) => !isWrittenQuestion(q)).length;
+    const flaggedCount = statQuestions.filter((q) => flagged[q.id]).length;
+    const scoredTotal = statQuestions.filter((q) => !isWrittenQuestion(q)).length;
     const writtenTotal = total - scoredTotal;
-    const writtenAnswered = activeQuestions.filter((q) => isWrittenQuestion(q) && Boolean(writtenAnswers[q.id]?.trim())).length;
+    const writtenAnswered = statQuestions.filter((q) => isWrittenQuestion(q) && Boolean(writtenAnswers[q.id]?.trim())).length;
 
     let correct = 0;
     if (submitted) {
-      for (const q of activeQuestions) {
+      for (const q of statQuestions) {
         if (isWrittenQuestion(q)) continue;
         const chosen = answers[q.id];
         if (!chosen) continue;
@@ -359,7 +468,25 @@ export function usePracticeEngine({
       }
     }
     return { total, answered, flaggedCount, correct, scoredTotal, writtenTotal, writtenAnswered };
-  }, [activeQuestions, answers, writtenAnswers, flagged, submitted, optionsByQ]);
+  }, [activeQuestions, baseQuestions, answers, writtenAnswers, flagged, submitted, optionsByQ]);
+
+  const submitStats = useMemo(() => {
+    const total = baseQuestions.length;
+    const answered = baseQuestions.filter((q) =>
+      isWrittenQuestion(q) ? Boolean(writtenAnswers[q.id]?.trim()) : Boolean(answers[q.id])
+    ).length;
+    const scoredTotal = baseQuestions.filter((q) => !isWrittenQuestion(q)).length;
+    const writtenTotal = total - scoredTotal;
+    const writtenAnswered = baseQuestions.filter((q) => isWrittenQuestion(q) && Boolean(writtenAnswers[q.id]?.trim())).length;
+    return {
+      total,
+      answered,
+      unanswered: Math.max(0, total - answered),
+      scoredTotal,
+      writtenTotal,
+      writtenAnswered,
+    };
+  }, [baseQuestions, answers, writtenAnswers]);
 
   // Load + restore/create attempt + timer base
   useEffect(() => {
@@ -386,6 +513,7 @@ export function usePracticeEngine({
       setWrittenSaving(false);
       setIsResumed(false);
       setRetryWeakIds(null);
+      setQuestionTypeFilterState("all");
 
       try {
         if (!setId) throw new Error("Missing set id");
@@ -516,10 +644,17 @@ export function usePracticeEngine({
           finalQuestions = cleanQData.slice(0, practiceRemaining);
         }
 
-        const resumeQuestions =
+        const baseResumeQuestions =
           dueQuestionIds && dueQuestionIds.length > 0
             ? finalQuestions.filter((q) => dueQuestionIds.includes(q.id))
             : finalQuestions;
+        const initialQuestionTypeFilter = isDueMode
+          ? "all"
+          : pickInitialQuestionTypeFilter(
+              baseResumeQuestions,
+              readQuestionTypeFilter(questionTypeFilterKey)
+            );
+        const resumeQuestions = filterQuestionsByType(baseResumeQuestions, initialQuestionTypeFilter);
 
         // ─── PHASE 2: attempt restore / create ───────────────────────────
         // Attempt creation needs userId (from Phase 1 auth).
@@ -657,6 +792,7 @@ export function usePracticeEngine({
         setQuestions(finalQuestions);
         setOptionsByQ(grouped);
         setAttemptId(effectiveAttemptId);
+        setQuestionTypeFilterState(initialQuestionTypeFilter);
         setIdx(Math.max(0, Math.min(Math.max(0, resumeQuestions.length - 1), resumeIdx)));
 
         // Apply Due Today pre-filter immediately after questions load.
@@ -865,6 +1001,7 @@ export function usePracticeEngine({
     }
 
     setRetryWeakIds(weakIds);
+    setQuestionTypeFilterState("all");
     setAnswers({});
     setWrittenAnswers({});
     setWrittenGrades({});
@@ -915,7 +1052,7 @@ export function usePracticeEngine({
         body: JSON.stringify({
           answers,
           writtenAnswers,
-          questionIds: activeQuestions.map((q) => q.id),
+          questionIds: baseQuestions.map((q) => q.id),
           reason,
           timeSpentSeconds: timeSpent,
         }),
@@ -985,7 +1122,7 @@ export function usePracticeEngine({
   const reviewItems = useMemo(() => {
     if (!submitted) return [];
 
-    const list = activeQuestions.map((q, i) => {
+    const list = baseQuestions.map((q, i) => {
       const chosen = answers[q.id] ?? null;
       const writtenAnswer = writtenAnswers[q.id] ?? "";
       const isWritten = isWrittenQuestion(q);
@@ -1015,12 +1152,13 @@ export function usePracticeEngine({
     if (reviewTab === "flagged") return list.filter((x) => x.isFlagged);
     if (reviewTab === "unanswered") return list.filter((x) => x.isUnanswered);
     return list;
-  }, [submitted, activeQuestions, answers, writtenAnswers, writtenGrades, optionsByQ, flagged, reviewTab]);
+  }, [submitted, baseQuestions, answers, writtenAnswers, writtenGrades, optionsByQ, flagged, reviewTab]);
 
   return {
     // data
     meta,
     questions: activeQuestions,
+    baseQuestions,
     optionsByQ,
     loading,
     err,
@@ -1043,12 +1181,15 @@ export function usePracticeEngine({
     isDueMode,
     studyMode,
     isResumed,
+    questionTypeFilter,
+    questionTypeCounts,
 
     // review
     reviewTab,
     setReviewTab,
     reviewItems,
     stats,
+    submitStats,
     finalizing,
     submitPoints,
     submitErr,
@@ -1060,6 +1201,7 @@ export function usePracticeEngine({
     choose,
     writeAnswer,
     setWrittenGrade,
+    setQuestionTypeFilter,
     toggleFlag,
     goToQuestion,
     persistProgress,

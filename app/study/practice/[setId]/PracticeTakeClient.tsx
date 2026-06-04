@@ -35,7 +35,7 @@ import { BetterExplanationInline, type BetterExplanationOptionKey } from "../../
 import { GuidedSourceModal, type GuidedStudyRef } from "../../_components/GuidedSourceModal";
 import { cn, msToClock, normalize } from "@/lib/utils";
 import { publicUrl } from "@/lib/publicUrl";
-import { usePracticeEngine } from "./usePracticeEngine";
+import { usePracticeEngine, type QuestionTypeFilter } from "./usePracticeEngine";
 import { supabase } from "@/lib/supabase";
 import type { WrittenAnswerGrade } from "@/lib/types";
 
@@ -348,6 +348,7 @@ export default function PracticeTakeClient() {
   const {
     meta,
     questions,
+    baseQuestions,
     loading,
     err,
     idx,
@@ -370,9 +371,13 @@ export default function PracticeTakeClient() {
     practiceAccess,
     originalQuestionCount,
     weakSummary,
+    questionTypeFilter,
+    questionTypeCounts,
+    submitStats,
     choose,
     writeAnswer,
     setWrittenGrade,
+    setQuestionTypeFilter,
     softReset,
     retryWeakQuestions,
     finalizeAttempt,
@@ -534,6 +539,23 @@ export default function PracticeTakeClient() {
   const isLast = questions.length > 0 && idx >= questions.length - 1;
   const learningMode = studyMode || isDueMode || isRetryMode;
   const isActiveAiDraft = meta?.draft_status === "draft" && !draftKept;
+  const currentPosition = questions.length > 0 ? Math.min(idx + 1, questions.length) : 0;
+  const visibleQuestionsLeft = questions.length > 0 ? Math.max(0, questions.length - currentPosition) : 0;
+  const canFilterQuestionTypes =
+    !isDueMode &&
+    !isRetryMode &&
+    questionTypeCounts.objective > 0 &&
+    questionTypeCounts.written > 0;
+  const needsWrittenAfterObjective =
+    canFilterQuestionTypes &&
+    questionTypeFilter === "objective" &&
+    questionTypeCounts.writtenAnswered < questionTypeCounts.written;
+  const filteredProgressLabel =
+    questionTypeFilter === "objective"
+      ? `OBJ ${currentPosition}/${questions.length}`
+      : questionTypeFilter === "written"
+        ? `Written ${currentPosition}/${questions.length}`
+        : `Q ${currentPosition}/${questions.length}`;
 
   const chosenId = current ? answers[current.id] : null;
   const currentQuestionType = current?.question_type === "short_answer" || current?.question_type === "theory"
@@ -634,7 +656,11 @@ export default function PracticeTakeClient() {
 
   function handleSubmitClick() {
     if (submitted) return;
-    const unanswered = stats.total - stats.answered;
+    if (needsWrittenAfterObjective) {
+      continueToWrittenQuestions();
+      return;
+    }
+    const unanswered = submitStats.unanswered;
     if (unanswered > 0 && !pendingSubmit) {
       setPendingSubmit(true);
       return;
@@ -712,9 +738,23 @@ export default function PracticeTakeClient() {
     });
   }
 
+  function changeQuestionTypeFilter(nextFilter: QuestionTypeFilter) {
+    if (nextFilter === questionTypeFilter) return;
+    setPendingSubmit(false);
+    setNavOpen(false);
+    setRevealed({});
+    setStudyHintOpen({});
+    setQuestionTypeFilter(nextFilter);
+    scrollToQuestionTop();
+  }
+
   function leavePractice() {
     persistProgress();
     router.back();
+  }
+
+  function continueToWrittenQuestions() {
+    changeQuestionTypeFilter("written");
   }
 
   function goNext() {
@@ -1091,6 +1131,42 @@ if (err || !meta) {
           </div>
         </div>
 
+        {canFilterQuestionTypes ? (
+          <div className="mt-2 flex items-center gap-1 overflow-x-auto rounded-2xl border border-border bg-background p-1">
+            {([
+              ["all", "All", questionTypeCounts.all],
+              ["objective", "Objective", questionTypeCounts.objective],
+              ["written", "Written", questionTypeCounts.written],
+            ] as const).map(([value, label, count]) => {
+              const active = questionTypeFilter === value;
+              return (
+                <button
+                  key={value}
+                  type="button"
+                  onClick={() => changeQuestionTypeFilter(value)}
+                  className={cn(
+                    "inline-flex h-9 shrink-0 items-center justify-center gap-1.5 rounded-xl px-3 text-xs font-extrabold transition",
+                    "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                    active
+                      ? "bg-[#5B35D5] text-white shadow-sm"
+                      : "text-muted-foreground hover:bg-secondary/70 hover:text-foreground"
+                  )}
+                >
+                  <span>{label}</span>
+                  <span
+                    className={cn(
+                      "rounded-full px-1.5 py-0.5 text-[10px] tabular-nums",
+                      active ? "bg-white/18 text-white" : "bg-secondary text-muted-foreground"
+                    )}
+                  >
+                    {count}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        ) : null}
+
         <div className="mt-2">
           <div className="flex items-center justify-between gap-2">
             <div className="flex min-w-0 items-center gap-1.5">
@@ -1102,7 +1178,8 @@ if (err || !meta) {
               <p className="truncate text-xs font-extrabold text-foreground">{normalize(meta.title)}</p>
             </div>
             <span className="shrink-0 text-[11px] font-semibold text-muted-foreground tabular-nums">
-              {stats.total - stats.answered} left
+              {filteredProgressLabel}
+              {visibleQuestionsLeft > 0 ? ` · ${visibleQuestionsLeft} left` : " · Last question"}
             </span>
           </div>
           <div className="mt-1.5 h-1.5 w-full overflow-hidden rounded-full bg-secondary" aria-hidden="true">
@@ -1716,7 +1793,7 @@ if (err || !meta) {
           {pendingSubmit && (
             <div className="rounded-2xl border border-amber-300/50 bg-amber-50 px-4 py-3 dark:border-amber-700/40 dark:bg-amber-950/20">
               <p className="text-sm font-semibold text-amber-900 dark:text-amber-200">
-                {stats.total - stats.answered} question{stats.total - stats.answered !== 1 ? "s" : ""} unanswered — submit anyway?
+                {submitStats.unanswered} question{submitStats.unanswered !== 1 ? "s" : ""} unanswered — submit anyway?
               </p>
               <div className="mt-2 flex gap-2">
                 <button
@@ -1740,12 +1817,12 @@ if (err || !meta) {
           {!submitted &&
            !isRetryMode &&
            originalQuestionCount !== null &&
-           questions.length < originalQuestionCount && (
+           baseQuestions.length < originalQuestionCount && (
             <div className="rounded-2xl border border-[#5B35D5]/20 bg-[#EEEDFE] px-4 py-3 dark:border-[#5B35D5]/30 dark:bg-[#5B35D5]/10">
               <div className="flex items-center justify-between gap-2">
                 <p className="text-sm font-semibold text-[#3B24A8] dark:text-indigo-300">
-                  Showing {questions.length} of {originalQuestionCount} questions
-                  — {questions.length} free question{questions.length !== 1 ? "s" : ""} remaining today.
+                  Showing {baseQuestions.length} of {originalQuestionCount} questions
+                  — {baseQuestions.length} free question{baseQuestions.length !== 1 ? "s" : ""} remaining today.
                 </p>
                 <Link
                   href="/study/billing"
@@ -2076,12 +2153,14 @@ if (err || !meta) {
                 className={cn(
                   "inline-flex h-12 flex-1 items-center justify-center gap-2 rounded-2xl text-sm font-extrabold transition active:scale-[0.98]",
                   "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-                  learningMode
+                  learningMode || needsWrittenAfterObjective
                     ? "bg-[#5B35D5] text-white hover:bg-[#4526B8]"
                     : "bg-secondary text-foreground hover:opacity-90"
                 )}
               >
-                {learningMode ? (
+                {needsWrittenAfterObjective ? (
+                  <><ArrowRight className="h-4 w-4" /> Continue to Written</>
+                ) : learningMode ? (
                   <><GraduationCap className="h-4 w-4" /> Finish session</>
                 ) : (
                   <><Send className="h-4 w-4" /> Submit</>
@@ -2107,7 +2186,7 @@ if (err || !meta) {
           >
             <BookOpen className="h-5 w-5 shrink-0 text-[#5B35D5] dark:text-indigo-300" aria-hidden="true" />
             <p className="min-w-0 flex-1 text-sm font-extrabold text-[#3B24A8] dark:text-indigo-300">
-              Resuming — {Object.keys(answers).length} of {questions.length} answered
+              Resuming — {submitStats.answered} of {submitStats.total} answered
             </p>
             <button
               type="button"
