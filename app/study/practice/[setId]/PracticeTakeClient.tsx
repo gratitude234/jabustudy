@@ -1961,6 +1961,39 @@ if (err || !meta) {
                             <p className="mt-2 text-[11px] font-semibold text-muted-foreground">Loaded from saved feedback.</p>
                           ) : null}
                         </div>
+                        {currentGradeState.grade.improvedAnswer ? (
+                          <div className="rounded-2xl border border-[#5B35D5]/20 bg-background p-3 dark:border-[#5B35D5]/30">
+                            <div className="flex items-center gap-2">
+                              <BookOpen className="h-4 w-4 shrink-0 text-[#5B35D5] dark:text-indigo-300" />
+                              <p className="text-xs font-extrabold text-[#3B24A8] dark:text-indigo-300">Improved answer</p>
+                            </div>
+                            <p className="mt-2 whitespace-pre-wrap text-sm leading-relaxed text-foreground">
+                              {currentGradeState.grade.improvedAnswer}
+                            </p>
+                            <p className="mt-2 text-[11px] font-semibold text-muted-foreground">
+                              Use this as a guide, then rewrite it in your own words.
+                            </p>
+                          </div>
+                        ) : currentGradeState.cached ? (
+                          <div className="rounded-2xl border border-[#5B35D5]/20 bg-background p-3 dark:border-[#5B35D5]/30">
+                            <div className="flex flex-wrap items-center justify-between gap-2">
+                              <div className="min-w-0">
+                                <p className="text-xs font-extrabold text-[#3B24A8] dark:text-indigo-300">Improved answer</p>
+                                <p className="mt-1 text-xs font-semibold text-muted-foreground">
+                                  Refresh the grade to generate an exam-ready version of your answer.
+                                </p>
+                              </div>
+                              <button
+                                type="button"
+                                onClick={() => void gradeWrittenAnswer(current.id)}
+                                className="inline-flex items-center gap-1.5 rounded-xl border border-[#5B35D5]/30 bg-[#EEEDFE] px-3 py-1.5 text-xs font-extrabold text-[#3B24A8] hover:bg-[#E2DFFE]"
+                              >
+                                <BookOpen className="h-3.5 w-3.5" />
+                                Improve
+                              </button>
+                            </div>
+                          </div>
+                        ) : null}
                         <div className="rounded-2xl border border-[#5B35D5]/20 bg-[#EEEDFE] p-3 dark:border-[#5B35D5]/30 dark:bg-[#5B35D5]/10">
                           <p className="text-xs font-extrabold text-[#3B24A8] dark:text-indigo-300">Model answer</p>
                           <p className="mt-1 whitespace-pre-wrap text-sm leading-relaxed text-foreground">

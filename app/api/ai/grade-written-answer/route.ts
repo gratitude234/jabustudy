@@ -108,7 +108,7 @@ function gradeFromRow(row: AttemptAnswerGradeRow): WrittenAnswerGrade | null {
     feedback,
     matchedPoints: cleanArray(row.ai_grade_matched_points, 2),
     missingPoints: cleanArray(row.ai_grade_missing_points, 3),
-    improvedAnswer: compactText(row.ai_grade_improved_answer, 220) || null,
+    improvedAnswer: compactText(row.ai_grade_improved_answer, 420) || null,
     gradedAt,
     provider: cleanString(row.ai_grade_provider, 80) || null,
     model: cleanString(row.ai_grade_model, 120) || null,
@@ -127,7 +127,7 @@ function normalizeGrade(raw: RawGrade, provider: string | undefined, model: stri
     feedback,
     matchedPoints: cleanArray(raw.matchedPoints, 2),
     missingPoints: cleanArray(raw.missingPoints, 3),
-    improvedAnswer: compactText(raw.improvedAnswer, 220) || null,
+    improvedAnswer: compactText(raw.improvedAnswer, 420) || null,
     gradedAt: new Date().toISOString(),
     provider: provider ?? null,
     model: model ?? null,
@@ -167,6 +167,7 @@ The app already shows the full model answer below your feedback. Keep your feedb
 - feedback: one short sentence, max 25 words.
 - matchedPoints: max 2 short phrases.
 - missingPoints: max 3 short phrases, only the most important gaps.
+- improvedAnswer: rewrite the student's answer into a better exam-ready answer, max 55 words. Preserve correct parts of the student's wording where possible, and add only the missing marking-point details.
 - Do not restate the full model answer.
 
 Return ONLY valid JSON with this exact shape:
@@ -176,7 +177,8 @@ Return ONLY valid JSON with this exact shape:
   "verdict": "correct" | "mostly_correct" | "partially_correct" | "incorrect" | "unanswered",
   "feedback": "One short sentence.",
   "matchedPoints": ["short correct point"],
-  "missingPoints": ["short missing point"]
+  "missingPoints": ["short missing point"],
+  "improvedAnswer": "A concise improved version of the student's answer."
 }
 
 The score must be between 0 and 10.`;
@@ -263,7 +265,7 @@ export async function POST(req: NextRequest) {
   const existingAnswerRow = existingAnswer as AttemptAnswerGradeRow | null;
   if (existingAnswerRow?.ai_grade_answer_hash === hash) {
     const cachedGrade = gradeFromRow(existingAnswerRow);
-    if (cachedGrade) {
+    if (cachedGrade?.improvedAnswer) {
       return NextResponse.json({
         ok: true,
         grade: cachedGrade,
@@ -299,7 +301,7 @@ export async function POST(req: NextRequest) {
       studentAnswer: answer,
     }))],
     temperature: 0.1,
-    maxTokens: 240,
+    maxTokens: 420,
     timeoutMs: 45_000,
     modelRole: "fast",
   }));
