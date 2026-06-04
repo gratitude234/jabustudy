@@ -6,12 +6,13 @@ import { usePathname } from "next/navigation";
 import {
   ShieldCheck, FileText, Inbox, LayoutDashboard, UserCheck2,
   Upload, History, BookOpen, ListChecks, ArrowLeft, FileInput as ImportIcon,
-  Banknote, Zap,
+  Banknote, Zap, Users,
 } from "lucide-react";
 import type React from "react";
 
 const NAV_ITEMS = [
   { href: "/study-admin",                    label: "Dashboard",  icon: LayoutDashboard },
+  { href: "/study-admin/users",              label: "Users",      icon: Users },
   { href: "/study-admin/materials",          label: "Materials",  icon: FileText },
   { href: "/study-admin/requests",           label: "Requests",   icon: Inbox },
   { href: "/study-admin/rep-applications",   label: "Rep Apps",   icon: UserCheck2 },

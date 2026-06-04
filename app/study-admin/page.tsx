@@ -452,7 +452,7 @@ export default function StudyAdminDashboardPage() {
       )}
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <MetricCard label="Students" value={metrics.totalStudents} hint="Known study profiles" icon={<Users className="h-4 w-4" />} accent="primary" />
+        <MetricCard label="Students" value={metrics.totalStudents} hint="Known study profiles" href="/study-admin/users" icon={<Users className="h-4 w-4" />} accent="primary" />
         <MetricCard label="Active today" value={metrics.activeToday} hint="Users with WAT activity" icon={<Activity className="h-4 w-4" />} accent="emerald" />
         <MetricCard label="Active week" value={metrics.activeWeek} hint="Unique users this week" icon={<Clock className="h-4 w-4" />} accent="sky" />
         <MetricCard label="Practice today" value={metrics.practiceSessionsToday} hint="Sessions started today" icon={<Zap className="h-4 w-4" />} accent="amber" />

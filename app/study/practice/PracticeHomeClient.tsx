@@ -134,7 +134,6 @@ type SetAttemptSummary = {
 
 const PRACTICE_PAGE_SIZE = 12;
 const FOR_YOU_CANDIDATE_LIMIT = 60;
-const FOR_YOU_RESULT_LIMIT = 6;
 
 function normalizeCourseCode(value: unknown) {
   return String(value ?? "").trim().toUpperCase();
@@ -643,7 +642,7 @@ function CourseChipsBar({
             )}
           >
             {code ? <Hash className="h-3 w-3" /> : null}
-            {code || "All"}
+            {code || "All courses"}
           </button>
         );
       })}
@@ -651,25 +650,38 @@ function CourseChipsBar({
   );
 }
 
-function ScoreRingSmall({ pct }: { pct: number | null }) {
+function ScoreRingSmall({
+  pct,
+  kind = "score",
+}: {
+  pct: number | null;
+  kind?: "score" | "progress";
+}) {
   const size = 48;
   const r = 19;
   const cx = 24;
   const circ = 2 * Math.PI * r;
-  const offset = pct != null ? circ * (1 - Math.max(0, Math.min(100, pct)) / 100) : circ;
-  const color = pct != null ? pctToColor(pct) : undefined;
+  const clampedPct = pct != null ? Math.max(0, Math.min(100, pct)) : null;
+  const offset = clampedPct != null ? circ * (1 - clampedPct / 100) : circ;
+  const color = clampedPct != null ? (kind === "progress" ? "#5B35D5" : pctToColor(clampedPct)) : undefined;
+  const ariaLabel =
+    clampedPct != null
+      ? kind === "progress"
+        ? `Progress: ${clampedPct}% answered`
+        : `Best score: ${clampedPct}%`
+      : "Not attempted";
   return (
     <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}
-      style={{ flexShrink: 0 }} aria-label={pct != null ? `Best score: ${pct}%` : "Not attempted"}>
+      style={{ flexShrink: 0 }} aria-label={ariaLabel}>
       <circle cx={cx} cy={cx} r={r} fill="none" stroke="currentColor" strokeWidth={3} opacity={0.12} />
-      {pct != null && (
+      {clampedPct != null && (
         <circle cx={cx} cy={cx} r={r} fill="none" stroke={color} strokeWidth={3}
           strokeDasharray={circ} strokeDashoffset={offset} strokeLinecap="round"
           transform={`rotate(-90 ${cx} ${cx})`} />
       )}
       <text x={cx} y={cx} textAnchor="middle" dominantBaseline="central"
         fontSize={10} fontWeight={500} fill="currentColor">
-        {pct != null ? `${pct}%` : "—"}
+        {clampedPct != null ? `${clampedPct}%` : "—"}
       </text>
     </svg>
   );
@@ -700,6 +712,7 @@ function QuizSetCard({
   const hasInProgress = Boolean(summary?.inProgressId);
   const hasSubmitted  = (summary?.attemptCount ?? 0) > 0;
   const bestPct       = summary?.bestPct ?? null;
+  const inProgressPct = summary?.inProgressPct ?? null;
   const isMastered    = bestPct != null && bestPct >= 70;
   const isPrivate = s.visibility === "private" && s.created_by === currentUserId;
 
@@ -711,8 +724,10 @@ function QuizSetCard({
       <div className="flex min-w-0 items-center gap-3">
         {/* Score ring or fallback icon */}
         <div className="shrink-0">
-          {hasSubmitted || hasInProgress ? (
-            <ScoreRingSmall pct={bestPct} />
+          {hasInProgress ? (
+            <ScoreRingSmall pct={inProgressPct ?? 0} kind="progress" />
+          ) : hasSubmitted ? (
+            <ScoreRingSmall pct={bestPct} kind="score" />
           ) : (
             <div className="grid h-12 w-12 place-items-center rounded-2xl bg-primary-light">
               <BookOpen className="h-5 w-5 text-primary" />
@@ -742,14 +757,34 @@ function QuizSetCard({
           </div>
 
           <div className="mt-1 flex flex-wrap items-center gap-2">
-            {hasInProgress && !hasSubmitted ? (
+            {hasInProgress ? (
               <>
                 <span className="inline-flex items-center rounded-full border border-amber-300/40 bg-amber-100/30 px-2 py-0.5 text-[11px] font-extrabold text-amber-800 dark:bg-amber-950/20 dark:text-amber-300">
                   In progress
                 </span>
-                {summary?.inProgressPct != null && (
+                {inProgressPct != null && (
                   <span className="text-[11px] font-semibold text-muted-foreground">
-                    {summary.inProgressPct}% answered
+                    {inProgressPct}% answered
+                  </span>
+                )}
+                {hasSubmitted && (
+                  <span className="text-[11px] font-semibold text-muted-foreground">
+                    {summary!.attemptCount}&times; tried
+                  </span>
+                )}
+                {hasSubmitted && bestPct != null && (
+                  <span className="text-[11px] font-extrabold" style={{ color: pctToColor(bestPct) }}>
+                    Best {bestPct}%
+                  </span>
+                )}
+                {hasSubmitted && isMastered && (
+                  <span className="inline-flex items-center gap-1 text-[11px] font-extrabold text-emerald-700 dark:text-emerald-400">
+                    <CheckCircle2 className="h-3 w-3" /> Mastered
+                  </span>
+                )}
+                {hasSubmitted && (
+                  <span className="inline-flex items-center rounded-full border border-amber-300/40 bg-amber-100/30 px-2 py-0.5 text-[11px] font-extrabold text-amber-800 dark:bg-amber-950/20 dark:text-amber-300">
+                    Resume available
                   </span>
                 )}
               </>
@@ -766,11 +801,6 @@ function QuizSetCard({
                 {isMastered && (
                   <span className="inline-flex items-center gap-1 text-[11px] font-extrabold text-emerald-700 dark:text-emerald-400">
                     <CheckCircle2 className="h-3 w-3" /> Mastered
-                  </span>
-                )}
-                {hasInProgress && (
-                  <span className="inline-flex items-center rounded-full border border-amber-300/40 bg-amber-100/30 px-2 py-0.5 text-[11px] font-extrabold text-amber-800 dark:bg-amber-950/20 dark:text-amber-300">
-                    Resume available
                   </span>
                 )}
               </>
@@ -1179,6 +1209,17 @@ function PracticeHomeInner() {
 
     (async () => {
       try {
+        const setQuestionTotals = new Map<string, number>();
+        for (const set of sets) {
+          const total =
+            typeof set.questions_count === "number" && set.questions_count > 0
+              ? set.questions_count
+              : typeof set.total_questions === "number" && set.total_questions > 0
+                ? set.total_questions
+                : null;
+          if (total !== null) setQuestionTotals.set(set.id, total);
+        }
+
         // Fetch newest attempt rows first so resume/latest context is stable.
         const { data, error } = await supabase
           .from("study_practice_attempts")
@@ -1191,6 +1232,8 @@ function PracticeHomeInner() {
 
         // Group by set_id and compute summary
         const map: Record<string, SetAttemptSummary> = {};
+        const inProgressAttemptIds: string[] = [];
+        const setIdByAttemptId = new Map<string, string>();
 
         for (const row of data as any[]) {
           const sid = String(row.set_id);
@@ -1227,13 +1270,75 @@ function PracticeHomeInner() {
           }
 
           if (isInProgress && !s.inProgressId) {
-            s.inProgressId = String(row.id);
-            if (
-              typeof row.score === "number" &&
-              typeof row.total_questions === "number" &&
-              row.total_questions > 0
-            ) {
-              s.inProgressPct = Math.round((row.score / row.total_questions) * 100);
+            const attemptId = String(row.id);
+            s.inProgressId = attemptId;
+            s.inProgressPct = 0;
+            inProgressAttemptIds.push(attemptId);
+            setIdByAttemptId.set(attemptId, sid);
+          }
+        }
+
+        if (inProgressAttemptIds.length > 0) {
+          const missingQuestionCountSetIds: string[] = [];
+          const missingQuestionCountSetIdSet = new Set<string>();
+          for (const attemptId of inProgressAttemptIds) {
+            const sid = setIdByAttemptId.get(attemptId);
+            if (!sid || setQuestionTotals.has(sid) || missingQuestionCountSetIdSet.has(sid)) continue;
+            missingQuestionCountSetIdSet.add(sid);
+            missingQuestionCountSetIds.push(sid);
+          }
+
+          if (missingQuestionCountSetIds.length > 0) {
+            const { data: questionRows } = await supabase
+              .from("study_quiz_questions")
+              .select("id,set_id")
+              .in("set_id", missingQuestionCountSetIds);
+
+            const fetchedCounts = new Map<string, number>();
+            for (const row of (questionRows ?? []) as any[]) {
+              const sid = row?.set_id ? String(row.set_id) : "";
+              if (!sid) continue;
+              fetchedCounts.set(sid, (fetchedCounts.get(sid) ?? 0) + 1);
+            }
+
+            for (const [sid, count] of fetchedCounts.entries()) {
+              if (count > 0) setQuestionTotals.set(sid, count);
+            }
+          }
+
+          const { data: answerRows, error: answerError } = await supabase
+            .from("study_attempt_answers")
+            .select("attempt_id,question_id,selected_option_id,text_answer")
+            .in("attempt_id", inProgressAttemptIds);
+
+          if (!answerError) {
+            const answeredQuestionIdsByAttempt = new Map<string, Set<string>>();
+            for (const row of (answerRows ?? []) as any[]) {
+              const attemptId = row?.attempt_id ? String(row.attempt_id) : "";
+              const questionId = row?.question_id ? String(row.question_id) : "";
+              if (!attemptId || !questionId) continue;
+
+              const hasMcqAnswer =
+                typeof row.selected_option_id === "string" && row.selected_option_id.trim().length > 0;
+              const hasWrittenAnswer =
+                typeof row.text_answer === "string" && row.text_answer.trim().length > 0;
+              if (!hasMcqAnswer && !hasWrittenAnswer) continue;
+
+              if (!answeredQuestionIdsByAttempt.has(attemptId)) {
+                answeredQuestionIdsByAttempt.set(attemptId, new Set<string>());
+              }
+              answeredQuestionIdsByAttempt.get(attemptId)!.add(questionId);
+            }
+
+            for (const attemptId of inProgressAttemptIds) {
+              const sid = setIdByAttemptId.get(attemptId);
+              if (!sid) continue;
+              const summary = map[sid];
+              const total = setQuestionTotals.get(sid) ?? 0;
+              const answered = answeredQuestionIdsByAttempt.get(attemptId)?.size ?? 0;
+              if (summary) {
+                summary.inProgressPct = total > 0 ? Math.round((answered / total) * 100) : 0;
+              }
             }
           }
         }
@@ -1280,7 +1385,7 @@ function PracticeHomeInner() {
       }
 
       const pageSize = isForYou ? FOR_YOU_CANDIDATE_LIMIT : PRACTICE_PAGE_SIZE;
-      const from = isForYou ? 0 : (nextPage - 1) * pageSize;
+      const from = (nextPage - 1) * pageSize;
       const to = from + pageSize - 1;
       const disabledColumns = new Set<PracticeSetOptionalField>();
 
@@ -1410,8 +1515,8 @@ function PracticeHomeInner() {
         return merged;
       });
 
-      const loaded = isForYou ? rows.length : (nextPage - 1) * pageSize + rows.length;
-      setHasMore(!isForYou && loaded < totalCount);
+      const loaded = (nextPage - 1) * pageSize + rows.length;
+      setHasMore(loaded < totalCount);
     } finally {
       setLoading(false);
       setLoadingMore(false);
@@ -1505,7 +1610,6 @@ function PracticeHomeInner() {
 
     return scored
       .sort((a, b) => b.score - a.score || b.createdAt - a.createdAt || a.s.id.localeCompare(b.s.id))
-      .slice(0, FOR_YOU_RESULT_LIMIT)
       .map((x) => x.s);
   }, [sets, courseParam, courseCodes, levelParam, semesterParam, userPrefs, setAttemptMap]);
 
@@ -1891,8 +1995,8 @@ function PracticeHomeInner() {
             )}
           </div>
 
-          {/* Load more (only on All sets view) */}
-          {!loading && sets.length > 0 && viewParam === "all" ? (
+          {/* Load more */}
+          {!loading && sets.length > 0 && hasMore ? (
             <div className="flex justify-center">
               {hasMore ? (
                 <button
