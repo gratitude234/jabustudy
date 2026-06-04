@@ -535,7 +535,6 @@ export default function PracticeTakeClient() {
     } catch { /* non-critical */ }
   }
 
-  const total = stats.total;
   const isLast = questions.length > 0 && idx >= questions.length - 1;
   const learningMode = studyMode || isDueMode || isRetryMode;
   const isActiveAiDraft = meta?.draft_status === "draft" && !draftKept;
@@ -550,12 +549,16 @@ export default function PracticeTakeClient() {
     canFilterQuestionTypes &&
     questionTypeFilter === "objective" &&
     questionTypeCounts.writtenAnswered < questionTypeCounts.written;
-  const filteredProgressLabel =
+  const currentSectionLabel =
     questionTypeFilter === "objective"
-      ? `OBJ ${currentPosition}/${questions.length}`
+      ? "Objective"
       : questionTypeFilter === "written"
-        ? `Written ${currentPosition}/${questions.length}`
-        : `Q ${currentPosition}/${questions.length}`;
+        ? "Theory"
+        : "All";
+  const visibleQuestionsLeftLabel = visibleQuestionsLeft > 0 ? `${visibleQuestionsLeft} left` : "Last question";
+  const positionProgressPct = questions.length > 0
+    ? Math.max(0, Math.min(100, (currentPosition / questions.length) * 100))
+    : 0;
 
   const chosenId = current ? answers[current.id] : null;
   const currentQuestionType = current?.question_type === "short_answer" || current?.question_type === "theory"
@@ -606,11 +609,6 @@ export default function PracticeTakeClient() {
 
   const isRevealed = current ? (learningMode && !!revealed[current.id]) && !isWrittenCurrent : false;
 
-  const answeredPct = useMemo(() => {
-    const t = Math.max(0, total || 0);
-    const a = Math.max(0, stats.answered || 0);
-    return t ? Math.round((a / t) * 100) : 0;
-  }, [stats.answered, total]);
   const totalMs =
     typeof meta?.time_limit_minutes === "number" && Number.isFinite(meta.time_limit_minutes)
       ? meta.time_limit_minutes * 60_000
@@ -1132,11 +1130,11 @@ if (err || !meta) {
         </div>
 
         {canFilterQuestionTypes ? (
-          <div className="mt-2 flex items-center gap-1 overflow-x-auto rounded-2xl border border-border bg-background p-1">
+          <div className="mt-2 grid grid-cols-3 gap-1 rounded-2xl border border-[#5B35D5]/15 bg-background/80 p-1 shadow-sm shadow-[#5B35D5]/5">
             {([
               ["all", "All", questionTypeCounts.all],
-              ["objective", "Objective", questionTypeCounts.objective],
-              ["written", "Written", questionTypeCounts.written],
+              ["objective", "OBJ", questionTypeCounts.objective],
+              ["written", "Theory", questionTypeCounts.written],
             ] as const).map(([value, label, count]) => {
               const active = questionTypeFilter === value;
               return (
@@ -1145,18 +1143,18 @@ if (err || !meta) {
                   type="button"
                   onClick={() => changeQuestionTypeFilter(value)}
                   className={cn(
-                    "inline-flex h-9 shrink-0 items-center justify-center gap-1.5 rounded-xl px-3 text-xs font-extrabold transition",
+                    "inline-flex h-10 min-w-0 items-center justify-center gap-1.5 rounded-xl px-2 text-xs font-extrabold transition sm:px-3",
                     "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
                     active
-                      ? "bg-[#5B35D5] text-white shadow-sm"
+                      ? "bg-[#5B35D5] text-white shadow-md shadow-[#5B35D5]/20"
                       : "text-muted-foreground hover:bg-secondary/70 hover:text-foreground"
                   )}
                 >
-                  <span>{label}</span>
+                  <span className="truncate">{label}</span>
                   <span
                     className={cn(
                       "rounded-full px-1.5 py-0.5 text-[10px] tabular-nums",
-                      active ? "bg-white/18 text-white" : "bg-secondary text-muted-foreground"
+                      active ? "bg-white/20 text-white" : "bg-secondary text-muted-foreground"
                     )}
                   >
                     {count}
@@ -1168,8 +1166,8 @@ if (err || !meta) {
         ) : null}
 
         <div className="mt-2">
-          <div className="flex items-center justify-between gap-2">
-            <div className="flex min-w-0 items-center gap-1.5">
+          <div className="flex flex-col gap-1.5 sm:flex-row sm:items-center sm:justify-between sm:gap-3">
+            <div className="flex min-w-0 items-center gap-1.5 sm:flex-1">
               {isDueMode && (
                 <span className="shrink-0 inline-flex items-center gap-1 rounded-full border border-[#5B35D5]/25 bg-[#EEEDFE] px-2 py-0.5 text-[10px] font-extrabold text-[#3B24A8] dark:border-[#5B35D5]/30 dark:bg-[#5B35D5]/10 dark:text-indigo-300">
                   Due
@@ -1177,13 +1175,12 @@ if (err || !meta) {
               )}
               <p className="truncate text-xs font-extrabold text-foreground">{normalize(meta.title)}</p>
             </div>
-            <span className="shrink-0 text-[11px] font-semibold text-muted-foreground tabular-nums">
-              {filteredProgressLabel}
-              {visibleQuestionsLeft > 0 ? ` · ${visibleQuestionsLeft} left` : " · Last question"}
+            <span className="inline-flex w-fit shrink-0 items-center rounded-full border border-border bg-background/80 px-2.5 py-1 text-[11px] font-extrabold text-muted-foreground tabular-nums">
+              {currentSectionLabel} · {visibleQuestionsLeftLabel}
             </span>
           </div>
           <div className="mt-1.5 h-1.5 w-full overflow-hidden rounded-full bg-secondary" aria-hidden="true">
-            <div className="h-full rounded-full bg-[#5B35D5]" style={{ width: `${answeredPct}%` }} />
+            <div className="h-full rounded-full bg-[#5B35D5] transition-all" style={{ width: `${positionProgressPct}%` }} />
           </div>
         </div>
       </div>
