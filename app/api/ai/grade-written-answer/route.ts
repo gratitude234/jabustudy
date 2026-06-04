@@ -4,12 +4,7 @@ import { generateJson, userMessage } from "@/lib/ai";
 import { adminSupabase } from "@/lib/supabase/admin";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import type { WrittenAnswerGrade, WrittenAnswerGradeVerdict } from "@/lib/types";
-import {
-  aiLimitFromEnv,
-  checkAiUsageLimit,
-  recordBlockedAiUsage,
-  withAiUsageContext,
-} from "@/lib/aiUsage";
+import { withAiUsageContext } from "@/lib/aiUsage";
 
 export const maxDuration = 60;
 
@@ -281,17 +276,6 @@ export async function POST(req: NextRequest) {
     route: "/api/ai/grade-written-answer",
     metadata: { attemptId, questionId, answerChars: answer.length },
   };
-  const limit = await checkAiUsageLimit({
-    userId: user.id,
-    endpoint: usageContext.endpoint,
-    limit: aiLimitFromEnv("AI_LIMIT_GRADE_WRITTEN_PER_DAY", 30),
-    windowMs: 24 * 60 * 60 * 1000,
-  });
-  if (!limit.allowed) {
-    await recordBlockedAiUsage(usageContext, "Daily written-answer grading limit reached.");
-    return jsonError(`AI limit reached (${limit.used}/${limit.limit}). Try again later.`, 429, "AI_RATE_LIMITED");
-  }
-
   const result = await withAiUsageContext(usageContext, () => generateJson<RawGrade>({
     messages: [userMessage(buildPrompt({
       questionType,
