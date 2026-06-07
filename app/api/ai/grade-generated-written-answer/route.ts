@@ -101,7 +101,11 @@ function buildPrompt(args: {
 
   return `You are grading a Nigerian university student's written practice answer.
 
-Use ONLY the question, model answer, and marking points below. Be fair to equivalent wording, but do not award credit for claims not supported by the model answer or marking points.
+Grade the student's answer against the QUESTION first. Use the model answer and marking points as the expected mark scheme, but do not treat them as an exclusive whitelist unless the question or marking points clearly require those exact named items.
+
+Be fair to correct equivalent wording and correct alternative examples. For broad prompts such as "list", "state", "describe", "explain", or "give examples", award credit for any factually correct items that satisfy the question, even if they are not in the model answer. Example: if a question asks for 5 organelles and functions, any 5 valid organelles with correct functions should score highly.
+
+Do not award credit for incorrect, vague, irrelevant, or unsupported claims. If the student gives more items than requested, grade the best relevant correct points and only penalize extra wrong claims when they create a material misconception.
 
 Question type: ${args.questionType}
 
@@ -120,7 +124,7 @@ ${args.studentAnswer}
 The app already shows the full model answer below your feedback. Keep your feedback small and useful:
 - feedback: one short sentence, max 25 words.
 - matchedPoints: max 2 short phrases.
-- missingPoints: max 3 short phrases, only the most important gaps.
+- missingPoints: max 3 short phrases, only the most important real gaps. Do not list optional model-answer examples that the student validly replaced with other correct examples.
 - Do not restate the full model answer.
 
 Return ONLY valid JSON with this exact shape:

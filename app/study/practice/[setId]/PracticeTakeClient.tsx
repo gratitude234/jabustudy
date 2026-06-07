@@ -832,10 +832,11 @@ export default function PracticeTakeClient() {
     setWrittenGradeStates((prev) => ({ ...prev, [questionId]: { status: "loading" } }));
 
     try {
+      const forceRefresh = writtenGradeStates[questionId]?.status === "done";
       const res = await fetch("/api/ai/grade-written-answer", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ attemptId, questionId, answer }),
+        body: JSON.stringify({ attemptId, questionId, answer, forceRefresh }),
       });
       const data = await res.json().catch(() => null) as
         | { ok?: boolean; grade?: WrittenAnswerGrade; cached?: boolean; pendingPoints?: number; message?: string; error?: string }
