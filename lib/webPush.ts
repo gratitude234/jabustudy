@@ -105,6 +105,7 @@ export type NotificationCategory =
   | 'milestones'
   | 'reminders'
   | 'rep_alerts'
+  | 'announcements'
 
 /**
  * Like sendUserPush but silently skips if the user has disabled this category.

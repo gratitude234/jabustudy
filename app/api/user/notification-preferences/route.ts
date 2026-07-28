@@ -9,7 +9,8 @@ type NotificationCategory =
   | "quizzes"
   | "milestones"
   | "reminders"
-  | "rep_alerts";
+  | "rep_alerts"
+  | "announcements";
 
 type NotificationPreferences = Partial<Record<NotificationCategory, boolean>>;
 
@@ -21,6 +22,7 @@ const KNOWN_CATEGORIES = new Set<string>([
   "milestones",
   "reminders",
   "rep_alerts",
+  "announcements",
 ]);
 
 function validatePrefs(raw: unknown): NotificationPreferences {

@@ -219,7 +219,7 @@ function ExternalToolRow({
 }
 
 type PushState = "loading" | "unsupported" | "denied" | "enabled" | "disabled";
-type NotificationCategory = "answers" | "upvotes" | "materials" | "quizzes" | "milestones" | "reminders" | "rep_alerts";
+type NotificationCategory = "answers" | "upvotes" | "materials" | "quizzes" | "milestones" | "reminders" | "rep_alerts" | "announcements";
 type NotificationPreferences = Partial<Record<NotificationCategory, boolean>>;
 
 const PUSH_CATEGORIES: { key: NotificationCategory; label: string; desc: string; repOnly: boolean }[] = [
@@ -230,6 +230,7 @@ const PUSH_CATEGORIES: { key: NotificationCategory; label: string; desc: string;
   { key: "milestones", label: "Milestones", desc: "Study streaks and perfect scores",         repOnly: false },
   { key: "reminders",  label: "Reminders",  desc: "Daily spaced-repetition alerts",           repOnly: false },
   { key: "rep_alerts", label: "Rep alerts", desc: "New questions and pending materials",      repOnly: true  },
+  { key: "announcements", label: "Announcements", desc: "Occasional updates from the JabuStudy team", repOnly: false },
 ];
 
 function PushToggleRow({ isRep }: { isRep: boolean }) {

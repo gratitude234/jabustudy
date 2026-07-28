@@ -6,7 +6,7 @@ import { usePathname } from "next/navigation";
 import {
   ShieldCheck, FileText, Inbox, LayoutDashboard, UserCheck2,
   Upload, History, BookOpen, ListChecks, ArrowLeft, FileInput as ImportIcon,
-  Banknote, Zap, Users,
+  Banknote, Zap, Users, Megaphone,
 } from "lucide-react";
 import type React from "react";
 
@@ -23,6 +23,7 @@ const NAV_ITEMS = [
   { href: "/study-admin/quiz-sets",           label: "Quiz Sets",  icon: Zap },
   { href: "/study-admin/question-quality",   label: "Quality",    icon: ListChecks },
   { href: "/study-admin/import",             label: "Import",     icon: ImportIcon },
+  { href: "/study-admin/announcements",      label: "Announce",   icon: Megaphone },
 ];
 
 // ─── Desktop sidebar nav item ─────────────────────────────────────────────────
