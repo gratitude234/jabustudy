@@ -680,7 +680,7 @@ function StudyMeInner() {
             tone="green"
           />
           <ToolRow
-            href="/study/billing"
+            href="/study/billing?returnTo=%2Fstudy%2Fme"
             title="JabuStudy Plus & Credits"
             desc="Manage plan, daily limits and AI credits"
             icon={<Banknote className="h-4 w-4" />}

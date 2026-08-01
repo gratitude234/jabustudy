@@ -29,7 +29,7 @@ export default function MobileTopBar() {
   const { theme, setTheme, resolvedTheme } = useTheme();
 
   const isPracticeSession = /^\/study\/practice\/[^/]+/.test(pathname);
-  const showSearch = pathname.startsWith("/study") && !isPracticeSession;
+  const showSearch = pathname.startsWith("/study") && !isPracticeSession && !pathname.startsWith("/study/billing");
 
   const initialQ = useMemo(() => sp.get("q") ?? "", [sp]);
   const [q, setQ] = useState(initialQ);

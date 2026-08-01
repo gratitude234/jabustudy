@@ -53,6 +53,12 @@ CRON_SECRET=                 # Bearer token for /api/cron/* routes
 NEXT_PUBLIC_SITE_URL=        # or VERCEL_URL — used to self-call internal API routes
 NEXT_PUBLIC_WHATSAPP_GROUP_URL= # WhatsApp group invite link shown in Study Hub
 NEXT_PUBLIC_WHATSAPP_COMMUNITY_URL= # Legacy alias for the same Study Hub WhatsApp group link
+PAYSTACK_SECRET_KEY=         # Paystack secret used for initialization, verification, and webhook HMAC
+NEXT_PUBLIC_PAYSTACK_ENABLED=false # Server-derived feature switch for Paystack checkout
+PAYSTACK_REQUEST_TIMEOUT_MS=10000  # Initialization and verification timeout
+JABUSTUDY_BANK_NAME=         # Legacy manual-transfer orders only
+JABUSTUDY_BANK_ACCOUNT_NUMBER=
+JABUSTUDY_BANK_ACCOUNT_NAME=
 ```
 
 ## Architecture Overview

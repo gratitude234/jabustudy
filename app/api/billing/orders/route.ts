@@ -2,7 +2,7 @@ export const runtime = "nodejs";
 
 import { NextRequest, NextResponse } from "next/server";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
-import { createBillingOrder, getBankDetails, isPaystackEnabled } from "@/lib/studyBilling";
+import { createBillingOrder, getBankDetails, getBillingHistory, isPaystackEnabled } from "@/lib/studyBilling";
 
 function errorResponse(error: unknown) {
   const e = error as { message?: string; status?: number; code?: string };
@@ -10,6 +10,20 @@ function errorResponse(error: unknown) {
     { ok: false, code: e.code || "SERVER_ERROR", message: e.message || "Server error" },
     { status: Number(e.status) || 500 }
   );
+}
+
+export async function GET(req: NextRequest) {
+  try {
+    const supabase = await createSupabaseServerClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return NextResponse.json({ ok: false, code: "NO_SESSION", message: "Sign in first." }, { status: 401 });
+    const cursor = req.nextUrl.searchParams.get("cursor");
+    const limit = Number(req.nextUrl.searchParams.get("limit") || 20);
+    const history = await getBillingHistory(user.id, { cursor, limit });
+    return NextResponse.json({ ok: true, ...history });
+  } catch (error) {
+    return errorResponse(error);
+  }
 }
 
 export async function POST(req: NextRequest) {

@@ -2,6 +2,7 @@
 "use client";
 
 import Link from "next/link";
+import BillingLink from "../../_components/BillingLink";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import {
@@ -1010,19 +1011,18 @@ if (err || !meta) {
               </div>
             </div>
             <div className="border-t border-amber-200/60 bg-amber-100/50 px-5 py-4 dark:border-amber-800/40 dark:bg-amber-950/40">
-              <Link
-                href="/study/billing"
+              <BillingLink
                 className="flex w-full items-center justify-center gap-2 rounded-2xl bg-primary px-4 py-3 text-sm font-extrabold text-white no-underline transition hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
               >
                 <Star className="h-4 w-4" /> Upgrade to Plus — unlimited practice
-              </Link>
+              </BillingLink>
             </div>
           </div>
 
           <div className="rounded-2xl border border-border bg-card px-4 py-3">
             <p className="text-sm font-extrabold text-foreground">Today&apos;s free allowance</p>
             <p className="mt-0.5 text-xs text-muted-foreground">
-              {practiceAccess!.used} used · 0 remaining · {practiceAccess!.limit} total
+              0 of {practiceAccess!.limit} questions left today
             </p>
             <div className="mt-2 h-2 w-full overflow-hidden rounded-full bg-secondary">
               <div className="h-full w-full rounded-full bg-amber-500" />
@@ -1820,14 +1820,13 @@ if (err || !meta) {
               <div className="flex items-center justify-between gap-2">
                 <p className="text-sm font-semibold text-[#3B24A8] dark:text-indigo-300">
                   Showing {baseQuestions.length} of {originalQuestionCount} questions
-                  — {baseQuestions.length} free question{baseQuestions.length !== 1 ? "s" : ""} remaining today.
+                  — {baseQuestions.length} of {practiceAccess?.limit ?? originalQuestionCount} questions left today.
                 </p>
-                <Link
-                  href="/study/billing"
+                <BillingLink
                   className="shrink-0 text-xs font-extrabold text-[#5B35D5] hover:underline dark:text-indigo-300 no-underline"
                 >
                   Upgrade
-                </Link>
+                </BillingLink>
               </div>
             </div>
           )}

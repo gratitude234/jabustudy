@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import BillingLink from "../../../_components/BillingLink";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import {
@@ -920,9 +921,9 @@ export default function PracticeMaterialClient({
           />
         </div>
       </div>
-      <Link href="/study/billing" className="shrink-0 rounded-xl border border-primary bg-primary-light px-3 py-1.5 text-xs font-bold text-primary no-underline">
+      <BillingLink className="shrink-0 rounded-xl border border-primary bg-primary-light px-3 py-1.5 text-xs font-bold text-primary no-underline">
         + Get more
-      </Link>
+      </BillingLink>
     </div>
   );
 

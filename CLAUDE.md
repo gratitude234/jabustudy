@@ -34,6 +34,7 @@ CRON_SECRET=                 # Bearer token for /api/cron/* routes
 NEXT_PUBLIC_SITE_URL=        # or VERCEL_URL — used to self-call internal API routes
 PAYSTACK_SECRET_KEY=         # sk_test_/sk_live_ — also verifies the webhook HMAC
 NEXT_PUBLIC_PAYSTACK_ENABLED= # "true" makes Paystack the only checkout; anything else falls back to manual bank transfer
+PAYSTACK_REQUEST_TIMEOUT_MS=10000 # initialization and verification timeout
 JABUSTUDY_BANK_NAME=         # manual-transfer fallback only (used when Paystack is disabled)
 JABUSTUDY_BANK_ACCOUNT_NUMBER=
 JABUSTUDY_BANK_ACCOUNT_NAME=

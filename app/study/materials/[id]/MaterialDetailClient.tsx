@@ -3,6 +3,7 @@
 // app/study/materials/[id]/MaterialDetailClient.tsx
 
 import Link from "next/link";
+import BillingLink from "../../_components/BillingLink";
 import { useEffect, useRef, useState } from "react";
 import {
   ArrowLeft,
@@ -2294,7 +2295,7 @@ export default function MaterialDetailClient({
                                   <p className="text-sm font-bold text-rose-700">Not enough credits</p>
                                   <p className="mt-0.5 text-xs text-rose-600">
                                     You need {cost} credit{cost !== 1 ? "s" : ""} but only have {balance}.{" "}
-                                    <Link href="/study/billing" className="font-bold underline">Top up →</Link>
+                                    <BillingLink className="font-bold underline">Top up →</BillingLink>
                                   </p>
                                 </>
                               ) : isFree ? (
@@ -2427,9 +2428,9 @@ export default function MaterialDetailClient({
                     </button>
                     {generationTrust?.credits && !generationTrust.credits.canAfford ? (
                       <p className="mt-2 text-center text-xs text-muted-foreground">
-                        <Link href="/study/billing" className="font-bold text-primary hover:underline">
+                        <BillingLink className="font-bold text-primary hover:underline">
                           Get more credits
-                        </Link>{" "}
+                        </BillingLink>{" "}
                         to generate questions.
                       </p>
                     ) : null}

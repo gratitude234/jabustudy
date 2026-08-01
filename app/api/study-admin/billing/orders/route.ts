@@ -40,7 +40,8 @@ export async function GET(req: Request) {
       .order("created_at", { ascending: false })
       .limit(limit);
 
-    if (status !== "all") query = query.eq("status", status);
+    if (status === "refund_review") query = query.eq("refund_status", "pending_review");
+    else if (status !== "all") query = query.eq("status", status);
 
     const { data, error } = await query;
     if (error) throw error;

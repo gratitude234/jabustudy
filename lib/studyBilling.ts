@@ -2,6 +2,9 @@ import "server-only";
 
 import { randomBytes } from "node:crypto";
 import { adminSupabase } from "@/lib/supabase/admin";
+import { sanitizeBillingReturnPath } from "@/lib/billingReturnPath";
+import { canReusePaystackCheckout } from "@/lib/billingWorkflow";
+import { verifyPaystackTransaction } from "@/lib/paystack";
 
 export const FREE_DAILY_PRACTICE_LIMIT = 40;
 
@@ -22,11 +25,17 @@ export type BillingPlanKey =
   | "credits_100";
 
 export type BillingOrderStatus =
+  | "initializing"
   | "pending_payment"
   | "pending_review"
   | "approved"
+  | "failed"
+  | "abandoned"
+  | "expired"
   | "rejected"
   | "cancelled";
+
+export type BillingRefundStatus = "none" | "pending_review" | "resolved";
 
 export type BillingPlan = {
   key: BillingPlanKey;
@@ -102,7 +111,20 @@ export type BillingOrderRow = {
   updated_at: string;
   payment_method: "manual" | "paystack";
   paystack_reference: string | null;
+  provider_status: string | null;
+  paystack_authorization_url: string | null;
+  initialized_at: string | null;
+  last_verified_at: string | null;
+  paid_at: string | null;
+  failure_detail: string | null;
+  return_path: string | null;
+  refund_status: BillingRefundStatus;
+  refunded_at: string | null;
+  refund_amount_naira: number | null;
+  refund_note: string | null;
 };
+
+export const ACTIVE_PAYSTACK_STATUSES: BillingOrderStatus[] = ["initializing", "pending_payment"];
 
 function httpError(message: string, status: number, code: string) {
   return Object.assign(new Error(message), { status, code });
@@ -421,127 +443,82 @@ export async function submitBillingOrder(args: {
   return normalizeOrder(data as BillingOrderRow);
 }
 
-async function grantCredits(args: {
-  userId: string;
-  amount: number;
-  reason: "purchase" | "plus_grant" | "admin_adjustment";
-  orderId?: string | null;
-  metadata?: Record<string, unknown>;
-}) {
-  const { data, error } = await adminSupabase.rpc("grant_study_user_credits", {
-    p_user_id: args.userId,
-    p_amount: args.amount,
-    p_reason: args.reason,
-    p_order_id: args.orderId ?? null,
-    p_metadata: args.metadata ?? {},
-  });
-
-  if (error) throw httpError(error.message, 500, "CREDIT_GRANT_FAILED");
-  const row = Array.isArray(data) ? data[0] : data;
-  if (!row?.ok) throw httpError("Credit grant failed.", 500, row?.code || "CREDIT_GRANT_FAILED");
-  return Number(row.balance ?? 0);
-}
-
 export async function approveBillingOrder(orderId: string, reviewerId: string, note?: unknown) {
-  const { data: order, error } = await adminSupabase
+  const { data: rpcData, error } = await adminSupabase.rpc("fulfil_manual_billing_order", {
+    p_order_id: orderId,
+    p_reviewer_id: reviewerId,
+    p_note: cleanText(note, 500) || null,
+  });
+  if (error) throw httpError(error.message, 500, "ORDER_APPROVE_FAILED");
+  const result = Array.isArray(rpcData) ? rpcData[0] : rpcData;
+  if (!result?.ok) {
+    const code = String(result?.code || "ORDER_APPROVE_FAILED");
+    throw httpError(
+      code === "ORDER_NOT_FOUND" ? "Order not found." : "Only submitted manual-transfer orders can be approved.",
+      code === "ORDER_NOT_FOUND" ? 404 : 409,
+      code
+    );
+  }
+  const { data: order, error: orderError } = await adminSupabase
     .from("study_billing_orders")
     .select("*")
     .eq("id", orderId)
     .maybeSingle();
-
-  if (error) throw httpError(error.message, 500, "DB_ERROR");
-  if (!order?.id) throw httpError("Order not found.", 404, "ORDER_NOT_FOUND");
-
-  const row = order as BillingOrderRow;
-  if (row.status === "approved") return normalizeOrder(row);
-  if (row.status !== "pending_review") {
-    throw httpError("Only submitted orders can be approved.", 409, "ORDER_NOT_REVIEWABLE");
-  }
-
-  const plan = getBillingPlan(row.plan_key);
-  const now = new Date();
-
-  if (plan.productType === "plus" && plan.plusDays) {
-    const current = await getPlusRow(row.user_id);
-    const baseMs = current?.active_until && new Date(current.active_until).getTime() > now.getTime()
-      ? new Date(current.active_until).getTime()
-      : now.getTime();
-    const activeUntil = new Date(baseMs + plan.plusDays * 86_400_000).toISOString();
-
-    const { error: entitlementError } = await adminSupabase
-      .from("study_plus_entitlements")
-      .upsert({
-        user_id: row.user_id,
-        plan_key: plan.key,
-        active_until: activeUntil,
-        last_order_id: row.id,
-        updated_at: now.toISOString(),
-      } as never, { onConflict: "user_id" });
-    if (entitlementError) throw httpError(entitlementError.message, 500, "PLUS_ACTIVATION_FAILED");
-
-    if (plan.credits > 0) {
-      await grantCredits({
-        userId: row.user_id,
-        amount: plan.credits,
-        reason: "plus_grant",
-        orderId: row.id,
-        metadata: { planKey: plan.key, activeUntil },
-      });
-    }
-  } else if (plan.productType === "credits") {
-    await grantCredits({
-      userId: row.user_id,
-      amount: plan.credits,
-      reason: "purchase",
-      orderId: row.id,
-      metadata: { planKey: plan.key },
-    });
-  }
-
-  const reviewedAt = new Date().toISOString();
-  const { data: updated, error: updateError } = await adminSupabase
-    .from("study_billing_orders")
-    .update({
-      status: "approved",
-      reviewed_by: reviewerId,
-      reviewed_at: reviewedAt,
-      admin_note: cleanText(note, 500) || null,
-      updated_at: reviewedAt,
-    } as never)
-    .eq("id", row.id)
-    .select("*")
-    .single();
-
-  if (updateError || !updated) throw httpError(updateError?.message || "Order approval failed.", 500, "ORDER_APPROVE_FAILED");
-  void notifyBillingUser(row.user_id, {
-    title: "Payment approved",
-    body: `${plan.label} is now active on your account.`,
-  });
-  return normalizeOrder(updated as BillingOrderRow);
+  if (orderError || !order?.id) throw httpError(orderError?.message || "Order not found.", 500, "DB_ERROR");
+  return normalizeOrder(order as BillingOrderRow);
 }
 
 export async function cancelBillingOrder(orderId: string, userId: string) {
-  // A Paystack order sits in pending_payment while the student is on the checkout
-  // page — but also for the gap between them paying and the confirmation landing.
-  // Cancelling in that gap would take their money and give them nothing, so check
-  // with Paystack first and approve instead of cancelling if it was actually paid.
   const { data: existing } = await adminSupabase
     .from("study_billing_orders")
-    .select("reference,payment_method,status")
+    .select("*")
     .eq("id", orderId)
     .eq("user_id", userId)
     .maybeSingle();
 
-  const pending = existing as Pick<BillingOrderRow, "reference" | "payment_method" | "status"> | null;
-  if (pending?.payment_method === "paystack" && pending.status === "pending_payment") {
-    const verified = await verifyPaystackOrder(pending.reference, userId);
-    if (verified?.status === "approved") {
-      throw httpError(
-        "This payment already went through, so it can't be cancelled. Your plan is active.",
-        409,
-        "ORDER_ALREADY_PAID"
-      );
+  const pending = existing as BillingOrderRow | null;
+  if (!pending?.id) throw httpError("Order not found.", 404, "ORDER_NOT_FOUND");
+
+  if (pending.payment_method === "paystack") {
+    if (pending.status === "approved") {
+      throw httpError("This payment is already confirmed and your access is active.", 409, "ORDER_ALREADY_PAID");
     }
+
+    try {
+      const verified = await verifyPaystackOrder(pending.reference, userId);
+      if (verified?.status === "approved") {
+        throw httpError("This payment already went through and your access is active.", 409, "ORDER_ALREADY_PAID");
+      }
+    } catch (error) {
+      const code = (error as { code?: string }).code;
+      if (code === "ORDER_ALREADY_PAID") throw error;
+      // Abandonment is deliberately recoverable. A later verified success can
+      // still fulfil this order, so a temporary Paystack outage cannot lose money.
+    }
+
+    const { data, error } = await adminSupabase
+      .from("study_billing_orders")
+      .update({
+        status: "abandoned",
+        provider_status: "abandoned_locally",
+        failure_detail: "Checkout was closed so the student could start again.",
+        updated_at: new Date().toISOString(),
+      } as never)
+      .eq("id", orderId)
+      .eq("user_id", userId)
+      .in("status", ["initializing", "pending_payment", "failed", "expired"])
+      .select("*")
+      .maybeSingle();
+
+    if (error) throw httpError(error.message, 500, "ORDER_ABANDON_FAILED");
+    if (!data?.id) {
+      const refreshed = await getOrderByReference(pending.reference, userId);
+      if (refreshed?.status === "approved") {
+        throw httpError("This payment already went through and your access is active.", 409, "ORDER_ALREADY_PAID");
+      }
+      throw httpError("Order could not be restarted.", 409, "ORDER_NOT_ABANDONABLE");
+    }
+    return normalizeOrder(data as BillingOrderRow);
   }
 
   const { data, error } = await adminSupabase
@@ -598,7 +575,7 @@ async function notifyBillingUser(userId: string, message: { title: string; body:
 }
 
 export async function getBillingSnapshot(userId: string) {
-  const [plus, freeTrial, practice, creditBalance, ordersResult] = await Promise.all([
+  const [plus, freeTrial, practice, creditBalance, ordersResult, activePaystackResult] = await Promise.all([
     getPlusAccess(userId),
     getFreeAiTrialUsage(userId),
     getPracticeAccess(userId),
@@ -609,7 +586,24 @@ export async function getBillingSnapshot(userId: string) {
       .eq("user_id", userId)
       .order("created_at", { ascending: false })
       .limit(10),
+    adminSupabase
+      .from("study_billing_orders")
+      .select("*")
+      .eq("user_id", userId)
+      .eq("payment_method", "paystack")
+      .in("status", ACTIVE_PAYSTACK_STATUSES)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle(),
   ]);
+  if (ordersResult.error) throw httpError(ordersResult.error.message, 500, "DB_ERROR");
+  if (activePaystackResult.error) throw httpError(activePaystackResult.error.message, 500, "DB_ERROR");
+
+  const recentRows = (ordersResult.data ?? []) as BillingOrderRow[];
+  const activePaystack = activePaystackResult.data as BillingOrderRow | null;
+  const visibleRows = activePaystack?.id && !recentRows.some((row) => row.id === activePaystack.id)
+    ? [...recentRows, activePaystack].sort((a, b) => b.created_at.localeCompare(a.created_at))
+    : recentRows;
 
   return {
     plus,
@@ -618,8 +612,10 @@ export async function getBillingSnapshot(userId: string) {
     freeAi: freeTrial,
     practice,
     bank: getBankDetails(),
+    paystackEnabled: isPaystackEnabled(),
     plans: Object.values(BILLING_PLANS),
-    orders: ((ordersResult.data ?? []) as BillingOrderRow[]).map(normalizeOrder),
+    orders: visibleRows.map(normalizeOrder),
+    historyNextCursor: recentRows.length >= 10 ? recentRows.at(-1)?.created_at ?? null : null,
   };
 }
 
@@ -648,146 +644,250 @@ export function normalizeOrder(row: BillingOrderRow) {
     expiresAt: new Date(new Date(row.created_at).getTime() + 48 * 3_600_000).toISOString(),
     paymentMethod: (row.payment_method ?? "manual") as "manual" | "paystack",
     paystackReference: row.paystack_reference ?? null,
+    providerStatus: row.provider_status ?? null,
+    initializedAt: row.initialized_at ?? null,
+    lastVerifiedAt: row.last_verified_at ?? null,
+    paidAt: row.paid_at ?? null,
+    failureDetail: row.failure_detail ?? null,
+    returnPath: sanitizeBillingReturnPath(row.return_path),
+    refundStatus: (row.refund_status ?? "none") as BillingRefundStatus,
+    refundedAt: row.refunded_at ?? null,
+    refundAmountNaira: row.refund_amount_naira ?? null,
+    refundNote: row.refund_note ?? null,
+    canResume: row.payment_method === "paystack"
+      && row.status === "pending_payment"
+      && Boolean(row.paystack_authorization_url),
   };
 }
 
-export async function createPaystackBillingOrder(userId: string, planKey: unknown) {
-  const plan = getBillingPlan(planKey);
-  const reference = await uniqueReference();
-  const now = new Date().toISOString();
-
-  const { data, error } = await adminSupabase
+export async function getBillingHistory(
+  userId: string,
+  options?: { cursor?: string | null; limit?: number }
+) {
+  const requestedLimit = Number(options?.limit ?? 20);
+  const limit = Number.isFinite(requestedLimit)
+    ? Math.min(50, Math.max(5, Math.trunc(requestedLimit)))
+    : 20;
+  let query = adminSupabase
     .from("study_billing_orders")
-    .insert({
-      user_id: userId,
-      product_type: plan.productType,
-      plan_key: plan.key,
-      amount_naira: plan.amountNaira,
-      credits: plan.credits,
-      plus_days: plan.plusDays,
-      reference,
-      status: "pending_payment",
-      payment_method: "paystack",
-      updated_at: now,
-    } as never)
     .select("*")
-    .single();
+    .eq("user_id", userId)
+    .order("created_at", { ascending: false })
+    .limit(limit + 1);
 
-  if (error || !data) throw httpError(error?.message || "Could not create order.", 500, "ORDER_CREATE_FAILED");
-  return normalizeOrder(data as BillingOrderRow);
+  if (options?.cursor) {
+    const cursorDate = new Date(options.cursor);
+    if (Number.isNaN(cursorDate.getTime())) throw httpError("Invalid history cursor.", 400, "INVALID_CURSOR");
+    query = query.lt("created_at", cursorDate.toISOString());
+  }
+
+  const { data, error } = await query;
+  if (error) throw httpError(error.message, 500, "DB_ERROR");
+  const rows = (data ?? []) as BillingOrderRow[];
+  const hasMore = rows.length > limit;
+  const page = rows.slice(0, limit);
+  return {
+    items: page.map(normalizeOrder),
+    nextCursor: hasMore ? page.at(-1)?.created_at ?? null : null,
+  };
 }
 
-export async function approvePaystackBillingOrder(orderId: string, paystackTxnId: string) {
-  const { data: order, error } = await adminSupabase
+export async function getBillingOrderDetails(userId: string, orderId: string) {
+  const { data, error } = await adminSupabase
     .from("study_billing_orders")
     .select("*")
     .eq("id", orderId)
+    .eq("user_id", userId)
+    .maybeSingle();
+  if (error) throw httpError(error.message, 500, "DB_ERROR");
+  return data?.id ? normalizeOrder(data as BillingOrderRow) : null;
+}
+
+async function getActivePaystackOrder(userId: string) {
+  const { data, error } = await adminSupabase
+    .from("study_billing_orders")
+    .select("*")
+    .eq("user_id", userId)
+    .eq("payment_method", "paystack")
+    .in("status", ACTIVE_PAYSTACK_STATUSES)
+    .order("created_at", { ascending: false })
+    .limit(1)
     .maybeSingle();
 
   if (error) throw httpError(error.message, 500, "DB_ERROR");
-  if (!order?.id) throw httpError("Order not found.", 404, "ORDER_NOT_FOUND");
+  return data as BillingOrderRow | null;
+}
 
-  const row = order as BillingOrderRow;
-  if (row.status === "approved") return normalizeOrder(row);
-  if (row.payment_method !== "paystack") throw httpError("Not a Paystack order.", 409, "WRONG_PAYMENT_METHOD");
-  if (row.status !== "pending_payment") throw httpError("Order cannot be approved.", 409, "ORDER_NOT_APPROVABLE");
+export async function createPaystackBillingOrder(userId: string, planKey: unknown, returnPath?: unknown) {
+  const plan = getBillingPlan(planKey);
+  const safeReturnPath = sanitizeBillingReturnPath(returnPath);
+  const now = Date.now();
+  const existing = await getActivePaystackOrder(userId);
 
-  const plan = getBillingPlan(row.plan_key);
-  const now = new Date();
-  const reviewedAt = now.toISOString();
+  if (existing) {
+    const ageMs = now - new Date(existing.created_at).getTime();
+    if (canReusePaystackCheckout({
+      paymentMethod: existing.payment_method,
+      status: existing.status,
+      planKey: existing.plan_key,
+      createdAt: existing.created_at,
+      authorizationUrl: existing.paystack_authorization_url,
+    }, plan.key, now)) {
+      return { order: normalizeOrder(existing), reused: true, authorizationUrl: existing.paystack_authorization_url };
+    }
 
-  // Claim the order before granting anything. The webhook and the callback verify
-  // can land on the same reference at the same time, and granting twice would hand
-  // out the plan twice. Only one of them can flip pending_payment -> approved.
-  const { data: claimed, error: claimError } = await adminSupabase
+    if (existing.plan_key === plan.key && existing.status === "initializing" && ageMs < 120_000) {
+      throw httpError("Your secure checkout is still opening. Try again in a moment.", 409, "PAYMENT_INITIALIZING");
+    }
+
+    await adminSupabase
+      .from("study_billing_orders")
+      .update({
+        status: ageMs >= 48 * 3_600_000 ? "expired" : "abandoned",
+        provider_status: ageMs >= 48 * 3_600_000 ? "expired_locally" : "superseded_locally",
+        failure_detail: "Superseded by a new checkout.",
+        updated_at: new Date(now).toISOString(),
+      } as never)
+      .eq("id", existing.id)
+      .in("status", ACTIVE_PAYSTACK_STATUSES);
+  }
+
+  const reference = await uniqueReference();
+  const nowIso = new Date().toISOString();
+  const insert = {
+    user_id: userId,
+    product_type: plan.productType,
+    plan_key: plan.key,
+    amount_naira: plan.amountNaira,
+    credits: plan.credits,
+    plus_days: plan.plusDays,
+    reference,
+    status: "initializing",
+    payment_method: "paystack",
+    provider_status: "initializing",
+    return_path: safeReturnPath,
+    updated_at: nowIso,
+  };
+
+  const { data, error } = await adminSupabase
+    .from("study_billing_orders")
+    .insert(insert as never)
+    .select("*")
+    .single();
+
+  if (error || !data) {
+    if ((error as { code?: string } | null)?.code === "23505") {
+      const concurrent = await getActivePaystackOrder(userId);
+      if (concurrent?.plan_key === plan.key && concurrent.paystack_authorization_url) {
+        return {
+          order: normalizeOrder(concurrent),
+          reused: true,
+          authorizationUrl: concurrent.paystack_authorization_url,
+        };
+      }
+      throw httpError("Another checkout is already opening. Try again in a moment.", 409, "ACTIVE_CHECKOUT_EXISTS");
+    }
+    throw httpError(error?.message || "Could not create order.", 500, "ORDER_CREATE_FAILED");
+  }
+
+  return { order: normalizeOrder(data as BillingOrderRow), reused: false, authorizationUrl: null as string | null };
+}
+
+export async function completePaystackInitialization(args: {
+  orderId: string;
+  userId: string;
+  authorizationUrl: string;
+}) {
+  const now = new Date().toISOString();
+  const { data, error } = await adminSupabase
     .from("study_billing_orders")
     .update({
-      status: "approved",
-      reviewed_by: null,
-      reviewed_at: reviewedAt,
-      admin_note: "paystack-auto",
-      paystack_reference: paystackTxnId,
-      updated_at: reviewedAt,
+      status: "pending_payment",
+      provider_status: "pending",
+      paystack_authorization_url: args.authorizationUrl,
+      initialized_at: now,
+      failure_detail: null,
+      updated_at: now,
     } as never)
-    .eq("id", row.id)
-    .eq("status", "pending_payment")
+    .eq("id", args.orderId)
+    .eq("user_id", args.userId)
+    .eq("status", "initializing")
     .select("*")
     .maybeSingle();
 
-  if (claimError) throw httpError(claimError.message, 500, "ORDER_APPROVE_FAILED");
-  if (!claimed) {
-    const { data: current } = await adminSupabase
-      .from("study_billing_orders")
-      .select("*")
-      .eq("id", row.id)
-      .maybeSingle();
-    if (!current) throw httpError("Order not found.", 404, "ORDER_NOT_FOUND");
-    return normalizeOrder(current as BillingOrderRow);
-  }
-
-  try {
-    if (plan.productType === "plus" && plan.plusDays) {
-      const current = await getPlusRow(row.user_id);
-      const baseMs = current?.active_until && new Date(current.active_until).getTime() > now.getTime()
-        ? new Date(current.active_until).getTime()
-        : now.getTime();
-      const activeUntil = new Date(baseMs + plan.plusDays * 86_400_000).toISOString();
-
-      const { error: entitlementError } = await adminSupabase
-        .from("study_plus_entitlements")
-        .upsert({
-          user_id: row.user_id,
-          plan_key: plan.key,
-          active_until: activeUntil,
-          last_order_id: row.id,
-          updated_at: now.toISOString(),
-        } as never, { onConflict: "user_id" });
-      if (entitlementError) throw httpError(entitlementError.message, 500, "PLUS_ACTIVATION_FAILED");
-
-      if (plan.credits > 0) {
-        await grantCredits({
-          userId: row.user_id,
-          amount: plan.credits,
-          reason: "plus_grant",
-          orderId: row.id,
-          metadata: { planKey: plan.key, activeUntil },
-        });
-      }
-    } else if (plan.productType === "credits") {
-      await grantCredits({
-        userId: row.user_id,
-        amount: plan.credits,
-        reason: "purchase",
-        orderId: row.id,
-        metadata: { planKey: plan.key },
-      });
-    }
-  } catch (err) {
-    // Release the claim so the next webhook retry can grant. The student has paid —
-    // leaving this approved-but-ungranted would silently swallow their money.
-    await adminSupabase
-      .from("study_billing_orders")
-      .update({ status: "pending_payment", reviewed_at: null, updated_at: new Date().toISOString() } as never)
-      .eq("id", row.id);
-    throw err;
-  }
-
-  void notifyBillingUser(row.user_id, {
-    title: "Payment confirmed",
-    body: `${plan.label} is now active on your account.`,
-  });
-  return normalizeOrder(claimed as BillingOrderRow);
+  if (error) throw httpError(error.message, 500, "ORDER_INIT_UPDATE_FAILED");
+  if (!data?.id) throw httpError("Checkout is no longer active.", 409, "CHECKOUT_NOT_ACTIVE");
+  return normalizeOrder(data as BillingOrderRow);
 }
 
-/**
- * Confirms a Paystack order straight from the transaction API. The webhook is the
- * primary path, but it cannot reach localhost and can be delayed or dropped in
- * production — this runs when the student lands back on the billing page so a
- * successful payment always activates.
- */
+export async function failPaystackInitialization(orderId: string, detail: string, providerStatus = "initialization_failed") {
+  const now = new Date().toISOString();
+  await adminSupabase
+    .from("study_billing_orders")
+    .update({
+      status: "failed",
+      provider_status: providerStatus,
+      failure_detail: cleanText(detail, 500) || "Paystack checkout could not be opened.",
+      last_verified_at: now,
+      updated_at: now,
+    } as never)
+    .eq("id", orderId)
+    .eq("status", "initializing");
+}
+
+export async function resumePaystackBillingOrder(orderId: string, userId: string) {
+  const { data, error } = await adminSupabase
+    .from("study_billing_orders")
+    .select("*")
+    .eq("id", orderId)
+    .eq("user_id", userId)
+    .maybeSingle();
+
+  if (error) throw httpError(error.message, 500, "DB_ERROR");
+  if (!data?.id) throw httpError("Order not found.", 404, "ORDER_NOT_FOUND");
+  const row = data as BillingOrderRow;
+  if (row.status === "approved") throw httpError("This payment is already confirmed.", 409, "ORDER_ALREADY_PAID");
+  if (row.payment_method !== "paystack" || row.status !== "pending_payment" || !row.paystack_authorization_url) {
+    throw httpError("This checkout can no longer be resumed. Start a new one.", 409, "CHECKOUT_NOT_RESUMABLE");
+  }
+  return { authorizationUrl: row.paystack_authorization_url, order: normalizeOrder(row) };
+}
+
+export async function approvePaystackBillingOrder(args: {
+  reference: string;
+  transactionId: string;
+  amountKobo: number;
+  currency: string;
+  paidAt?: string | null;
+}) {
+  const { data: rpcData, error } = await adminSupabase.rpc("fulfil_paystack_billing_order", {
+    p_reference: args.reference,
+    p_transaction_id: args.transactionId,
+    p_amount_kobo: args.amountKobo,
+    p_currency: args.currency,
+    p_paid_at: args.paidAt ?? null,
+  });
+
+  if (error) throw httpError(error.message, 500, "PAYSTACK_FULFILMENT_FAILED");
+  const result = Array.isArray(rpcData) ? rpcData[0] : rpcData;
+  if (!result?.ok) {
+    const code = String(result?.code || "PAYSTACK_FULFILMENT_FAILED");
+    const status = code === "ORDER_NOT_FOUND" ? 404 : code.includes("MISMATCH") ? 400 : 409;
+    throw httpError(`Payment could not be fulfilled (${code}).`, status, code);
+  }
+
+  const { data: order, error: orderError } = await adminSupabase
+    .from("study_billing_orders")
+    .select("*")
+    .eq("reference", args.reference)
+    .maybeSingle();
+  if (orderError || !order?.id) throw httpError(orderError?.message || "Order not found.", 500, "DB_ERROR");
+
+  return normalizeOrder(order as BillingOrderRow);
+}
+
 export async function verifyPaystackOrder(reference: string, userId: string) {
   const secretKey = process.env.PAYSTACK_SECRET_KEY;
-
   const { data, error } = await adminSupabase
     .from("study_billing_orders")
     .select("*")
@@ -797,34 +897,137 @@ export async function verifyPaystackOrder(reference: string, userId: string) {
 
   if (error) throw httpError(error.message, 500, "DB_ERROR");
   if (!data?.id) return null;
-
   const row = data as BillingOrderRow;
-  if (!secretKey || row.payment_method !== "paystack" || row.status !== "pending_payment") {
-    return normalizeOrder(row);
+  if (row.payment_method !== "paystack" || row.status === "approved") return normalizeOrder(row);
+  if (!secretKey) throw httpError("Payment gateway not configured.", 503, "PAYSTACK_NOT_CONFIGURED");
+
+  const transaction = await verifyPaystackTransaction(secretKey, reference);
+  const verifiedAt = new Date().toISOString();
+
+  if (transaction.status === "success") {
+    if (transaction.amountKobo === null || !transaction.currency) {
+      throw httpError("Paystack returned incomplete payment details.", 502, "PAYSTACK_VERIFY_INCOMPLETE");
+    }
+    return approvePaystackBillingOrder({
+      reference,
+      transactionId: transaction.id,
+      amountKobo: transaction.amountKobo,
+      currency: transaction.currency,
+      paidAt: transaction.paidAt,
+    });
   }
 
-  const res = await fetch(`https://api.paystack.co/transaction/verify/${encodeURIComponent(reference)}`, {
-    headers: { Authorization: `Bearer ${secretKey}` },
-    cache: "no-store",
+  const ageMs = Date.now() - new Date(row.created_at).getTime();
+  const terminalStatus = transaction.status === "failed"
+    ? "failed"
+    : transaction.status === "abandoned"
+      ? "abandoned"
+      : ageMs >= 48 * 3_600_000
+        ? "expired"
+        : null;
+
+  const update: Record<string, unknown> = {
+    provider_status: transaction.rawStatus,
+    last_verified_at: verifiedAt,
+    failure_detail: terminalStatus === "failed"
+      ? "Paystack reported that this payment failed."
+      : terminalStatus === "abandoned"
+        ? "The Paystack checkout was not completed."
+        : terminalStatus === "expired"
+          ? "This checkout is more than 48 hours old."
+          : null,
+    updated_at: verifiedAt,
+  };
+  if (terminalStatus) update.status = terminalStatus;
+
+  const { data: updated, error: updateError } = await adminSupabase
+    .from("study_billing_orders")
+    .update(update as never)
+    .eq("id", row.id)
+    .neq("status", "approved")
+    .select("*")
+    .maybeSingle();
+  if (updateError) throw httpError(updateError.message, 500, "ORDER_VERIFY_UPDATE_FAILED");
+
+  return normalizeOrder((updated ?? row) as BillingOrderRow);
+}
+
+export async function verifyPaystackOrderForAdmin(orderId: string) {
+  const { data, error } = await adminSupabase
+    .from("study_billing_orders")
+    .select("reference,user_id")
+    .eq("id", orderId)
+    .maybeSingle();
+  if (error) throw httpError(error.message, 500, "DB_ERROR");
+  if (!data?.reference || !data.user_id) throw httpError("Order not found.", 404, "ORDER_NOT_FOUND");
+  return verifyPaystackOrder(String(data.reference), String(data.user_id));
+}
+
+export async function flagPaystackRefund(args: {
+  reference?: string | null;
+  transactionId?: string | null;
+  amountKobo: number;
+  currency: string;
+  refundedAt?: string | null;
+  note?: string | null;
+}) {
+  const { data, error } = await adminSupabase.rpc("flag_paystack_refund", {
+    p_reference: args.reference ?? null,
+    p_transaction_id: args.transactionId ?? null,
+    p_amount_kobo: args.amountKobo,
+    p_currency: args.currency,
+    p_refunded_at: args.refundedAt ?? null,
+    p_note: cleanText(args.note, 500) || null,
   });
-  const payload = await res.json().catch(() => null) as {
-    status?: boolean;
-    data?: { status?: string; amount?: number; id?: number | string };
-  } | null;
-
-  if (!res.ok || !payload?.status || payload.data?.status !== "success") return normalizeOrder(row);
-
-  if (payload.data.amount !== row.amount_naira * 100) {
-    console.error(`[paystack-verify] amount mismatch for ${reference}: expected ${row.amount_naira * 100}, got ${payload.data.amount}`);
-    return normalizeOrder(row);
+  if (error) throw httpError(error.message, 500, "REFUND_FLAG_FAILED");
+  const result = Array.isArray(data) ? data[0] : data;
+  if (!result?.ok) {
+    const code = String(result?.code || "REFUND_FLAG_FAILED");
+    throw httpError(`Refund could not be recorded (${code}).`, code === "ORDER_NOT_FOUND" ? 404 : 409, code);
   }
+  return result;
+}
 
-  try {
-    return await approvePaystackBillingOrder(row.id, String(payload.data.id ?? reference));
-  } catch (err) {
-    console.error("[paystack-verify] approval failed:", err);
-    return normalizeOrder(row);
-  }
+export async function recordPaystackFailure(reference: string, providerStatus: string, detail?: string | null) {
+  const now = new Date().toISOString();
+  const { data, error } = await adminSupabase
+    .from("study_billing_orders")
+    .update({
+      status: "failed",
+      provider_status: cleanText(providerStatus, 80) || "failed",
+      failure_detail: cleanText(detail, 500) || "Paystack reported that this payment failed.",
+      last_verified_at: now,
+      updated_at: now,
+    } as never)
+    .eq("reference", reference)
+    .eq("payment_method", "paystack")
+    .neq("status", "approved")
+    .select("*")
+    .maybeSingle();
+  if (error) throw httpError(error.message, 500, "PAYSTACK_FAILURE_UPDATE_FAILED");
+  return data?.id ? normalizeOrder(data as BillingOrderRow) : null;
+}
+
+export async function resolveBillingRefund(orderId: string, reviewerId: string, note: unknown) {
+  const resolutionNote = cleanText(note, 500);
+  if (!resolutionNote) throw httpError("Add a reconciliation note before resolving this refund.", 400, "REFUND_NOTE_REQUIRED");
+  const now = new Date().toISOString();
+  const { data, error } = await adminSupabase
+    .from("study_billing_orders")
+    .update({
+      refund_status: "resolved",
+      refund_note: resolutionNote,
+      reviewed_by: reviewerId,
+      reviewed_at: now,
+      updated_at: now,
+    } as never)
+    .eq("id", orderId)
+    .eq("refund_status", "pending_review")
+    .select("*")
+    .maybeSingle();
+  if (error) throw httpError(error.message, 500, "REFUND_RESOLVE_FAILED");
+  if (!data?.id) throw httpError("Refund review was not found or is already resolved.", 409, "REFUND_NOT_REVIEWABLE");
+  return normalizeOrder(data as BillingOrderRow);
 }
 
 export async function getOrderByReference(reference: string, userId: string) {

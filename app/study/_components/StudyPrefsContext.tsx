@@ -143,7 +143,8 @@ export function StudyPrefsProvider({ children }: { children: React.ReactNode }) 
 
       if (!mounted) return;
       if (!user) {
-        router.replace("/login");
+        const next = `${window.location.pathname}${window.location.search}${window.location.hash}`;
+        router.replace(`/login?next=${encodeURIComponent(next)}`);
         return;
       }
 

@@ -17,9 +17,26 @@ export async function GET(req: NextRequest) {
   try {
     const order = await verifyPaystackOrder(ref, user.id);
     if (!order) return jsonError("Order not found.", 404, "ORDER_NOT_FOUND");
-    return NextResponse.json({ ok: true, order });
+    const terminal = ["approved", "failed", "abandoned", "expired", "rejected", "cancelled"].includes(order.status);
+    const retryable = ["failed", "abandoned", "expired", "rejected"].includes(order.status);
+    return NextResponse.json({
+      ok: true,
+      order,
+      providerStatus: order.providerStatus,
+      terminal,
+      retryable,
+      returnPath: order.returnPath,
+    });
   } catch (err: unknown) {
-    const e = err as { status?: number; code?: string; message?: string };
-    return jsonError(e.message || "Could not fetch order.", e.status || 500, e.code || "DB_ERROR");
+    const e = err as { status?: number; code?: string; message?: string; retryable?: boolean };
+    return NextResponse.json(
+      {
+        ok: false,
+        code: e.code || "DB_ERROR",
+        message: e.message || "Could not fetch order.",
+        retryable: e.retryable ?? true,
+      },
+      { status: e.status || 500 }
+    );
   }
 }

@@ -26,6 +26,10 @@ const STUDY_NAV_ITEMS: StudyNavItem[] = [
 ];
 
 function isActive(pathname: string, item: StudyNavItem) {
+  if (item.href === "/study/me" && pathname.startsWith("/study/billing")) {
+    return true;
+  }
+
   if (item.href === "/study/library" && /^\/study\/materials\/[^/]+$/.test(pathname)) {
     return true;
   }

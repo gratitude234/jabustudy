@@ -3,6 +3,7 @@ import { cn, normalizeQuery, buildHref, pctToColor } from "@/lib/utils";
 import { getPracticeStreak } from "@/lib/studyPractice";
 
 import Link from "next/link";
+import BillingLink from "../_components/BillingLink";
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { supabase } from "@/lib/supabase";
@@ -1751,23 +1752,22 @@ function PracticeHomeInner() {
                 <AlertTriangle className="h-4 w-4 shrink-0 text-amber-600 dark:text-amber-400" />
                 <p className="text-sm font-extrabold text-amber-900 dark:text-amber-200">Daily limit reached</p>
               </div>
-              <Link
-                href="/study/billing"
+              <BillingLink
                 className="rounded-xl bg-primary px-3 py-1.5 text-xs font-extrabold text-white no-underline hover:opacity-90"
               >
                 Upgrade to Plus
-              </Link>
+              </BillingLink>
             </div>
           </div>
         ) : billingStatus.practice.limit !== null ? (
           <div className="rounded-2xl border border-border bg-card px-4 py-3">
             <div className="flex items-center justify-between gap-2">
               <p className="text-xs font-semibold text-muted-foreground">
-                {billingStatus.practice.used} of {billingStatus.practice.limit} free questions used today
+                {billingStatus.practice.remaining ?? 0} of {billingStatus.practice.limit} questions left today
               </p>
-              <Link href="/study/billing" className="text-xs font-extrabold text-[#5B35D5] hover:underline dark:text-indigo-300">
+              <BillingLink className="text-xs font-extrabold text-[#5B35D5] hover:underline dark:text-indigo-300">
                 Upgrade
-              </Link>
+              </BillingLink>
             </div>
             <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-secondary">
               <div

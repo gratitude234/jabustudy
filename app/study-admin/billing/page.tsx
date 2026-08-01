@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import { Banknote, Check, ExternalLink, Loader2, RefreshCw, Search, X } from "lucide-react";
+import { Banknote, Check, ExternalLink, Loader2, RefreshCw, RotateCcw, Search, ShieldCheck, X } from "lucide-react";
 import { useRouter } from "next/navigation";
 
 import { supabase } from "@/lib/supabase";
@@ -17,7 +17,7 @@ type AdminBillingOrder = {
   credits: number;
   plusDays: number | null;
   reference: string;
-  status: "pending_payment" | "pending_review" | "approved" | "rejected" | "cancelled";
+  status: "initializing" | "pending_payment" | "pending_review" | "approved" | "failed" | "abandoned" | "expired" | "rejected" | "cancelled";
   receiptUrl: string | null;
   senderName: string | null;
   senderBank: string | null;
@@ -25,6 +25,16 @@ type AdminBillingOrder = {
   adminNote: string | null;
   createdAt: string;
   submittedAt: string | null;
+  paymentMethod: "manual" | "paystack";
+  providerStatus: string | null;
+  lastVerifiedAt: string | null;
+  paidAt: string | null;
+  paystackReference: string | null;
+  failureDetail: string | null;
+  refundStatus: "none" | "pending_review" | "resolved";
+  refundedAt: string | null;
+  refundAmountNaira: number | null;
+  refundNote: string | null;
   user: {
     id: string;
     email: string | null;
@@ -50,9 +60,9 @@ function when(iso: string | null) {
 }
 
 function statusClass(status: AdminBillingOrder["status"]) {
-  if (status === "approved") return "border-emerald-200 bg-emerald-50 text-emerald-700";
-  if (status === "rejected") return "border-rose-200 bg-rose-50 text-rose-700";
-  if (status === "pending_review") return "border-amber-200 bg-amber-50 text-amber-700";
+  if (status === "approved") return "border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-800 dark:bg-emerald-950/30 dark:text-emerald-200";
+  if (status === "rejected" || status === "failed") return "border-rose-200 bg-rose-50 text-rose-700 dark:border-rose-800 dark:bg-rose-950/30 dark:text-rose-200";
+  if (status === "pending_review" || status === "pending_payment") return "border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-200";
   return "border-border bg-background text-muted-foreground";
 }
 
@@ -63,7 +73,7 @@ function OrderCard({
 }: {
   item: AdminBillingOrder;
   busyId: string | null;
-  onReview: (id: string, action: "approve" | "reject", note: string) => Promise<void>;
+  onReview: (id: string, action: "approve" | "reject" | "verify-paystack" | "resolve-refund", note: string) => Promise<void>;
 }) {
   const [note, setNote] = useState("");
 
@@ -78,6 +88,14 @@ function OrderCard({
             <span className="rounded-full border border-border bg-background px-2.5 py-1 text-xs font-bold">
               {item.reference}
             </span>
+            <span className="rounded-full border border-border bg-background px-2.5 py-1 text-xs font-bold capitalize">
+              {item.paymentMethod}
+            </span>
+            {item.refundStatus !== "none" ? (
+              <span className="rounded-full border border-amber-300 bg-amber-50 px-2.5 py-1 text-xs font-bold text-amber-800 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-200">
+                Refund {item.refundStatus.replace(/_/g, " ")}
+              </span>
+            ) : null}
           </div>
           <h2 className="mt-3 text-lg font-extrabold text-foreground">{item.planLabel}</h2>
           <p className="mt-1 text-sm text-muted-foreground">
@@ -90,7 +108,13 @@ function OrderCard({
             <p><span className="font-bold">Bank:</span> {item.senderBank || "Not provided"}</p>
             <p><span className="font-bold">Transfer ref:</span> {item.transactionReference || "Not provided"}</p>
             <p><span className="font-bold">Submitted:</span> {when(item.submittedAt)}</p>
+            <p><span className="font-bold">Provider status:</span> {item.providerStatus || "Not checked"}</p>
+            <p><span className="font-bold">Last verification:</span> {when(item.lastVerifiedAt)}</p>
+            <p><span className="font-bold">Paid:</span> {when(item.paidAt)}</p>
+            <p className="break-all"><span className="font-bold">Transaction ID:</span> {item.paystackReference || item.transactionReference || "Not recorded"}</p>
           </div>
+          {item.failureDetail ? <p className="mt-3 rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-xs font-semibold text-rose-800 dark:border-rose-900 dark:bg-rose-950/30 dark:text-rose-200">{item.failureDetail}</p> : null}
+          {item.refundStatus !== "none" ? <p className="mt-3 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-900 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-100">Refund reported {when(item.refundedAt)}{item.refundAmountNaira ? ` · ${money(item.refundAmountNaira)}` : ""}{item.refundNote ? ` · ${item.refundNote}` : ""}. Benefits are unchanged until reconciled manually.</p> : null}
           {item.adminNote ? (
             <p className="mt-3 rounded-xl bg-secondary px-3 py-2 text-xs font-semibold text-muted-foreground">{item.adminNote}</p>
           ) : null}
@@ -110,7 +134,7 @@ function OrderCard({
               No receipt
             </span>
           )}
-          {item.status === "pending_review" ? (
+          {item.status === "pending_review" && item.paymentMethod === "manual" ? (
             <>
               <textarea
                 value={note}
@@ -136,6 +160,36 @@ function OrderCard({
               >
                 <X className="h-4 w-4" />
                 Reject
+              </button>
+            </>
+          ) : null}
+          {item.paymentMethod === "paystack" ? (
+            <button
+              type="button"
+              onClick={() => onReview(item.id, "verify-paystack", "")}
+              disabled={busyId !== null}
+              className="inline-flex items-center justify-center gap-2 rounded-xl border border-primary/30 bg-primary/5 px-3 py-2 text-sm font-bold text-primary disabled:opacity-60"
+            >
+              {busyId === item.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <ShieldCheck className="h-4 w-4" />}
+              Verify with Paystack
+            </button>
+          ) : null}
+          {item.refundStatus === "pending_review" ? (
+            <>
+              <textarea
+                value={note}
+                onChange={(event) => setNote(event.target.value)}
+                placeholder="Required reconciliation note"
+                rows={3}
+                className="w-full rounded-xl border border-border bg-background px-3 py-2 text-xs outline-none focus:border-primary lg:w-56"
+              />
+              <button
+                type="button"
+                onClick={() => onReview(item.id, "resolve-refund", note)}
+                disabled={busyId !== null || !note.trim()}
+                className="inline-flex items-center justify-center gap-2 rounded-xl bg-amber-600 px-3 py-2 text-sm font-bold text-white disabled:opacity-60"
+              >
+                <RotateCcw className="h-4 w-4" /> Resolve review
               </button>
             </>
           ) : null}
@@ -203,7 +257,7 @@ export default function StudyAdminBillingPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [status]);
 
-  async function review(orderId: string, action: "approve" | "reject", note: string) {
+  async function review(orderId: string, action: "approve" | "reject" | "verify-paystack" | "resolve-refund", note: string) {
     setBusyId(orderId);
     setError(null);
     setMessage(null);
@@ -220,10 +274,18 @@ export default function StudyAdminBillingPage() {
       });
       const data = await res.json().catch(() => null) as { ok?: boolean; message?: string } | null;
       if (!res.ok || !data?.ok) throw new Error(data?.message || `Could not ${action} order.`);
-      setMessage(action === "approve" ? "Order approved and access granted." : "Order rejected.");
+      setMessage(
+        action === "approve"
+          ? "Order approved and access granted."
+          : action === "reject"
+            ? "Order rejected."
+            : action === "verify-paystack"
+              ? "Paystack verification completed."
+              : "Refund review resolved; benefits were left unchanged."
+      );
       await load();
     } catch (err) {
-      setError(err instanceof Error ? err.message : `Could not ${action} order.`);
+      setError(err instanceof Error ? err.message : `Could not ${action.replace(/-/g, " ")} order.`);
     } finally {
       setBusyId(null);
     }
@@ -248,7 +310,7 @@ export default function StudyAdminBillingPage() {
         <div>
           <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Study Admin</p>
           <h1 className="mt-1 text-2xl font-bold tracking-tight">Billing review</h1>
-          <p className="mt-1 text-sm text-muted-foreground">Confirm manual transfers and activate Plus or credit packs.</p>
+          <p className="mt-1 text-sm text-muted-foreground">Review manual transfers, verify Paystack orders, and reconcile refunds.</p>
         </div>
         <button
           type="button"
@@ -259,8 +321,8 @@ export default function StudyAdminBillingPage() {
         </button>
       </div>
 
-      {error ? <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm font-semibold text-rose-700">{error}</div> : null}
-      {message ? <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-semibold text-emerald-700">{message}</div> : null}
+      {error ? <div role="alert" className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm font-semibold text-rose-700 dark:border-rose-800 dark:bg-rose-950/30 dark:text-rose-200">{error}</div> : null}
+      {message ? <div role="status" aria-live="polite" className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-semibold text-emerald-700 dark:border-emerald-800 dark:bg-emerald-950/30 dark:text-emerald-200">{message}</div> : null}
 
       <div className="grid gap-3 md:grid-cols-[1fr_auto]">
         <div className="flex items-center gap-2 rounded-2xl border border-border bg-card px-3 py-2">
@@ -283,7 +345,12 @@ export default function StudyAdminBillingPage() {
           className="rounded-2xl border border-border bg-card px-3 py-2 text-sm font-semibold outline-none"
         >
           <option value="pending_review">Pending review</option>
+          <option value="refund_review">Refund review</option>
+          <option value="initializing">Initializing</option>
           <option value="pending_payment">Awaiting receipt</option>
+          <option value="failed">Failed</option>
+          <option value="abandoned">Abandoned</option>
+          <option value="expired">Expired</option>
           <option value="approved">Approved</option>
           <option value="rejected">Rejected</option>
           <option value="all">All orders</option>
