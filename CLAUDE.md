@@ -32,6 +32,11 @@ WHATSAPP_TOKEN=              # Meta Cloud API token (streak reminder cron)
 WHATSAPP_PHONE_NUMBER_ID=
 CRON_SECRET=                 # Bearer token for /api/cron/* routes
 NEXT_PUBLIC_SITE_URL=        # or VERCEL_URL — used to self-call internal API routes
+PAYSTACK_SECRET_KEY=         # sk_test_/sk_live_ — also verifies the webhook HMAC
+NEXT_PUBLIC_PAYSTACK_ENABLED= # "true" makes Paystack the only checkout; anything else falls back to manual bank transfer
+JABUSTUDY_BANK_NAME=         # manual-transfer fallback only (used when Paystack is disabled)
+JABUSTUDY_BANK_ACCOUNT_NUMBER=
+JABUSTUDY_BANK_ACCOUNT_NAME=
 ```
 
 ## Architecture Overview
@@ -115,6 +120,18 @@ The app is a full PWA. `public/sw.js` is the service worker (registered by `comp
 
 `app/api/cron/streak-reminder/route.ts` — streak reminder via WhatsApp (19:00 UTC daily).
 Both are configured in `vercel.json` and authenticated with `CRON_SECRET` Bearer token (support GET and POST).
+
+### Billing / Paystack
+
+`lib/studyBilling.ts` owns plans, entitlements, credits, and orders. Paystack is the live checkout; manual bank transfer is a disabled fallback kept for outages and for clearing legacy orders.
+
+- `isPaystackEnabled()` gates everything. When true, `POST /api/billing/orders` (manual order creation) returns 409 and the billing UI shows only Paystack buttons.
+- `POST /api/billing/orders/paystack/init` creates a `pending_payment` order and returns Paystack's `authorization_url`.
+- Approval has **two** paths, both landing in `approvePaystackBillingOrder()`, which atomically claims `pending_payment → approved` before granting so a race cannot double-grant:
+  1. `POST /api/billing/paystack/webhook` — primary. Verifies the `x-paystack-signature` HMAC-SHA512 against the raw body using `PAYSTACK_SECRET_KEY`, and checks the amount.
+  2. `GET /api/billing/orders/status?ref=` → `verifyPaystackOrder()` — polled by the billing page on callback. Calls Paystack's verify API directly, so payments still activate on localhost (where the webhook cannot reach) or if the webhook is dropped.
+- Webhook URL to register in the Paystack dashboard: `{NEXT_PUBLIC_SITE_URL}/api/billing/paystack/webhook`.
+- Amounts are naira in the DB (`amount_naira`) and **kobo** at the Paystack API boundary (`× 100`).
 
 ### API Response Convention
 

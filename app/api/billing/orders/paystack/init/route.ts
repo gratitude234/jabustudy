@@ -31,7 +31,13 @@ export async function POST(req: NextRequest) {
     return jsonError(e.message || "Could not create order.", e.status || 500, e.code || "ORDER_CREATE_FAILED");
   }
 
-  const callbackUrl = `${siteUrl}/study/billing?ref=${order.reference}`;
+  // NEXT_PUBLIC_SITE_URL points at production even in dev, which would bounce a
+  // local tester to the live site after paying. Send them back where they started.
+  const requestOrigin = req.nextUrl.origin;
+  const isLocalOrigin = /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(requestOrigin);
+  const baseUrl = isLocalOrigin ? requestOrigin : siteUrl;
+
+  const callbackUrl = `${baseUrl}/study/billing?ref=${order.reference}`;
   const paystackRes = await fetch("https://api.paystack.co/transaction/initialize", {
     method: "POST",
     headers: {

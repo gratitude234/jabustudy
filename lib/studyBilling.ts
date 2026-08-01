@@ -115,6 +115,10 @@ export function getBillingPlan(planKey: unknown): BillingPlan {
   return plan;
 }
 
+export function isPaystackEnabled() {
+  return Boolean(process.env.PAYSTACK_SECRET_KEY) && process.env.NEXT_PUBLIC_PAYSTACK_ENABLED === "true";
+}
+
 export function getBankDetails() {
   return {
     bankName: process.env.JABUSTUDY_BANK_NAME || process.env.JABU_BANK_NAME || "",
@@ -517,6 +521,29 @@ export async function approveBillingOrder(orderId: string, reviewerId: string, n
 }
 
 export async function cancelBillingOrder(orderId: string, userId: string) {
+  // A Paystack order sits in pending_payment while the student is on the checkout
+  // page — but also for the gap between them paying and the confirmation landing.
+  // Cancelling in that gap would take their money and give them nothing, so check
+  // with Paystack first and approve instead of cancelling if it was actually paid.
+  const { data: existing } = await adminSupabase
+    .from("study_billing_orders")
+    .select("reference,payment_method,status")
+    .eq("id", orderId)
+    .eq("user_id", userId)
+    .maybeSingle();
+
+  const pending = existing as Pick<BillingOrderRow, "reference" | "payment_method" | "status"> | null;
+  if (pending?.payment_method === "paystack" && pending.status === "pending_payment") {
+    const verified = await verifyPaystackOrder(pending.reference, userId);
+    if (verified?.status === "approved") {
+      throw httpError(
+        "This payment already went through, so it can't be cancelled. Your plan is active.",
+        409,
+        "ORDER_ALREADY_PAID"
+      );
+    }
+  }
+
   const { data, error } = await adminSupabase
     .from("study_billing_orders")
     .update({ status: "cancelled", updated_at: new Date().toISOString() } as never)
@@ -667,46 +694,12 @@ export async function approvePaystackBillingOrder(orderId: string, paystackTxnId
 
   const plan = getBillingPlan(row.plan_key);
   const now = new Date();
-
-  if (plan.productType === "plus" && plan.plusDays) {
-    const current = await getPlusRow(row.user_id);
-    const baseMs = current?.active_until && new Date(current.active_until).getTime() > now.getTime()
-      ? new Date(current.active_until).getTime()
-      : now.getTime();
-    const activeUntil = new Date(baseMs + plan.plusDays * 86_400_000).toISOString();
-
-    const { error: entitlementError } = await adminSupabase
-      .from("study_plus_entitlements")
-      .upsert({
-        user_id: row.user_id,
-        plan_key: plan.key,
-        active_until: activeUntil,
-        last_order_id: row.id,
-        updated_at: now.toISOString(),
-      } as never, { onConflict: "user_id" });
-    if (entitlementError) throw httpError(entitlementError.message, 500, "PLUS_ACTIVATION_FAILED");
-
-    if (plan.credits > 0) {
-      await grantCredits({
-        userId: row.user_id,
-        amount: plan.credits,
-        reason: "plus_grant",
-        orderId: row.id,
-        metadata: { planKey: plan.key, activeUntil },
-      });
-    }
-  } else if (plan.productType === "credits") {
-    await grantCredits({
-      userId: row.user_id,
-      amount: plan.credits,
-      reason: "purchase",
-      orderId: row.id,
-      metadata: { planKey: plan.key },
-    });
-  }
-
   const reviewedAt = now.toISOString();
-  const { data: updated, error: updateError } = await adminSupabase
+
+  // Claim the order before granting anything. The webhook and the callback verify
+  // can land on the same reference at the same time, and granting twice would hand
+  // out the plan twice. Only one of them can flip pending_payment -> approved.
+  const { data: claimed, error: claimError } = await adminSupabase
     .from("study_billing_orders")
     .update({
       status: "approved",
@@ -717,15 +710,121 @@ export async function approvePaystackBillingOrder(orderId: string, paystackTxnId
       updated_at: reviewedAt,
     } as never)
     .eq("id", row.id)
+    .eq("status", "pending_payment")
     .select("*")
-    .single();
+    .maybeSingle();
 
-  if (updateError || !updated) throw httpError(updateError?.message || "Order approval failed.", 500, "ORDER_APPROVE_FAILED");
+  if (claimError) throw httpError(claimError.message, 500, "ORDER_APPROVE_FAILED");
+  if (!claimed) {
+    const { data: current } = await adminSupabase
+      .from("study_billing_orders")
+      .select("*")
+      .eq("id", row.id)
+      .maybeSingle();
+    if (!current) throw httpError("Order not found.", 404, "ORDER_NOT_FOUND");
+    return normalizeOrder(current as BillingOrderRow);
+  }
+
+  try {
+    if (plan.productType === "plus" && plan.plusDays) {
+      const current = await getPlusRow(row.user_id);
+      const baseMs = current?.active_until && new Date(current.active_until).getTime() > now.getTime()
+        ? new Date(current.active_until).getTime()
+        : now.getTime();
+      const activeUntil = new Date(baseMs + plan.plusDays * 86_400_000).toISOString();
+
+      const { error: entitlementError } = await adminSupabase
+        .from("study_plus_entitlements")
+        .upsert({
+          user_id: row.user_id,
+          plan_key: plan.key,
+          active_until: activeUntil,
+          last_order_id: row.id,
+          updated_at: now.toISOString(),
+        } as never, { onConflict: "user_id" });
+      if (entitlementError) throw httpError(entitlementError.message, 500, "PLUS_ACTIVATION_FAILED");
+
+      if (plan.credits > 0) {
+        await grantCredits({
+          userId: row.user_id,
+          amount: plan.credits,
+          reason: "plus_grant",
+          orderId: row.id,
+          metadata: { planKey: plan.key, activeUntil },
+        });
+      }
+    } else if (plan.productType === "credits") {
+      await grantCredits({
+        userId: row.user_id,
+        amount: plan.credits,
+        reason: "purchase",
+        orderId: row.id,
+        metadata: { planKey: plan.key },
+      });
+    }
+  } catch (err) {
+    // Release the claim so the next webhook retry can grant. The student has paid —
+    // leaving this approved-but-ungranted would silently swallow their money.
+    await adminSupabase
+      .from("study_billing_orders")
+      .update({ status: "pending_payment", reviewed_at: null, updated_at: new Date().toISOString() } as never)
+      .eq("id", row.id);
+    throw err;
+  }
+
   void notifyBillingUser(row.user_id, {
     title: "Payment confirmed",
     body: `${plan.label} is now active on your account.`,
   });
-  return normalizeOrder(updated as BillingOrderRow);
+  return normalizeOrder(claimed as BillingOrderRow);
+}
+
+/**
+ * Confirms a Paystack order straight from the transaction API. The webhook is the
+ * primary path, but it cannot reach localhost and can be delayed or dropped in
+ * production — this runs when the student lands back on the billing page so a
+ * successful payment always activates.
+ */
+export async function verifyPaystackOrder(reference: string, userId: string) {
+  const secretKey = process.env.PAYSTACK_SECRET_KEY;
+
+  const { data, error } = await adminSupabase
+    .from("study_billing_orders")
+    .select("*")
+    .eq("reference", reference)
+    .eq("user_id", userId)
+    .maybeSingle();
+
+  if (error) throw httpError(error.message, 500, "DB_ERROR");
+  if (!data?.id) return null;
+
+  const row = data as BillingOrderRow;
+  if (!secretKey || row.payment_method !== "paystack" || row.status !== "pending_payment") {
+    return normalizeOrder(row);
+  }
+
+  const res = await fetch(`https://api.paystack.co/transaction/verify/${encodeURIComponent(reference)}`, {
+    headers: { Authorization: `Bearer ${secretKey}` },
+    cache: "no-store",
+  });
+  const payload = await res.json().catch(() => null) as {
+    status?: boolean;
+    data?: { status?: string; amount?: number; id?: number | string };
+  } | null;
+
+  if (!res.ok || !payload?.status || payload.data?.status !== "success") return normalizeOrder(row);
+
+  if (payload.data.amount !== row.amount_naira * 100) {
+    console.error(`[paystack-verify] amount mismatch for ${reference}: expected ${row.amount_naira * 100}, got ${payload.data.amount}`);
+    return normalizeOrder(row);
+  }
+
+  try {
+    return await approvePaystackBillingOrder(row.id, String(payload.data.id ?? reference));
+  } catch (err) {
+    console.error("[paystack-verify] approval failed:", err);
+    return normalizeOrder(row);
+  }
 }
 
 export async function getOrderByReference(reference: string, userId: string) {
