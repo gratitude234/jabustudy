@@ -112,7 +112,7 @@ export default function ExamSprintAdminPage() {
   return (
     <div className="space-y-6">
       <header className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-        <div><p className="text-xs font-black uppercase tracking-[0.16em] text-primary">Supplementary 2026</p><h1 className="mt-1 text-2xl font-extrabold">Exam Sprint control room</h1><p className="mt-1 text-sm text-muted-foreground">Build, verify and publish secure paid CBT banks.</p></div>
+        <div><p className="text-xs font-black uppercase tracking-[0.16em] text-primary">Supplementary 2026</p><h1 className="mt-1 text-2xl font-extrabold">Exam Sprint control room</h1><p className="mt-1 text-sm text-muted-foreground">Build, verify, open and close secure paid CBT banks manually.</p></div>
         <button onClick={() => { setLoading(true); setError(null); void load(); }} disabled={loading} className="inline-flex items-center justify-center gap-2 rounded-xl border border-border bg-card px-3 py-2 text-sm font-bold"><RefreshCw className={cn("h-4 w-4", loading && "animate-spin")} /> Refresh</button>
       </header>
 

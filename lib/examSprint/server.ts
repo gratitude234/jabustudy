@@ -5,7 +5,6 @@ import { adminSupabase } from "@/lib/supabase/admin";
 import {
   EXAM_CAMPAIGN_KEY,
   EXAM_COURSES,
-  examCourseIsClosed,
   findExamCourse,
   normalizeExamCourseCode,
   type ExamCourse,
@@ -263,7 +262,6 @@ export async function getExamCatalog(userId?: string | null) {
       );
       return {
         ...course,
-        closed: examCourseIsClosed(course),
         sets: courseSets,
         progress: (() => {
           const value = progress.get(normalizeExamCourseCode(course.code));

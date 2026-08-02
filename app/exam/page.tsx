@@ -3,7 +3,6 @@ import { ArrowRight, CalendarClock, CheckCircle2, Clock3, LockKeyhole, Sparkles,
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { EXAM_SPRINT_PRICE_NAIRA, examCourseDateLabel } from "@/lib/examSprint/config";
 import { getExamCatalog } from "@/lib/examSprint/server";
-import ExamCountdown from "./_components/ExamCountdown";
 
 export const dynamic = "force-dynamic";
 
@@ -15,8 +14,7 @@ export default async function ExamSprintPage() {
   const supabase = await createSupabaseServerClient();
   const { data: { user } } = await supabase.auth.getUser();
   const catalog = await getExamCatalog(user?.id);
-  const available = catalog.courses.filter((course) => course.sets.length > 0 && !course.closed).length;
-  const nextCourse = catalog.courses.find((course) => !course.closed);
+  const available = catalog.courses.filter((course) => course.sets.length > 0).length;
 
   return (
     <div className="space-y-8 pb-12">
@@ -43,7 +41,6 @@ export default async function ExamSprintPage() {
               </span>
             )}
           </div>
-          {nextCourse ? <ExamCountdown examAt={nextCourse.examAt} courseCode={nextCourse.code} /> : null}
         </div>
         <div className="mt-8 grid gap-3 sm:grid-cols-3">
           <div className="rounded-2xl border border-white/10 bg-white/5 p-4"><p className="text-2xl font-black">{available}</p><p className="mt-1 text-xs font-semibold text-zinc-400">course{available === 1 ? "" : "s"} ready now</p></div>
@@ -72,7 +69,7 @@ export default async function ExamSprintPage() {
             <p className="text-xs font-black uppercase tracking-[0.16em] text-primary">2026 supplementary timetable</p>
             <h2 className="mt-1 text-2xl font-black tracking-tight">Choose your course</h2>
           </div>
-          <p className="text-sm text-muted-foreground">New attempts close at the official exam time.</p>
+          <p className="text-sm text-muted-foreground">Courses stay available while their question banks are published.</p>
         </div>
 
         <div className="mt-5 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
@@ -91,9 +88,7 @@ export default async function ExamSprintPage() {
                 </p>
                 {progress ? <p className="mt-3 text-xs font-bold text-emerald-700">Best readiness: {progress.bestPercentage}% · {progress.attempts} attempt{progress.attempts === 1 ? "" : "s"}</p> : null}
                 <div className="mt-auto pt-5">
-                  {course.closed ? (
-                    <span className="inline-flex w-full items-center justify-center rounded-2xl border border-border bg-secondary px-4 py-3 text-sm font-bold text-muted-foreground">Course closed</span>
-                  ) : ready ? (
+                  {ready ? (
                     <Link href={`/exam/${course.slug}`} className="inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-primary px-4 py-3 text-sm font-extrabold text-primary-foreground no-underline hover:brightness-105">
                       Open course <ArrowRight className="h-4 w-4" />
                     </Link>

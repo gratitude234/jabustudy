@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { adminSupabase } from "@/lib/supabase/admin";
-import { EXAM_CAMPAIGN_KEY, examCourseIsClosed } from "@/lib/examSprint/config";
+import { EXAM_CAMPAIGN_KEY } from "@/lib/examSprint/config";
 import {
   attemptExpired,
   buildExamSnapshot,
@@ -53,9 +53,6 @@ export async function POST(req: NextRequest) {
     if (!setId || !kind) throw examHttpError("setId and a valid attempt kind are required.", 400, "INVALID_REQUEST");
 
     const { row: setRow, set, course } = await getPublishedExamSet(setId);
-    if (examCourseIsClosed(course)) {
-      throw examHttpError("Practice for this course closed when the official exam began.", 409, "EXAM_CLOSED");
-    }
 
     const experience = examExperience(kind);
     if (kind === "diagnostic") {
@@ -120,10 +117,7 @@ export async function POST(req: NextRequest) {
       questionCount,
     });
     const startedAt = new Date();
-    const deadlineAt = new Date(Math.min(
-      startedAt.getTime() + durationMinutes * 60_000,
-      new Date(course.examAt).getTime(),
-    ));
+    const deadlineAt = new Date(startedAt.getTime() + durationMinutes * 60_000);
     const { data: created, error: createError } = await adminSupabase
       .from("study_practice_attempts")
       .insert({

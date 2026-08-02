@@ -41,10 +41,6 @@ export function findExamCourse(value: unknown) {
   ) ?? null;
 }
 
-export function examCourseIsClosed(course: ExamCourse, now = Date.now()) {
-  return now >= new Date(course.examAt).getTime();
-}
-
 export function examCourseDateLabel(course: ExamCourse) {
   return new Intl.DateTimeFormat("en-NG", {
     weekday: "long",

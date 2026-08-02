@@ -2,7 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ArrowLeft, CalendarClock, CheckCircle2, Clock3, FileQuestion, LockKeyhole, RotateCcw, ShieldCheck } from "lucide-react";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
-import { examCourseDateLabel, examCourseIsClosed, findExamCourse } from "@/lib/examSprint/config";
+import { examCourseDateLabel, findExamCourse } from "@/lib/examSprint/config";
 import { getExamCatalog, getPublishedExamSets } from "@/lib/examSprint/server";
 import StartExamButton from "../_components/StartExamButton";
 
@@ -16,7 +16,6 @@ export default async function ExamCoursePage({ params }: { params: Promise<{ cou
   const { data: { user } } = await supabase.auth.getUser();
   const [sets, catalog] = await Promise.all([getPublishedExamSets(course), getExamCatalog(user?.id)]);
   const courseState = catalog.courses.find((item) => item.slug === course.slug);
-  const closed = examCourseIsClosed(course);
   const loginNext = `/exam/${course.slug}`;
 
   return (
@@ -38,9 +37,7 @@ export default async function ExamCoursePage({ params }: { params: Promise<{ cou
         </div>
       </section>
 
-      {closed ? (
-        <div className="rounded-3xl border border-amber-200 bg-amber-50 p-5 text-amber-950"><p className="font-extrabold">New attempts are closed</p><p className="mt-1 text-sm">The official exam time for this course has started. Previous results remain available from your Exam Sprint home.</p></div>
-      ) : sets.length === 0 ? (
+      {sets.length === 0 ? (
         <div className="rounded-3xl border border-border bg-card p-8 text-center"><FileQuestion className="mx-auto h-8 w-8 text-muted-foreground" /><h2 className="mt-4 text-xl font-extrabold">Question bank coming soon</h2><p className="mx-auto mt-2 max-w-lg text-sm text-muted-foreground">This course stays locked until its questions have been reviewed and approved.</p></div>
       ) : (
         <div className="grid gap-5 lg:grid-cols-[0.9fr,1.1fr]">
