@@ -10,11 +10,11 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ que
     const { questionId } = await params;
     const { data: question, error } = await adminSupabase
       .from("study_quiz_questions")
-      .select("id,prompt,explanation,question_type,study_quiz_options(id,text,is_correct),study_quiz_sets!inner(delivery_mode,exam_campaign_key)")
+      .select("id,prompt,explanation,question_type,study_quiz_options(id,text,is_correct),exam_set:study_quiz_sets!study_quiz_questions_set_id_fkey!inner(delivery_mode,exam_campaign_key)")
       .eq("id", questionId)
       .maybeSingle();
     if (error) throw error;
-    const set = question?.study_quiz_sets as unknown as { delivery_mode?: string; exam_campaign_key?: string } | null;
+    const set = question?.exam_set as unknown as { delivery_mode?: string; exam_campaign_key?: string } | null;
     if (!question || set?.delivery_mode !== "mock_exam" || set.exam_campaign_key !== EXAM_CAMPAIGN_KEY) return NextResponse.json({ ok: false, code: "QUESTION_NOT_FOUND", message: "Exam question not found." }, { status: 404 });
     const options = Array.isArray(question.study_quiz_options) ? question.study_quiz_options : [];
     const distinct = new Set(options.map((option) => String(option.text ?? "").trim().toLowerCase()).filter(Boolean));
