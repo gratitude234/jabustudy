@@ -37,13 +37,35 @@ export async function POST(
 
   const { data: attempt, error: attemptError } = await admin
     .from("study_practice_attempts")
-    .select("id, user_id, status")
+    .select("id, user_id, set_id, status, experience")
     .eq("id", attemptId)
     .maybeSingle();
 
   if (attemptError || !attempt) return jsonError("Attempt not found.", 404, "NOT_FOUND");
   if (attempt.user_id !== user.id) return jsonError("Forbidden.", 403, "FORBIDDEN");
+  if ((attempt.experience ?? "practice") !== "practice") {
+    return jsonError("Exam Sprint answers must use the exam response endpoint.", 400, "INVALID_ATTEMPT_TYPE");
+  }
   if (attempt.status !== "in_progress") return jsonError("Attempt is not in progress.", 409, "NOT_IN_PROGRESS");
+
+  const { data: question, error: questionError } = await admin
+    .from("study_quiz_questions")
+    .select("id")
+    .eq("id", questionId)
+    .eq("set_id", attempt.set_id)
+    .maybeSingle();
+  if (questionError || !question) {
+    return jsonError("Question not found in this practice set.", 400, "INVALID_QUESTION");
+  }
+
+  const { data: quizSet } = await admin
+    .from("study_quiz_sets")
+    .select("delivery_mode")
+    .eq("id", attempt.set_id)
+    .maybeSingle();
+  if (quizSet?.delivery_mode === "mock_exam") {
+    return jsonError("Exam Sprint answers must use the exam response endpoint.", 400, "INVALID_ATTEMPT_TYPE");
+  }
 
   const { data: option, error: optionError } = await admin
     .from("study_quiz_options")

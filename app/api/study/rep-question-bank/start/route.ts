@@ -2,12 +2,14 @@ import { NextRequest, NextResponse } from "next/server";
 import { adminSupabase } from "@/lib/supabase/admin";
 import { requireStudyModeratorFromRequest } from "@/lib/studyAdmin/requireStudyModeratorFromRequest";
 import { getBankState, isAiSupported, jsonError, requireScopedCourse } from "@/lib/repQuestionBank";
+import { EXAM_CAMPAIGN_KEY, findExamCourse } from "@/lib/examSprint/config";
 
 type StartBody = {
   courseId?: string;
   materialIds?: string[];
   batchSize?: number;
   topicTarget?: number;
+  target?: "practice" | "exam_sprint";
 };
 
 export async function POST(req: NextRequest) {
@@ -20,15 +22,21 @@ export async function POST(req: NextRequest) {
     const course = await requireScopedCourse(courseId, scope);
     const batchSize = Math.max(3, Math.min(10, Math.trunc(Number(body?.batchSize ?? 5))));
     const topicTarget = Math.max(1, Math.min(10, Math.trunc(Number(body?.topicTarget ?? 3))));
+    const examTarget = body?.target === "exam_sprint";
+    if (examTarget && !findExamCourse(course.course_code)) {
+      return jsonError("This course is not on the Exam Sprint timetable.", 422, "UNKNOWN_EXAM_COURSE");
+    }
 
-    const { data: existingRun, error: existingErr } = await adminSupabase
-      .from("study_question_bank_runs")
-      .select("id")
-      .eq("course_id", courseId)
-      .in("status", ["draft", "ready", "failed"])
-      .order("created_at", { ascending: false })
-      .limit(1)
-      .maybeSingle();
+    const { data: existingRun, error: existingErr } = examTarget
+      ? { data: null, error: null }
+      : await adminSupabase
+          .from("study_question_bank_runs")
+          .select("id")
+          .eq("course_id", courseId)
+          .in("status", ["draft", "ready", "failed"])
+          .order("created_at", { ascending: false })
+          .limit(1)
+          .maybeSingle();
     if (existingErr) throw existingErr;
     if (existingRun?.id) {
       return NextResponse.json({ ok: true, bank: await getBankState(String(existingRun.id)) });
@@ -68,16 +76,27 @@ export async function POST(req: NextRequest) {
     const { data: set, error: setErr } = await adminSupabase
       .from("study_quiz_sets")
       .insert({
-        title: `${course.course_code} Official Practice Bank`,
-        description: "AI-assisted draft created by a course rep. Review before publishing.",
+        title: examTarget ? `${course.course_code} Exam Sprint Bank` : `${course.course_code} Official Practice Bank`,
+        description: examTarget
+          ? "Private Exam Sprint draft. Every question requires human review before publishing."
+          : "AI-assisted draft created by a course rep. Review before publishing.",
         course_code: course.course_code,
         level: course.level,
         source: "rep_ai_bank",
         source_material_ids: selectedMaterials,
         created_by: userId,
         published: false,
-        visibility: "public",
+        visibility: examTarget ? "private" : "public",
         questions_count: 0,
+        ...(examTarget ? {
+          delivery_mode: "mock_exam",
+          exam_campaign_key: EXAM_CAMPAIGN_KEY,
+          access_tier: "plus_monthly",
+          time_limit_minutes: 40,
+          exam_question_count: 40,
+          diagnostic_question_count: 10,
+          diagnostic_time_limit_minutes: 10,
+        } : {}),
       } as any)
       .select("id")
       .single();

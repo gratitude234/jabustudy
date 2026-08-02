@@ -24,12 +24,15 @@ export async function POST(
 
   const { data: attempt, error: attemptError } = await admin
     .from("study_practice_attempts")
-    .select("id, user_id, status")
+    .select("id, user_id, status, experience")
     .eq("id", attemptId)
     .maybeSingle();
 
   if (attemptError || !attempt) return jsonError("Attempt not found.", 404, "NOT_FOUND");
   if (attempt.user_id !== user.id) return jsonError("Forbidden.", 403, "FORBIDDEN");
+  if ((attempt.experience ?? "practice") !== "practice") {
+    return jsonError("Exam Sprint attempts cannot be abandoned through Practice Mode.", 400, "INVALID_ATTEMPT_TYPE");
+  }
   if (attempt.status !== "in_progress") {
     return NextResponse.json({ ok: true, alreadyFinished: true });
   }

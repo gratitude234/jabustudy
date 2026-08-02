@@ -130,7 +130,7 @@ function StepPaste({ text, setText, onNext }: { text: string; setText: (v: strin
 
 // ─── Step 2: Meta ──────────────────────────────────────────────────────────────
 
-type MetaState = { title: string; course_code: string; level: string; semester: string; difficulty: string; time_limit: string; description: string };
+type MetaState = { title: string; course_code: string; level: string; semester: string; difficulty: string; time_limit: string; description: string; target: "practice" | "exam_sprint" };
 function StepMeta({ meta, setMeta, onNext, onBack }: { meta: MetaState; setMeta: React.Dispatch<React.SetStateAction<MetaState>>; onNext: () => void; onBack: () => void }) {
   const set = (k: keyof MetaState, v: string) => setMeta(m => ({ ...m, [k]: v }));
   const valid = meta.title.trim() && meta.course_code.trim();
@@ -141,6 +141,14 @@ function StepMeta({ meta, setMeta, onNext, onBack }: { meta: MetaState; setMeta:
         These go into <code className="rounded bg-zinc-100 px-1 text-zinc-700">study_quiz_sets</code>. Title and course code are required.
       </p>
       <div className="grid grid-cols-2 gap-4">
+        <div className="col-span-2">
+          <Label>Import target</Label>
+          <select value={meta.target} onChange={e => set("target", e.target.value as MetaState["target"])} className="w-full rounded-2xl border bg-white px-4 py-3 text-sm text-zinc-900 outline-none">
+            <option value="practice">Normal practice draft</option>
+            <option value="exam_sprint">Private Exam Sprint bank</option>
+          </select>
+          {meta.target === "exam_sprint" ? <p className="mt-1.5 text-xs text-violet-700">Correct answers stay private. Every imported question must be verified before publication.</p> : null}
+        </div>
         <div className="col-span-2">
           <Label>Quiz Set Title *</Label>
           <Input value={meta.title} onChange={v => set("title", v)} placeholder="e.g. BCH 201 — First Semester Objectives" />
@@ -417,7 +425,8 @@ function buildSQL(meta: MetaState, questions: Question[]) {
 
   // Insert set
   lines.push(`-- 1. Quiz Set`);
-  lines.push(`INSERT INTO public.study_quiz_sets (id, title, description, course_code, level, semester, difficulty, time_limit_minutes, questions_count, published, created_at)`);
+  const examTarget = meta.target === "exam_sprint";
+  lines.push(`INSERT INTO public.study_quiz_sets (id, title, description, course_code, level, semester, difficulty, time_limit_minutes, questions_count, published, visibility, delivery_mode, exam_campaign_key, access_tier, exam_question_count, diagnostic_question_count, diagnostic_time_limit_minutes, created_at)`);
   lines.push(`VALUES (`);
   lines.push(`  '${setId}',`);
   lines.push(`  '${esc(meta.title)}',`);
@@ -426,9 +435,16 @@ function buildSQL(meta: MetaState, questions: Question[]) {
   lines.push(`  ${meta.level ? `'${meta.level}'` : "NULL"},`);
   lines.push(`  ${meta.semester ? `'${meta.semester}'` : "NULL"},`);
   lines.push(`  ${meta.difficulty ? `'${meta.difficulty}'` : "NULL"},`);
-  lines.push(`  ${meta.time_limit ? parseInt(meta.time_limit) : "NULL"},`);
+  lines.push(`  ${meta.time_limit ? parseInt(meta.time_limit) : examTarget ? 40 : "NULL"},`);
   lines.push(`  ${questions.length},`);
   lines.push(`  false,`);
+  lines.push(`  '${examTarget ? "private" : "public"}',`);
+  lines.push(`  '${examTarget ? "mock_exam" : "practice"}',`);
+  lines.push(`  ${examTarget ? "'supplementary-2026'" : "NULL"},`);
+  lines.push(`  '${examTarget ? "plus_monthly" : "free"}',`);
+  lines.push(`  40,`);
+  lines.push(`  10,`);
+  lines.push(`  10,`);
   lines.push(`  now()`);
   lines.push(`);`);
   lines.push(``);
@@ -461,7 +477,7 @@ function buildSQL(meta: MetaState, questions: Question[]) {
 export default function MCQImporter() {
   const [step, setStep] = useState<Step>("paste");
   const [text, setText] = useState("");
-  const [meta, setMeta] = useState({ title: "", course_code: "", level: "", semester: "", difficulty: "", time_limit: "", description: "" });
+  const [meta, setMeta] = useState<MetaState>({ title: "", course_code: "", level: "", semester: "", difficulty: "", time_limit: "", description: "", target: "practice" });
   const [questions, setQuestions] = useState<Question[]>([]);
   const [sql, setSQL] = useState("");
   const [parsing, setParsing] = useState(false);

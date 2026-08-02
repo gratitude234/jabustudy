@@ -27,7 +27,7 @@ export async function POST(
   { params }: { params: { runId: string } | Promise<{ runId: string }> }
 ) {
   try {
-    const { scope } = await requireStudyModeratorFromRequest(req);
+    const { scope, isSuper } = await requireStudyModeratorFromRequest(req);
     const { runId } = await params;
     if (!runId) return jsonError("Missing runId.", 400, "MISSING_RUN_ID");
 
@@ -39,6 +39,17 @@ export async function POST(
     if (runErr) throw runErr;
     if (!run) return jsonError("Question bank run not found.", 404, "RUN_NOT_FOUND");
     const bankRun = run as BankRunRow;
+
+    const { data: targetSet, error: targetSetError } = await adminSupabase
+      .from("study_quiz_sets")
+      .select("delivery_mode")
+      .eq("id", bankRun.quiz_set_id)
+      .maybeSingle();
+    if (targetSetError) throw targetSetError;
+    if (targetSet?.delivery_mode === "mock_exam") {
+      if (!isSuper) return jsonError("Only a super admin can publish paid Exam Sprint content.", 403, "SUPER_ADMIN_REQUIRED");
+      return jsonError("Publish secure exam banks from the Exam Sprint admin dashboard.", 409, "USE_EXAM_SPRINT_PUBLISH");
+    }
 
     await requireScopedCourse(String(bankRun.course_id), scope);
 

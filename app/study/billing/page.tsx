@@ -187,6 +187,7 @@ export default function StudyBillingPage() {
   const [transactionReference, setTransactionReference] = useState("");
   const [copied, setCopied] = useState<string | null>(null);
   const [queryReturnPath, setQueryReturnPath] = useState("/study");
+  const [offer, setOffer] = useState<string | null>(null);
   const pollRunRef = useRef(0);
   const verificationInFlightRef = useRef(false);
 
@@ -299,7 +300,9 @@ export default function StudyBillingPage() {
   useEffect(() => {
     let active = true;
     const timer = window.setTimeout(async () => {
-      setQueryReturnPath(sanitizeBillingReturnPath(new URLSearchParams(window.location.search).get("returnTo")));
+      const query = new URLSearchParams(window.location.search);
+      setQueryReturnPath(sanitizeBillingReturnPath(query.get("returnTo")));
+      setOffer(query.get("offer"));
       const data = await loadBilling();
       if (!active || !data) return;
       const callbackReference = new URLSearchParams(window.location.search).get("ref");
@@ -330,6 +333,10 @@ export default function StudyBillingPage() {
   }, []);
 
   const plusPlans = useMemo(() => snapshot?.plans.filter((plan) => plan.productType === "plus") ?? [], [snapshot]);
+  const visiblePlusPlans = useMemo(
+    () => offer === "exam-sprint" ? plusPlans.filter((plan) => plan.key === "plus_monthly") : plusPlans,
+    [offer, plusPlans],
+  );
   const creditPlans = useMemo(() => snapshot?.plans.filter((plan) => plan.productType === "credits") ?? [], [snapshot]);
   const checkoutOrder = snapshot?.orders.find((order) => order.id === checkoutOrderId) ?? null;
   const returnPath = confirmedOrder?.returnPath || checkoutOrder?.returnPath || queryReturnPath;
@@ -705,20 +712,21 @@ export default function StudyBillingPage() {
       {!blocksPlans && snapshot ? (
         <section className="space-y-6" aria-labelledby="plans-heading">
           <div>
-            <h2 id="plans-heading" className="text-lg font-extrabold">JabuStudy Plus</h2>
+            <h2 id="plans-heading" className="text-lg font-extrabold">{offer === "exam-sprint" ? "Unlock Exam Sprint" : "JabuStudy Plus"}</h2>
+            {offer === "exam-sprint" ? <p className="mt-1 text-sm text-muted-foreground">Get every available Exam Sprint mock plus all normal Plus benefits for 30 days.</p> : null}
             <p className="mt-1 text-sm text-muted-foreground">
               {snapshot.plus.active
                 ? "Buying Plus again extends your current expiry; you do not lose remaining time."
                 : "Recommended for regular study: unlimited practice plus included AI credits."}
             </p>
             <div className="mt-3 grid gap-3 sm:grid-cols-2">
-              {plusPlans.map((plan) => {
+              {visiblePlusPlans.map((plan) => {
                 const recommended = plan.key === "plus_monthly";
                 return (
                   <article key={plan.key} className={cn("relative flex flex-col rounded-2xl border p-5 shadow-sm", recommended ? "border-primary/50 bg-primary/5" : "border-border bg-card")}>
                     {recommended ? <span className="absolute -top-2.5 left-4 rounded-full bg-primary px-3 py-1 text-[11px] font-extrabold text-primary-foreground">Best value</span> : null}
                     <div className="flex items-start justify-between gap-3"><h3 className="font-extrabold">{plan.plusDays}-day Plus</h3><p className="text-xl font-black">{money(plan.amountNaira)}</p></div>
-                    <ul className="mt-3 space-y-2 text-sm text-muted-foreground"><li className="flex gap-2"><CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-emerald-600" />Unlimited daily practice</li><li className="flex gap-2"><CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-emerald-600" />{plan.credits} AI credits included</li></ul>
+                    <ul className="mt-3 space-y-2 text-sm text-muted-foreground">{offer === "exam-sprint" ? <li className="flex gap-2"><CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-emerald-600" />All published Exam Sprint mocks</li> : null}<li className="flex gap-2"><CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-emerald-600" />Unlimited daily practice</li><li className="flex gap-2"><CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-emerald-600" />{plan.credits} AI credits included</li></ul>
                     <button type="button" onClick={() => void startPayment(plan.key)} disabled={busyPlan !== null} className={cn("mt-4 inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-extrabold disabled:opacity-60", recommended ? "bg-primary text-primary-foreground" : "border border-primary text-primary hover:bg-primary/10", focusRing)}>{busyPlan === plan.key ? <Loader2 className="h-4 w-4 animate-spin" /> : null}{snapshot.plus.active ? "Extend Plus" : "Get Plus"} · {money(plan.amountNaira)}</button>
                   </article>
                 );

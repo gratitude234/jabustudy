@@ -6,7 +6,7 @@ import { createServerClient } from "@supabase/ssr";
  * Keeps Supabase auth cookies refreshed so Route Handlers can read sessions.
  */
 export async function proxy(request: NextRequest) {
-  let response = NextResponse.next({
+  const response = NextResponse.next({
     request: { headers: request.headers },
   });
 
@@ -41,5 +41,7 @@ export const config = {
     "/study/tutors/apply/:path*",
     "/study/gpa/:path*",
     "/study-admin/:path*",
+    "/exam/:path*",
+    "/api/exam/:path*",
   ],
 };

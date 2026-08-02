@@ -103,6 +103,7 @@ const PRACTICE_SET_OPTIONAL_FIELDS = [
   "questions_count",
   "visibility",
   "source",
+  "delivery_mode",
 ] as const;
 
 type PracticeSetOptionalField = (typeof PRACTICE_SET_OPTIONAL_FIELDS)[number];
@@ -1409,6 +1410,9 @@ function PracticeHomeInner() {
 
         if (!disabledColumns.has("published")) {
           query = query.eq("published", true);
+        }
+        if (!disabledColumns.has("delivery_mode")) {
+          query = query.eq("delivery_mode", "practice");
         }
 
         const qNorm = normalizeQuery(qParam);

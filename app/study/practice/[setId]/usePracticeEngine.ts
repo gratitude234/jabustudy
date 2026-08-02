@@ -526,7 +526,7 @@ export function usePracticeEngine({
 
         const setReq = supabase
           .from("study_quiz_sets")
-          .select("id,title,description,course_code,level,time_limit_minutes,source_material_id,published,created_by,visibility,draft_status,draft_expires_at,generation_config")
+          .select("id,title,description,course_code,level,time_limit_minutes,source_material_id,published,created_by,visibility,draft_status,draft_expires_at,generation_config,delivery_mode")
           .eq("id", setId)
           .maybeSingle();
 
@@ -576,7 +576,11 @@ export function usePracticeEngine({
           published?: boolean | null;
           created_by?: string | null;
           visibility?: string | null;
+          delivery_mode?: string | null;
         };
+        if (setData.delivery_mode === "mock_exam") {
+          throw new Error("Open this set from Exam Sprint.");
+        }
         const isAuthor = Boolean(setData.created_by && setData.created_by === user?.id);
         const isPublic = (setData.visibility ?? "public") === "public";
 

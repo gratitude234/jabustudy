@@ -157,13 +157,25 @@ export async function POST(
 
   const { data: attempt, error: attemptError } = await admin
     .from("study_practice_attempts")
-    .select("id,user_id,set_id,status,started_at,submitted_at,score,total_questions,scored_questions_count")
+    .select("id,user_id,set_id,status,started_at,submitted_at,score,total_questions,scored_questions_count,experience")
     .eq("id", attemptId)
     .maybeSingle();
 
   if (attemptError) return jsonError(attemptError.message, 500, "DB_ERROR");
   if (!attempt?.id) return jsonError("Attempt not found.", 404, "ATTEMPT_NOT_FOUND");
   if (attempt.user_id !== user.id) return jsonError("You can only submit your own attempt.", 403, "FORBIDDEN");
+  if ((attempt.experience ?? "practice") !== "practice") {
+    return jsonError("Exam Sprint attempts must use the exam submission endpoint.", 400, "INVALID_ATTEMPT_TYPE");
+  }
+
+  const { data: quizSet } = await admin
+    .from("study_quiz_sets")
+    .select("delivery_mode")
+    .eq("id", attempt.set_id)
+    .maybeSingle();
+  if (quizSet?.delivery_mode === "mock_exam") {
+    return jsonError("Exam Sprint attempts must use the exam submission endpoint.", 400, "INVALID_ATTEMPT_TYPE");
+  }
 
   if (attempt.status === "submitted") {
     const rankPreview = await getRankPreview(admin, user.id);

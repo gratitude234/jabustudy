@@ -29,6 +29,7 @@ export default function AppChrome({ children }: { children: React.ReactNode }) {
   }, []);
 
   if (pathname?.startsWith("/study-admin")) return <>{children}</>;
+  if (pathname?.startsWith("/exam")) return <>{children}</>;
 
   return (
     <NotificationsProvider>

@@ -6,7 +6,7 @@ import { usePathname } from "next/navigation";
 import {
   ShieldCheck, FileText, Inbox, LayoutDashboard, UserCheck2,
   Upload, History, BookOpen, ListChecks, ArrowLeft, FileInput as ImportIcon,
-  Banknote, Zap, Users, Megaphone,
+  Banknote, Zap, Users, Megaphone, TimerReset,
 } from "lucide-react";
 import type React from "react";
 
@@ -21,6 +21,7 @@ const NAV_ITEMS = [
   { href: "/study-admin/courses",            label: "Courses",    icon: BookOpen },
   { href: "/study-admin/billing",            label: "Billing",    icon: Banknote },
   { href: "/study-admin/quiz-sets",           label: "Quiz Sets",  icon: Zap },
+  { href: "/study-admin/exam-sprint",         label: "Exam Sprint", icon: TimerReset },
   { href: "/study-admin/question-quality",   label: "Quality",    icon: ListChecks },
   { href: "/study-admin/import",             label: "Import",     icon: ImportIcon },
   { href: "/study-admin/announcements",      label: "Announce",   icon: Megaphone },

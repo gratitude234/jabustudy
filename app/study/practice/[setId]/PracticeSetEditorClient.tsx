@@ -45,6 +45,7 @@ type QuizSet = {
   questions_count: number | null;
   published: boolean;
   created_at: string;
+  delivery_mode?: "practice" | "mock_exam" | null;
 };
 
 type QuizQuestion = {
@@ -57,6 +58,8 @@ type QuizQuestion = {
   marking_points?: string[] | null;
   position: number | null;
   created_at: string;
+  exam_verified_at?: string | null;
+  exam_verified_by?: string | null;
 };
 
 type QuizOption = {
@@ -85,6 +88,7 @@ export default function PracticeSetEditorClient({ setId }: { setId: string }) {
   const [timeLimit, setTimeLimit] = useState<string>("");
   const [difficulty, setDifficulty] = useState<string>("");
   const [published, setPublished] = useState(false);
+  const [deliveryMode, setDeliveryMode] = useState<"practice" | "mock_exam">("practice");
 
   const [questions, setQuestions] = useState<QuizQuestion[]>([]);
   const [optionsByQ, setOptionsByQ] = useState<Record<string, QuizOption[]>>({});
@@ -107,6 +111,7 @@ export default function PracticeSetEditorClient({ setId }: { setId: string }) {
           setLevel("");
           setTimeLimit("");
           setPublished(false);
+          setDeliveryMode("practice");
           setQuestions([]);
           setOptionsByQ({});
           return;
@@ -133,6 +138,7 @@ export default function PracticeSetEditorClient({ setId }: { setId: string }) {
         setTimeLimit(row.time_limit_minutes == null ? "" : String(row.time_limit_minutes));
         setDifficulty(row.difficulty ?? "");
         setPublished(!!row.published);
+        setDeliveryMode(row.delivery_mode === "mock_exam" ? "mock_exam" : "practice");
 
         const { data: qData, error: qErr } = await supabase
           .from("study_quiz_questions")
@@ -182,7 +188,7 @@ export default function PracticeSetEditorClient({ setId }: { setId: string }) {
       level: normalize(level) || null,
       time_limit_minutes: timeLimit.trim() ? Number(timeLimit) : null,
       difficulty: (difficulty || null) as "easy" | "medium" | "hard" | null,
-      published,
+      published: deliveryMode === "mock_exam" ? Boolean(setRow?.published) : published,
       questions_count: computedCount,
     };
 
@@ -257,7 +263,11 @@ export default function PracticeSetEditorClient({ setId }: { setId: string }) {
         } as any)
         .eq("id", q.id);
       if (error) throw error;
-      setQuestions((arr) => arr.map((x) => (x.id === q.id ? { ...x, ...patch } : x)));
+      setQuestions((arr) => arr.map((x) => (x.id === q.id ? {
+        ...x,
+        ...patch,
+        ...(deliveryMode === "mock_exam" ? { exam_verified_at: null, exam_verified_by: null } : {}),
+      } : x)));
     } catch (e: any) {
       setBanner({ kind: "error", text: e?.message || "Failed to save question." });
     } finally {
@@ -299,6 +309,9 @@ export default function PracticeSetEditorClient({ setId }: { setId: string }) {
       if (error) throw error;
       const opt = data as QuizOption;
       setOptionsByQ((m2) => ({ ...m2, [questionId]: [...(m2[questionId] || []), opt] }));
+      if (deliveryMode === "mock_exam") {
+        setQuestions((arr) => arr.map((q) => q.id === questionId ? { ...q, exam_verified_at: null, exam_verified_by: null } : q));
+      }
     } catch (e: any) {
       setBanner({ kind: "error", text: e?.message || "Failed to add option." });
     } finally {
@@ -333,6 +346,9 @@ export default function PracticeSetEditorClient({ setId }: { setId: string }) {
         }
         return { ...m2, [questionId]: arr };
       });
+      if (deliveryMode === "mock_exam") {
+        setQuestions((arr) => arr.map((q) => q.id === questionId ? { ...q, exam_verified_at: null, exam_verified_by: null } : q));
+      }
     } catch (e: any) {
       setBanner({ kind: "error", text: e?.message || "Failed to save option." });
     } finally {
@@ -348,6 +364,9 @@ export default function PracticeSetEditorClient({ setId }: { setId: string }) {
       const { error } = await supabase.from("study_quiz_options").delete().eq("id", opt.id);
       if (error) throw error;
       setOptionsByQ((m2) => ({ ...m2, [questionId]: (m2[questionId] || []).filter((x) => x.id !== opt.id) }));
+      if (deliveryMode === "mock_exam") {
+        setQuestions((arr) => arr.map((q) => q.id === questionId ? { ...q, exam_verified_at: null, exam_verified_by: null } : q));
+      }
     } catch (e: any) {
       setBanner({ kind: "error", text: e?.message || "Failed to delete option." });
     } finally {
@@ -373,6 +392,28 @@ export default function PracticeSetEditorClient({ setId }: { setId: string }) {
     setQuestions(copy);
   }
 
+  async function verifyExamQuestion(questionId: string) {
+    setMutating((current) => ({ ...current, [`verify_${questionId}`]: true }));
+    setBanner(null);
+    try {
+      const { data } = await supabase.auth.getSession();
+      const token = data.session?.access_token;
+      if (!token) throw new Error("Sign in again to verify this question.");
+      const response = await fetch(`/api/study-admin/exam-sprint/questions/${encodeURIComponent(questionId)}/verify`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const result = await response.json().catch(() => null) as { ok?: boolean; verifiedAt?: string; message?: string } | null;
+      if (!response.ok || !result?.ok || !result.verifiedAt) throw new Error(result?.message || "Could not verify this question.");
+      setQuestions((current) => current.map((question) => question.id === questionId ? { ...question, exam_verified_at: result.verifiedAt } : question));
+      setBanner({ kind: "success", text: "Question verified for Exam Sprint." });
+    } catch (e: any) {
+      setBanner({ kind: "error", text: e?.message || "Could not verify this question." });
+    } finally {
+      setMutating((current) => ({ ...current, [`verify_${questionId}`]: false }));
+    }
+  }
+
   return (
     <div className="space-y-4 pb-28 md:pb-6">
       <header className="rounded-3xl border bg-white p-4 shadow-sm sm:p-5">
@@ -385,8 +426,8 @@ export default function PracticeSetEditorClient({ setId }: { setId: string }) {
 
         <div className="mt-3 flex items-start justify-between gap-4">
           <div>
-            <p className="text-lg font-semibold text-zinc-900">{isNew ? "New CBT set" : "Edit CBT set"}</p>
-            <p className="text-sm text-zinc-600">Build a question set for Practice Mode.</p>
+            <p className="text-lg font-semibold text-zinc-900">{deliveryMode === "mock_exam" ? "Edit secure Exam Sprint bank" : isNew ? "New CBT set" : "Edit CBT set"}</p>
+            <p className="text-sm text-zinc-600">{deliveryMode === "mock_exam" ? "Every question needs four options, an explanation and human verification." : "Build a question set for Practice Mode."}</p>
           </div>
 
           <button
@@ -475,6 +516,14 @@ export default function PracticeSetEditorClient({ setId }: { setId: string }) {
                 />
               </div>
               <div className="flex items-end">
+                {deliveryMode === "mock_exam" ? (
+                  <div className={cn(
+                    "mt-1 inline-flex w-full items-center justify-center gap-2 rounded-2xl border px-3 py-2 text-sm font-semibold",
+                    published ? "border-emerald-200 bg-emerald-50 text-emerald-900" : "border-violet-200 bg-violet-50 text-violet-900",
+                  )}>
+                    <ShieldCheck className="h-4 w-4" /> {published ? "Published via Exam Sprint" : "Private exam draft"}
+                  </div>
+                ) : (
                 <button
                   type="button"
                   onClick={() => setPublished((p) => !p)}
@@ -487,6 +536,7 @@ export default function PracticeSetEditorClient({ setId }: { setId: string }) {
                 >
                   <ShieldCheck className="h-4 w-4" /> {published ? "Published" : "Draft"}
                 </button>
+                )}
               </div>
             </div>
 
@@ -561,6 +611,7 @@ export default function PracticeSetEditorClient({ setId }: { setId: string }) {
                 const isWritten = qType !== "mcq";
                 const opts = optionsByQ[q.id] || [];
                 const hasCorrect = opts.some((o) => o.is_correct);
+                const examVerified = Boolean(q.exam_verified_at);
                 return (
                   <div key={q.id} className="rounded-3xl border bg-white p-4">
                     <div className="flex items-start justify-between gap-3">
@@ -581,6 +632,11 @@ export default function PracticeSetEditorClient({ setId }: { setId: string }) {
                       </button>
 
                       <div className="flex items-center gap-2">
+                        {deliveryMode === "mock_exam" ? (
+                          <span className={cn("hidden rounded-full px-2 py-1 text-[10px] font-bold sm:inline-flex", examVerified ? "bg-emerald-100 text-emerald-800" : "bg-amber-100 text-amber-800")}>
+                            {examVerified ? "Verified" : "Unverified"}
+                          </span>
+                        ) : null}
                         <button
                           type="button"
                           onClick={() => moveQuestion(q, -1)}
@@ -719,6 +775,23 @@ export default function PracticeSetEditorClient({ setId }: { setId: string }) {
                               Pick one correct option
                             </span>
                           )}
+                          {deliveryMode === "mock_exam" && !isWritten ? (
+                            <button
+                              type="button"
+                              onClick={() => void verifyExamQuestion(q.id)}
+                              disabled={Boolean(mutating[`verify_${q.id}`]) || examVerified}
+                              className={cn(
+                                "inline-flex items-center gap-2 rounded-2xl border px-3 py-2 text-sm font-semibold",
+                                examVerified
+                                  ? "border-emerald-200 bg-emerald-50 text-emerald-800"
+                                  : "border-violet-200 bg-violet-50 text-violet-800 hover:bg-violet-100",
+                                mutating[`verify_${q.id}`] ? "opacity-60" : "",
+                              )}
+                            >
+                              {mutating[`verify_${q.id}`] ? <Loader2 className="h-4 w-4 animate-spin" /> : <ShieldCheck className="h-4 w-4" />}
+                              {examVerified ? "Verified" : "Verify question"}
+                            </button>
+                          ) : null}
                         </div>
 
                         {!isWritten ? (
@@ -828,10 +901,10 @@ export default function PracticeSetEditorClient({ setId }: { setId: string }) {
         <div className="mt-3 flex flex-wrap gap-2">
           {!isNew && setRow ? (
             <Link
-              href={`/study/practice/${setRow.id}`}
+              href={deliveryMode === "mock_exam" ? "/exam" : `/study/practice/${setRow.id}`}
               className="inline-flex items-center gap-2 rounded-2xl border bg-white px-3 py-2 text-sm font-semibold hover:bg-zinc-50"
             >
-              <ExternalLinkIcon /> Preview as student
+              <ExternalLinkIcon /> {deliveryMode === "mock_exam" ? "Open Exam Sprint" : "Preview as student"}
             </Link>
           ) : null}
           <Link
