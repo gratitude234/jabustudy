@@ -95,6 +95,8 @@ export default function PracticeSetEditorClient({ setId }: { setId: string }) {
   const [expandedQ, setExpandedQ] = useState<Record<string, boolean>>({});
 
   const computedCount = useMemo(() => questions.length, [questions.length]);
+  const verifiedCount = useMemo(() => questions.filter((question) => Boolean(question.exam_verified_at)).length, [questions]);
+  const unverifiedCount = Math.max(0, computedCount - verifiedCount);
 
   useEffect(() => {
     let mounted = true;
@@ -414,6 +416,42 @@ export default function PracticeSetEditorClient({ setId }: { setId: string }) {
     }
   }
 
+  async function verifyAllExamQuestions() {
+    if (deliveryMode !== "mock_exam" || !computedCount || !unverifiedCount) return;
+    const confirmed = window.confirm(
+      `Verify all ${computedCount} questions in this bank?\n\nOnly continue if you have reviewed every prompt, option, correct answer and explanation.`,
+    );
+    if (!confirmed) return;
+
+    setMutating((current) => ({ ...current, verify_all: true }));
+    setBanner(null);
+    try {
+      const { data } = await supabase.auth.getSession();
+      const token = data.session?.access_token;
+      if (!token) throw new Error("Sign in again to verify this bank.");
+      const response = await fetch(`/api/study-admin/exam-sprint/${encodeURIComponent(setId)}/verify-all`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ confirmed: true }),
+      });
+      const result = await response.json().catch(() => null) as {
+        ok?: boolean;
+        verifiedAt?: string;
+        verifiedCount?: number;
+        message?: string;
+      } | null;
+      if (!response.ok || !result?.ok || !result.verifiedAt) {
+        throw new Error(result?.message || "Could not verify the complete bank.");
+      }
+      setQuestions((current) => current.map((question) => ({ ...question, exam_verified_at: result.verifiedAt })));
+      setBanner({ kind: "success", text: `${result.verifiedCount ?? computedCount} questions verified. Return to the Exam Sprint dashboard to publish the bank.` });
+    } catch (error: unknown) {
+      setBanner({ kind: "error", text: error instanceof Error ? error.message : "Could not verify the complete bank." });
+    } finally {
+      setMutating((current) => ({ ...current, verify_all: false }));
+    }
+  }
+
   return (
     <div className="space-y-4 pb-28 md:pb-6">
       <header className="rounded-3xl border bg-white p-4 shadow-sm sm:p-5">
@@ -583,18 +621,37 @@ export default function PracticeSetEditorClient({ setId }: { setId: string }) {
             <p className="text-sm font-semibold text-zinc-900">Questions</p>
             <p className="text-xs text-zinc-600">Build MCQs, short-answer prompts, and theory questions in one set.</p>
           </div>
-          <button
-            type="button"
-            onClick={addQuestion}
-            disabled={!!mutating.addq || loading}
-            className={cn(
-              "inline-flex items-center justify-center gap-2 rounded-2xl border border-zinc-900 bg-zinc-900 px-3 py-2 text-sm font-semibold text-white hover:bg-zinc-800",
-              mutating.addq || loading ? "opacity-60" : ""
-            )}
-          >
-            {mutating.addq ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
-            Add question
-          </button>
+          <div className="flex flex-wrap items-center gap-2">
+            {deliveryMode === "mock_exam" && computedCount > 0 ? (
+              <button
+                type="button"
+                onClick={() => void verifyAllExamQuestions()}
+                disabled={Boolean(mutating.verify_all) || loading || unverifiedCount === 0}
+                className={cn(
+                  "inline-flex items-center justify-center gap-2 rounded-2xl border px-3 py-2 text-sm font-semibold",
+                  unverifiedCount === 0
+                    ? "border-emerald-200 bg-emerald-50 text-emerald-800"
+                    : "border-violet-200 bg-violet-50 text-violet-800 hover:bg-violet-100",
+                  mutating.verify_all || loading ? "opacity-60" : "",
+                )}
+              >
+                {mutating.verify_all ? <Loader2 className="h-4 w-4 animate-spin" /> : <ShieldCheck className="h-4 w-4" />}
+                {unverifiedCount === 0 ? "All questions verified" : `Verify all reviewed (${unverifiedCount})`}
+              </button>
+            ) : null}
+            <button
+              type="button"
+              onClick={addQuestion}
+              disabled={!!mutating.addq || loading}
+              className={cn(
+                "inline-flex items-center justify-center gap-2 rounded-2xl border border-zinc-900 bg-zinc-900 px-3 py-2 text-sm font-semibold text-white hover:bg-zinc-800",
+                mutating.addq || loading ? "opacity-60" : ""
+              )}
+            >
+              {mutating.addq ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
+              Add question
+            </button>
+          </div>
         </div>
 
         {loading ? (
