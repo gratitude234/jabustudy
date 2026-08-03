@@ -22,6 +22,18 @@ export default async function ExamResultPage({ params }: { params: Promise<{ att
   const result = await getExamResult(user.id, attemptId);
   const course = findExamCourse(result.courseCode);
   const status = readiness(result.percentage);
+  const coverageBefore = result.coverageBefore ?? 0;
+  const coverageAfter = result.coverageAfter ?? 0;
+  const newQuestionsThisAttempt = result.newQuestionsThisAttempt ?? 0;
+  const bankTotal = result.bankTotal ?? 0;
+  const showCoverage = result.kind === "mock"
+    && result.coverageBefore !== null
+    && result.coverageAfter !== null
+    && result.newQuestionsThisAttempt !== null
+    && result.bankTotal !== null;
+  const coveragePercent = showCoverage && bankTotal > 0
+    ? Math.round((coverageAfter / bankTotal) * 100)
+    : 0;
 
   return (
     <div className="space-y-6 pb-12">
@@ -48,6 +60,29 @@ export default async function ExamResultPage({ params }: { params: Promise<{ att
           <p className="mt-1 text-sm">{status.note}</p>
         </div>
       </section>
+
+      {showCoverage ? (
+        <section className="rounded-3xl border border-primary/20 bg-primary/[0.04] p-5 shadow-sm">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+            <div>
+              <p className="text-xs font-black uppercase tracking-[0.16em] text-primary">Question-bank coverage</p>
+              <h2 className="mt-1 text-xl font-extrabold">{coverageAfter} of {bankTotal} covered</h2>
+              <p className="mt-2 text-sm text-muted-foreground">
+                This mock added {newQuestionsThisAttempt} new bank question{newQuestionsThisAttempt === 1 ? "" : "s"}. Your coverage was {coverageBefore} before this attempt.
+              </p>
+            </div>
+            <span className="shrink-0 rounded-full bg-primary/10 px-3 py-2 text-xs font-black text-primary">{coveragePercent}% covered</span>
+          </div>
+          <div className="mt-4 h-2.5 overflow-hidden rounded-full bg-background" aria-label={`${coveragePercent}% of this question bank covered`}>
+            <div className="h-full rounded-full bg-primary transition-[width]" style={{ width: `${coveragePercent}%` }} />
+          </div>
+          <p className="mt-3 text-xs font-semibold text-muted-foreground">
+            {result.coverageComplete
+              ? "Full bank covered. Your next mock will focus on unanswered, missed, flagged and older questions."
+              : `${Math.max(0, bankTotal - coverageAfter)} unseen question${bankTotal - coverageAfter === 1 ? "" : "s"} remaining.`}
+          </p>
+        </section>
+      ) : null}
 
       {result.weakTopics.length > 0 ? (
         <section className="rounded-3xl border border-border bg-card p-5 shadow-sm">

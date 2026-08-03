@@ -9,6 +9,14 @@ import {
   normalizeExamCourseCode,
   type ExamCourse,
 } from "@/lib/examSprint/config";
+import {
+  buildExamQuestionHistory,
+  calculateExamQuestionCoverage,
+  selectExamQuestions,
+  type ExamQuestionCoverage,
+  type ExamQuestionExposure,
+  type ExamQuestionHistory,
+} from "@/lib/examSprint/coverage";
 
 export type ExamAttemptKind = "diagnostic" | "mock";
 export type ExamAttemptExperience = "exam_diagnostic" | "exam_mock";
@@ -63,6 +71,10 @@ export type PublicExamSet = {
   attemptQuestionCount: number;
   diagnosticQuestionCount: number;
   diagnosticTimeLimitMinutes: number;
+};
+
+export type PublicExamSetWithCoverage = PublicExamSet & {
+  coverage: ExamQuestionCoverage;
 };
 
 export function examHttpError(message: string, status: number, code: string) {
@@ -137,6 +149,104 @@ export function parseExamSnapshot(value: unknown): ExamDeliverySnapshot {
     courseCode: cleanString(raw.courseCode, 30),
     questions,
   };
+}
+
+function tryParseExamSnapshot(value: unknown) {
+  try {
+    return parseExamSnapshot(value);
+  } catch {
+    return null;
+  }
+}
+
+type ExamHistoryAttempt = {
+  id: string;
+  submitted_at: string | null;
+  delivery_snapshot: unknown;
+};
+
+type ExamHistoryAnswer = {
+  attempt_id: string;
+  question_id: string;
+  selected_option_id: string | null;
+  flagged: boolean;
+};
+
+function historyFromAttempts(
+  attempts: readonly ExamHistoryAttempt[],
+  answers: readonly ExamHistoryAnswer[] = [],
+): ExamQuestionHistory {
+  const answersByAttempt = new Map<string, Map<string, ExamHistoryAnswer>>();
+  for (const answer of answers) {
+    const attemptAnswers = answersByAttempt.get(answer.attempt_id) ?? new Map<string, ExamHistoryAnswer>();
+    attemptAnswers.set(String(answer.question_id), answer);
+    answersByAttempt.set(answer.attempt_id, attemptAnswers);
+  }
+
+  const exposures: ExamQuestionExposure[] = [];
+  for (const attempt of attempts) {
+    const snapshot = tryParseExamSnapshot(attempt.delivery_snapshot);
+    if (!snapshot) continue;
+    const attemptAnswers = answersByAttempt.get(attempt.id);
+    for (const question of snapshot.questions) {
+      const answer = attemptAnswers?.get(question.id);
+      const selectedOptionId = answer?.selected_option_id ?? null;
+      exposures.push({
+        questionId: question.id,
+        deliveredAt: attempt.submitted_at ?? 0,
+        outcome: !selectedOptionId
+          ? "unanswered"
+          : selectedOptionId === question.correctOptionId
+            ? "correct"
+            : "incorrect",
+        flagged: Boolean(answer?.flagged),
+      });
+    }
+  }
+  return buildExamQuestionHistory(exposures);
+}
+
+async function getSubmittedMockHistory(userId: string, setId: string, excludeAttemptId?: string) {
+  let query = adminSupabase
+    .from("study_practice_attempts")
+    .select("id,submitted_at,delivery_snapshot")
+    .eq("user_id", userId)
+    .eq("set_id", setId)
+    .eq("experience", "exam_mock")
+    .eq("status", "submitted")
+    .order("submitted_at", { ascending: true });
+  if (excludeAttemptId) query = query.neq("id", excludeAttemptId);
+  const { data: attemptRows, error: attemptError } = await query;
+  if (attemptError) throw examHttpError(attemptError.message, 500, "ATTEMPT_HISTORY_FAILED");
+  const attempts = (attemptRows ?? []) as ExamHistoryAttempt[];
+  if (attempts.length === 0) return new Map() as ExamQuestionHistory;
+
+  const { data: answerRows, error: answerError } = await adminSupabase
+    .from("study_attempt_answers")
+    .select("attempt_id,question_id,selected_option_id,flagged")
+    .in("attempt_id", attempts.map((attempt) => attempt.id));
+  if (answerError) throw examHttpError(answerError.message, 500, "ANSWER_HISTORY_FAILED");
+  return historyFromAttempts(attempts, (answerRows ?? []) as ExamHistoryAnswer[]);
+}
+
+async function getEligibleQuestionIdsBySet(setIds: readonly string[]) {
+  const bySet = new Map<string, string[]>();
+  for (const setId of setIds) bySet.set(setId, []);
+  if (setIds.length === 0) return bySet;
+
+  const { data, error } = await adminSupabase
+    .from("study_quiz_questions")
+    .select("id,set_id")
+    .in("set_id", [...setIds])
+    .eq("question_type", "mcq")
+    .not("exam_verified_at", "is", null);
+  if (error) throw examHttpError(error.message, 500, "EXAM_QUESTION_LOAD_FAILED");
+  for (const row of data ?? []) {
+    const setId = String(row.set_id ?? "");
+    if (!bySet.has(setId)) continue;
+    bySet.get(setId)!.push(String(row.id));
+  }
+  return bySet;
 }
 
 export async function getMonthlyExamAccess(userId: string | null | undefined) {
@@ -214,14 +324,36 @@ export async function getExamCatalog(userId?: string | null) {
     userId
       ? adminSupabase
           .from("study_practice_attempts")
-          .select("id,set_id,experience,status,score,total_questions,submitted_at,study_quiz_sets(course_code)")
+          .select("id,set_id,experience,status,score,total_questions,submitted_at,delivery_snapshot")
           .eq("user_id", userId)
           .eq("campaign_key", EXAM_CAMPAIGN_KEY)
           .order("created_at", { ascending: false })
       : Promise.resolve({ data: [], error: null }),
   ]);
 
+  if (attemptsResult.error) throw examHttpError(attemptsResult.error.message, 500, "ATTEMPT_HISTORY_FAILED");
   const attempts = (attemptsResult.data ?? []) as Array<Record<string, unknown>>;
+  const setById = new Map(sets.map((set) => [set.id, set]));
+  const eligibleQuestionIdsBySet = await getEligibleQuestionIdsBySet(sets.map((set) => set.id));
+  const coverageBySet = new Map<string, ExamQuestionCoverage>();
+  for (const set of sets) {
+    const submittedMockAttempts = attempts
+      .filter((attempt) => attempt.status === "submitted"
+        && attempt.experience === "exam_mock"
+        && String(attempt.set_id) === set.id)
+      .map((attempt) => ({
+        id: String(attempt.id),
+        submitted_at: typeof attempt.submitted_at === "string" ? attempt.submitted_at : null,
+        delivery_snapshot: attempt.delivery_snapshot,
+      }));
+    coverageBySet.set(
+      set.id,
+      calculateExamQuestionCoverage(
+        eligibleQuestionIdsBySet.get(set.id) ?? [],
+        historyFromAttempts(submittedMockAttempts),
+      ),
+    );
+  }
   const diagnosticUsed = attempts.some((attempt) => attempt.experience === "exam_diagnostic");
   const progress = new Map<string, {
     bestDiagnostic: number;
@@ -231,8 +363,8 @@ export async function getExamCatalog(userId?: string | null) {
   }>();
   for (const attempt of attempts) {
     if (attempt.status !== "submitted") continue;
-    const relation = attempt.study_quiz_sets as { course_code?: unknown } | null;
-    const key = normalizeExamCourseCode(relation?.course_code);
+    const set = setById.get(String(attempt.set_id));
+    const key = normalizeExamCourseCode(set?.courseCode);
     if (!key) continue;
     const total = Number(attempt.total_questions ?? 0);
     const score = Number(attempt.score ?? 0);
@@ -259,7 +391,10 @@ export async function getExamCatalog(userId?: string | null) {
     courses: EXAM_COURSES.map((course) => {
       const courseSets = sets.filter(
         (set) => normalizeExamCourseCode(set.courseCode) === normalizeExamCourseCode(course.code),
-      );
+      ).map((set) => ({
+        ...set,
+        coverage: coverageBySet.get(set.id) ?? calculateExamQuestionCoverage([], new Map()),
+      } satisfies PublicExamSetWithCoverage));
       return {
         ...course,
         sets: courseSets,
@@ -297,6 +432,8 @@ export async function buildExamSnapshot(args: {
   setTitle: string;
   courseCode: string;
   questionCount: number;
+  userId: string;
+  kind: ExamAttemptKind;
 }) {
   const { data, error } = await adminSupabase
     .from("study_quiz_questions")
@@ -336,13 +473,22 @@ export async function buildExamSnapshot(args: {
     );
   }
 
+  const selected = args.kind === "mock"
+    ? selectExamQuestions({
+        candidates,
+        history: await getSubmittedMockHistory(args.userId, args.setId),
+        questionCount: args.questionCount,
+        shuffle,
+      }).questions
+    : shuffle(candidates).slice(0, args.questionCount);
+
   return {
     version: 1,
     campaignKey: EXAM_CAMPAIGN_KEY,
     setId: args.setId,
     setTitle: args.setTitle,
     courseCode: args.courseCode,
-    questions: shuffle(candidates).slice(0, args.questionCount),
+    questions: selected,
   } satisfies ExamDeliverySnapshot;
 }
 
@@ -436,6 +582,25 @@ export async function getExamResult(userId: string, attemptId: string) {
   }
   const score = Number(attempt.score ?? 0);
   const total = Number(attempt.total_questions ?? snapshot.questions.length);
+  let coverageBefore: number | null = null;
+  let coverageAfter: number | null = null;
+  let newQuestionsThisAttempt: number | null = null;
+  let bankTotal: number | null = null;
+  let coverageComplete: boolean | null = null;
+  if (attempt.experience === "exam_mock") {
+    const eligibleQuestionIds = (await getEligibleQuestionIdsBySet([snapshot.setId])).get(snapshot.setId) ?? [];
+    const [beforeHistory, afterHistory] = await Promise.all([
+      getSubmittedMockHistory(userId, snapshot.setId, attempt.id),
+      getSubmittedMockHistory(userId, snapshot.setId),
+    ]);
+    const before = calculateExamQuestionCoverage(eligibleQuestionIds, beforeHistory);
+    const after = calculateExamQuestionCoverage(eligibleQuestionIds, afterHistory);
+    coverageBefore = before.delivered;
+    coverageAfter = after.delivered;
+    newQuestionsThisAttempt = Math.max(0, after.delivered - before.delivered);
+    bankTotal = after.bankTotal;
+    coverageComplete = after.complete;
+  }
   return {
     attemptId: attempt.id,
     kind: attemptKind(attempt.experience),
@@ -449,6 +614,11 @@ export async function getExamResult(userId: string, attemptId: string) {
     timeSpentSeconds: Number(attempt.time_spent_seconds ?? 0),
     submittedAt: attempt.submitted_at,
     submissionReason: attempt.submission_reason,
+    coverageBefore,
+    coverageAfter,
+    newQuestionsThisAttempt,
+    bankTotal,
+    coverageComplete,
     weakTopics: [...missedTopics.entries()]
       .map(([topic, missed]) => ({ topic, missed }))
       .sort((a, b) => b.missed - a.missed),

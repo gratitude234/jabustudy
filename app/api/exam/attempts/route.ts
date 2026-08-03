@@ -115,6 +115,8 @@ export async function POST(req: NextRequest) {
       setTitle: set.title,
       courseCode: course.code,
       questionCount,
+      userId: user.id,
+      kind,
     });
     const startedAt = new Date();
     const deadlineAt = new Date(startedAt.getTime() + durationMinutes * 60_000);
