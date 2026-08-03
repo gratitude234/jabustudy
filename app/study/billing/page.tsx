@@ -302,7 +302,8 @@ export default function StudyBillingPage() {
     const timer = window.setTimeout(async () => {
       const query = new URLSearchParams(window.location.search);
       setQueryReturnPath(sanitizeBillingReturnPath(query.get("returnTo")));
-      setOffer(query.get("offer"));
+      const requestedOffer = query.get("offer");
+      setOffer(requestedOffer);
       const data = await loadBilling();
       if (!active || !data) return;
       const callbackReference = new URLSearchParams(window.location.search).get("ref");
@@ -315,6 +316,8 @@ export default function StudyBillingPage() {
         return;
       }
       const target = selectBillingVisitOrder(data.orders, callbackReference);
+      const contextualReturnPath = callbackOrder?.returnPath || target?.returnPath || query.get("returnTo") || "";
+      if (!requestedOffer && contextualReturnPath.startsWith("/exam")) setOffer("exam-sprint");
       if (target && target.status !== "approved") {
         setCheckoutOrderId(target.id);
         void pollPayment(target.reference);
@@ -532,7 +535,7 @@ export default function StudyBillingPage() {
 
   return (
     <div className="space-y-6 pb-24">
-      <StudyTabs />
+      {offer === "exam-sprint" ? null : <StudyTabs />}
 
       <div className="sr-only" aria-live="polite" aria-atomic="true">{statusMessage}</div>
       {toast ? (
@@ -550,8 +553,9 @@ export default function StudyBillingPage() {
 
       <div className="flex items-start justify-between gap-4">
         <div>
-          <p className="text-xs font-bold uppercase tracking-wide text-muted-foreground">Billing</p>
-          <h1 className="mt-0.5 text-2xl font-extrabold tracking-tight">Plans &amp; AI credits</h1>
+          <p className="text-xs font-bold uppercase tracking-wide text-muted-foreground">{offer === "exam-sprint" ? "Exam Sprint checkout" : "Billing"}</p>
+          <h1 className="mt-0.5 text-2xl font-extrabold tracking-tight">{offer === "exam-sprint" ? "Unlock every mock" : "Plans & AI credits"}</h1>
+          {offer === "exam-sprint" ? <p className="mt-1 text-sm text-muted-foreground">One payment. Every published Exam Sprint course. 30 days.</p> : null}
         </div>
         <Link href={returnPath} className={cn("mt-1 inline-flex shrink-0 items-center gap-1 text-sm font-bold text-primary no-underline hover:underline", focusRing)}>
           <ArrowLeft className="h-4 w-4" aria-hidden="true" /> Back
@@ -606,12 +610,7 @@ export default function StudyBillingPage() {
             <BadgeCheck className="h-4 w-4 text-primary" aria-hidden="true" />
             {snapshot.plus.active ? `Plus · expires ${formatDate(snapshot.plus.activeUntil)}` : "Free plan"}
           </span>
-          <span className="text-muted-foreground"><Zap className="mr-1 inline h-4 w-4 text-amber-500" aria-hidden="true" />{snapshot.credits.balance} AI credit{snapshot.credits.balance === 1 ? "" : "s"}</span>
-          <span className="text-muted-foreground">
-            {snapshot.practice.limit === null
-              ? "Unlimited practice"
-              : `${snapshot.practice.remaining ?? 0} of ${snapshot.practice.limit} questions left today`}
-          </span>
+          {offer === "exam-sprint" ? <span className="text-muted-foreground">30-day access also includes unlimited Study practice and monthly AI credits.</span> : <><span className="text-muted-foreground"><Zap className="mr-1 inline h-4 w-4 text-amber-500" aria-hidden="true" />{snapshot.credits.balance} AI credit{snapshot.credits.balance === 1 ? "" : "s"}</span><span className="text-muted-foreground">{snapshot.practice.limit === null ? "Unlimited practice" : `${snapshot.practice.remaining ?? 0} of ${snapshot.practice.limit} questions left today`}</span></>}
         </div>
       ) : null}
 
@@ -724,17 +723,17 @@ export default function StudyBillingPage() {
                 const recommended = plan.key === "plus_monthly";
                 return (
                   <article key={plan.key} className={cn("relative flex flex-col rounded-2xl border p-5 shadow-sm", recommended ? "border-primary/50 bg-primary/5" : "border-border bg-card")}>
-                    {recommended ? <span className="absolute -top-2.5 left-4 rounded-full bg-primary px-3 py-1 text-[11px] font-extrabold text-primary-foreground">Best value</span> : null}
-                    <div className="flex items-start justify-between gap-3"><h3 className="font-extrabold">{plan.plusDays}-day Plus</h3><p className="text-xl font-black">{money(plan.amountNaira)}</p></div>
+                    {recommended && offer !== "exam-sprint" ? <span className="absolute -top-2.5 left-4 rounded-full bg-primary px-3 py-1 text-[11px] font-extrabold text-primary-foreground">Best value</span> : null}
+                    <div className="flex items-start justify-between gap-3"><h3 className="font-extrabold">{offer === "exam-sprint" ? "30 days of Exam Sprint" : `${plan.plusDays}-day Plus`}</h3><p className="text-xl font-black">{money(plan.amountNaira)}</p></div>
                     <ul className="mt-3 space-y-2 text-sm text-muted-foreground">{offer === "exam-sprint" ? <li className="flex gap-2"><CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-emerald-600" />All published Exam Sprint mocks</li> : null}<li className="flex gap-2"><CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-emerald-600" />Unlimited daily practice</li><li className="flex gap-2"><CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-emerald-600" />{plan.credits} AI credits included</li></ul>
-                    <button type="button" onClick={() => void startPayment(plan.key)} disabled={busyPlan !== null} className={cn("mt-4 inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-extrabold disabled:opacity-60", recommended ? "bg-primary text-primary-foreground" : "border border-primary text-primary hover:bg-primary/10", focusRing)}>{busyPlan === plan.key ? <Loader2 className="h-4 w-4 animate-spin" /> : null}{snapshot.plus.active ? "Extend Plus" : "Get Plus"} · {money(plan.amountNaira)}</button>
+                    <button type="button" onClick={() => void startPayment(plan.key)} disabled={busyPlan !== null} className={cn("mt-4 inline-flex min-h-12 items-center justify-center gap-2 rounded-xl px-4 text-sm font-extrabold disabled:opacity-60", recommended ? "bg-primary text-primary-foreground" : "border border-primary text-primary hover:bg-primary/10", focusRing)}>{busyPlan === plan.key ? <Loader2 className="h-4 w-4 animate-spin" /> : null}{offer === "exam-sprint" ? snapshot.plus.active ? "Extend access" : "Pay securely" : snapshot.plus.active ? "Extend Plus" : "Get Plus"} · {money(plan.amountNaira)}</button>
                   </article>
                 );
               })}
             </div>
           </div>
 
-          <div>
+          {offer !== "exam-sprint" ? <div>
             <h2 className="text-lg font-extrabold">AI credit top-ups</h2>
             <p className="mt-1 text-sm text-muted-foreground">One-off top-ups for AI question generation. Plus is usually better value for free users who practise often.</p>
             <div className="mt-3 grid gap-3 sm:grid-cols-3">
@@ -747,12 +746,12 @@ export default function StudyBillingPage() {
                 </article>
               ))}
             </div>
-          </div>
+          </div> : null}
           <p className="text-center text-xs text-muted-foreground">{snapshot.paystackEnabled ? "Secure checkout by Paystack. Access activates after verified payment." : "Legacy bank transfer is available while Paystack is offline."}</p>
         </section>
       ) : null}
 
-      {historyItems.length > 0 ? (
+      {offer !== "exam-sprint" && historyItems.length > 0 ? (
         <section aria-labelledby="history-heading">
           <div className="mb-3 flex items-center justify-between gap-3"><h2 id="history-heading" className="text-base font-extrabold">Payment history</h2>{refreshing ? <span className="inline-flex items-center gap-1 text-xs text-muted-foreground" role="status"><Loader2 className="h-3.5 w-3.5 animate-spin" />Refreshing</span> : null}</div>
           <div className="overflow-hidden rounded-2xl border border-border bg-card">

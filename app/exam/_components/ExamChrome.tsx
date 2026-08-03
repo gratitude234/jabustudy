@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import Image from "next/image";
 import { usePathname } from "next/navigation";
 import { ArrowLeft, Moon, Sun } from "lucide-react";
 import { useTheme } from "@/components/ThemeProvider";
@@ -13,7 +14,7 @@ export default function ExamChrome({ children }: { children: React.ReactNode }) 
   const { resolvedTheme, setTheme } = useTheme();
 
   if (pathname.startsWith("/exam/attempt/")) {
-    return <div className="min-h-dvh bg-zinc-950 text-zinc-50">{children}</div>;
+    return <div className="min-h-dvh bg-background text-foreground">{children}</div>;
   }
 
   return (
@@ -21,7 +22,7 @@ export default function ExamChrome({ children }: { children: React.ReactNode }) 
       <header className="sticky top-0 z-40 border-b border-border/80 bg-background/90 backdrop-blur-xl">
         <div className="mx-auto flex h-16 w-full max-w-6xl items-center justify-between px-4 md:px-6">
           <Link href="/exam" className="inline-flex items-center gap-2.5 no-underline">
-            <img src="/logo-icon.png" alt="" className="h-9 w-9 shrink-0 object-contain" />
+            <Image src="/logo-icon.png" alt="" width={36} height={36} className="h-9 w-9 shrink-0 object-contain" />
             <span>
               <span className="block text-sm font-black leading-none text-foreground">Exam Sprint</span>
               <span className="mt-1 block text-[10px] font-bold uppercase tracking-[0.18em] text-muted-foreground">by JabuStudy</span>

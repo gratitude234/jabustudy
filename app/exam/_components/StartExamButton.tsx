@@ -47,7 +47,9 @@ export default function StartExamButton({
         return;
       }
       if (response.status === 402 && data?.checkoutUrl) {
-        router.push(data.checkoutUrl);
+        const checkout = new URL(data.checkoutUrl, window.location.origin);
+        checkout.searchParams.set("returnTo", pathname);
+        router.push(`${checkout.pathname}${checkout.search}${checkout.hash}`);
         return;
       }
       if (!response.ok || !data?.ok || !data.attempt?.id) {
