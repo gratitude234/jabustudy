@@ -1,20 +1,30 @@
 import Link from "next/link";
 import { ArrowRight, CalendarClock, CheckCircle2, Clock3, LockKeyhole, Sparkles, Target } from "lucide-react";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
-import { EXAM_SPRINT_PRICE_NAIRA, examCourseDateLabel } from "@/lib/examSprint/config";
+import {
+  EXAM_BANK_MINIMUM,
+  EXAM_DIAGNOSTIC_QUESTION_COUNT,
+  EXAM_MOCK_QUESTION_COUNT,
+  EXAM_SPRINT_PRICE_NAIRA,
+  examCourseDateLabel,
+} from "@/lib/examSprint/config";
 import { getExamCatalog } from "@/lib/examSprint/server";
+import { formatNaira } from "@/lib/utils";
 
 export const dynamic = "force-dynamic";
-
-function formatNaira(value: number) {
-  return new Intl.NumberFormat("en-NG", { style: "currency", currency: "NGN", maximumFractionDigits: 0 }).format(value);
-}
 
 export default async function ExamSprintPage() {
   const supabase = await createSupabaseServerClient();
   const { data: { user } } = await supabase.auth.getUser();
   const catalog = await getExamCatalog(user?.id);
+  const readySets = catalog.courses.flatMap((course) => course.sets);
   const available = catalog.courses.filter((course) => course.sets.length > 0).length;
+  // Read the headline numbers off a live set so the pitch cannot drift from what
+  // the exam actually serves. Falls back to the campaign defaults before launch.
+  const sample = readySets[0] ?? null;
+  const mockQuestions = sample?.attemptQuestionCount ?? EXAM_MOCK_QUESTION_COUNT;
+  const diagnosticQuestions = sample?.diagnosticQuestionCount ?? EXAM_DIAGNOSTIC_QUESTION_COUNT;
+  const bankSize = sample?.coverage.bankTotal || EXAM_BANK_MINIMUM;
 
   return (
     <div className="space-y-8 pb-12">
@@ -44,15 +54,15 @@ export default async function ExamSprintPage() {
         </div>
         <div className="mt-8 grid gap-3 sm:grid-cols-3">
           <div className="rounded-2xl border border-white/10 bg-white/5 p-4"><p className="text-2xl font-black">{available}</p><p className="mt-1 text-xs font-semibold text-zinc-400">course{available === 1 ? "" : "s"} ready now</p></div>
-          <div className="rounded-2xl border border-white/10 bg-white/5 p-4"><p className="text-2xl font-black">40</p><p className="mt-1 text-xs font-semibold text-zinc-400">questions per paid mock</p></div>
-          <div className="rounded-2xl border border-white/10 bg-white/5 p-4"><p className="text-2xl font-black">1 free</p><p className="mt-1 text-xs font-semibold text-zinc-400">10-question diagnostic</p></div>
+          <div className="rounded-2xl border border-white/10 bg-white/5 p-4"><p className="text-2xl font-black">{mockQuestions}</p><p className="mt-1 text-xs font-semibold text-zinc-400">questions per paid mock</p></div>
+          <div className="rounded-2xl border border-white/10 bg-white/5 p-4"><p className="text-2xl font-black">1 free</p><p className="mt-1 text-xs font-semibold text-zinc-400">{diagnosticQuestions}-question diagnostic</p></div>
         </div>
       </section>
 
       <section className="grid gap-4 md:grid-cols-3">
         {[
           { icon: Clock3, title: "Real exam rhythm", body: "One question at a time, a fixed timer and automatic submission when time runs out." },
-          { icon: Target, title: "Fresh mix each time", body: "Every paid attempt draws 40 randomized questions from a reviewed 60-question bank." },
+          { icon: Target, title: "Fresh mix each time", body: `Every paid attempt draws ${mockQuestions} randomized questions from a reviewed ${bankSize}-question bank.` },
           { icon: CheckCircle2, title: "Learn after submitting", body: "See your score, corrections, explanations and the topics that need another look." },
         ].map(({ icon: Icon, title, body }) => (
           <article key={title} className="rounded-3xl border border-border bg-card p-5 shadow-sm">
@@ -80,13 +90,13 @@ export default async function ExamSprintPage() {
               <article key={course.code} className="flex min-h-64 flex-col rounded-3xl border border-border bg-card p-5 shadow-sm">
                 <div className="flex items-start justify-between gap-3">
                   <span className="rounded-xl bg-primary/10 px-3 py-1.5 text-sm font-black text-primary">{course.code}</span>
-                  {course.priority ? <span className="rounded-full bg-amber-100 px-2.5 py-1 text-[10px] font-black uppercase tracking-wide text-amber-800">Priority</span> : null}
+                  {course.priority ? <span className="rounded-full bg-amber-100/60 px-2.5 py-1 text-[10px] font-black uppercase tracking-wide text-amber-800 dark:bg-amber-950/40 dark:text-amber-400">Priority</span> : null}
                 </div>
                 <h3 className="mt-4 text-lg font-extrabold leading-snug">{course.title}</h3>
                 <p className="mt-3 flex items-start gap-2 text-xs font-semibold leading-5 text-muted-foreground">
                   <CalendarClock className="mt-0.5 h-4 w-4 shrink-0" /> {examCourseDateLabel(course)}
                 </p>
-                {progress ? <p className="mt-3 text-xs font-bold text-emerald-700">Best readiness: {progress.bestPercentage}% · {progress.attempts} attempt{progress.attempts === 1 ? "" : "s"}</p> : null}
+                {progress ? <p className="mt-3 text-xs font-bold text-emerald-700 dark:text-emerald-400">Best readiness: {progress.bestPercentage}% · {progress.attempts} attempt{progress.attempts === 1 ? "" : "s"}</p> : null}
                 <div className="mt-auto pt-5">
                   {ready ? (
                     <Link href={`/exam/${course.slug}`} className="inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-primary px-4 py-3 text-sm font-extrabold text-primary-foreground no-underline hover:brightness-105">
@@ -102,7 +112,7 @@ export default async function ExamSprintPage() {
         </div>
       </section>
 
-      <p className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs leading-5 text-amber-900">
+      <p className="rounded-2xl border border-amber-300/50 bg-amber-100/40 px-4 py-3 text-xs leading-5 text-amber-900 dark:bg-amber-950/25 dark:text-amber-300">
         Exam Sprint is an independent revision tool. It does not provide leaked questions, official predictions or guaranteed examination results.
       </p>
     </div>

@@ -1023,7 +1023,7 @@ export default function AttemptReviewClient() {
       </Card>
 
       {/* ── Main two-column layout ─────────────────────────────────────────── */}
-      <div className="grid gap-4 lg:grid-cols-[300px,1fr]">
+      <div className="grid gap-4 lg:grid-cols-[300px_1fr]">
 
         {/* LEFT — Question list (desktop sidebar, hidden on mobile) */}
         <Card className="hidden rounded-3xl lg:block">

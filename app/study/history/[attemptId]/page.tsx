@@ -25,7 +25,7 @@ function AttemptReviewFallback() {
         </div>
       </Card>
 
-      <div className="mt-4 grid gap-4 lg:grid-cols-[320px,1fr]">
+      <div className="mt-4 grid gap-4 lg:grid-cols-[320px_1fr]">
         <SkeletonCard />
         <SkeletonCard lines={3} />
       </div>

@@ -324,7 +324,7 @@ export async function getExamCatalog(userId?: string | null) {
     userId
       ? adminSupabase
           .from("study_practice_attempts")
-          .select("id,set_id,experience,status,score,total_questions,submitted_at,delivery_snapshot")
+          .select("id,set_id,experience,status,score,total_questions,submitted_at,deadline_at,delivery_snapshot")
           .eq("user_id", userId)
           .eq("campaign_key", EXAM_CAMPAIGN_KEY)
           .order("created_at", { ascending: false })
@@ -354,7 +354,30 @@ export async function getExamCatalog(userId?: string | null) {
       ),
     );
   }
-  const diagnosticUsed = attempts.some((attempt) => attempt.experience === "exam_diagnostic");
+  // The free diagnostic is one-per-campaign, so a single attempt row decides the
+  // state of every course page. Callers need more than a boolean: an attempt that
+  // is still running has to stay resumable, and a finished one should link to its
+  // result instead of dead-ending on "already used".
+  const diagnosticRow = attempts.find((attempt) => attempt.experience === "exam_diagnostic") ?? null;
+  const diagnostic = diagnosticRow
+    ? (() => {
+        const deadlineMs = new Date(String(diagnosticRow.deadline_at ?? "")).getTime();
+        const total = Number(diagnosticRow.total_questions ?? 0);
+        const score = Number(diagnosticRow.score ?? 0);
+        return {
+          attemptId: String(diagnosticRow.id),
+          setId: String(diagnosticRow.set_id),
+          courseCode: setById.get(String(diagnosticRow.set_id))?.courseCode ?? null,
+          // Expired-but-unsubmitted counts as finished: getExamResult finalizes it on open.
+          resumable: diagnosticRow.status === "in_progress"
+            && Number.isFinite(deadlineMs)
+            && deadlineMs > Date.now(),
+          submitted: diagnosticRow.status === "submitted",
+          percentage: total > 0 ? Math.round((score / total) * 100) : 0,
+        };
+      })()
+    : null;
+  const diagnosticUsed = diagnostic !== null;
   const progress = new Map<string, {
     bestDiagnostic: number;
     bestMock: number;
@@ -388,6 +411,7 @@ export async function getExamCatalog(userId?: string | null) {
   return {
     access,
     diagnosticUsed,
+    diagnostic,
     courses: EXAM_COURSES.map((course) => {
       const courseSets = sets.filter(
         (set) => normalizeExamCourseCode(set.courseCode) === normalizeExamCourseCode(course.code),
@@ -612,6 +636,11 @@ export async function getExamResult(userId: string, attemptId: string) {
     answered: items.filter((item) => item.selectedOptionId).length,
     percentage: total > 0 ? Math.round((score / total) * 100) : 0,
     timeSpentSeconds: Number(attempt.time_spent_seconds ?? 0),
+    // Derived from this attempt's own window rather than the set, so a later
+    // edit to the set's time limit cannot rewrite the pace of a past attempt.
+    allowedSeconds: Math.max(0, Math.round(
+      (new Date(attempt.deadline_at).getTime() - new Date(attempt.started_at).getTime()) / 1000,
+    )),
     submittedAt: attempt.submitted_at,
     submissionReason: attempt.submission_reason,
     coverageBefore,

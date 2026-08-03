@@ -2,10 +2,16 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { ArrowLeft, GraduationCap } from "lucide-react";
+import { ArrowLeft, GraduationCap, Moon, Sun } from "lucide-react";
+import { useTheme } from "@/components/ThemeProvider";
 
 export default function ExamChrome({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
+  // Exam Sprint bypasses AppChrome, so the app's usual theme control in TopNav /
+  // SidebarNav is out of reach here. Without this, a visitor carries whatever
+  // theme they arrived with and cannot change it until they leave.
+  const { resolvedTheme, setTheme } = useTheme();
+
   if (pathname.startsWith("/exam/attempt/")) {
     return <div className="min-h-dvh bg-zinc-950 text-zinc-50">{children}</div>;
   }
@@ -23,10 +29,22 @@ export default function ExamChrome({ children }: { children: React.ReactNode }) 
               <span className="mt-1 block text-[10px] font-bold uppercase tracking-[0.18em] text-muted-foreground">by JabuStudy</span>
             </span>
           </Link>
-          <Link href="/study" className="inline-flex items-center gap-1.5 rounded-xl border border-border bg-card px-3 py-2 text-xs font-bold text-foreground no-underline hover:bg-secondary">
-            <ArrowLeft className="h-3.5 w-3.5" aria-hidden="true" />
-            Study Hub
-          </Link>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setTheme(resolvedTheme === "dark" ? "light" : "dark")}
+              className="grid h-9 w-9 place-items-center rounded-xl border border-border bg-card text-foreground hover:bg-secondary"
+              aria-label={resolvedTheme === "dark" ? "Switch to light theme" : "Switch to dark theme"}
+            >
+              {resolvedTheme === "dark"
+                ? <Sun className="h-4 w-4" aria-hidden="true" />
+                : <Moon className="h-4 w-4" aria-hidden="true" />}
+            </button>
+            <Link href="/study" className="inline-flex items-center gap-1.5 rounded-xl border border-border bg-card px-3 py-2 text-xs font-bold text-foreground no-underline hover:bg-secondary">
+              <ArrowLeft className="h-3.5 w-3.5" aria-hidden="true" />
+              Study Hub
+            </Link>
+          </div>
         </div>
       </header>
       <main className="mx-auto w-full max-w-6xl px-4 py-6 md:px-6 md:py-9">{children}</main>

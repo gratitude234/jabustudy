@@ -84,6 +84,11 @@ export default function StartExamButton({
               <div><p className="text-xs font-black uppercase tracking-[0.16em] text-violet-300">Before you begin</p><h2 id={`exam-instructions-${setId}`} className="mt-1 text-2xl font-black">CBT instructions</h2></div>
               <button type="button" onClick={() => setReviewing(false)} disabled={busy} className="grid h-9 w-9 place-items-center rounded-xl border border-white/10 bg-white/5 text-zinc-300" aria-label="Close instructions"><X className="h-4 w-4" /></button>
             </div>
+            {/* This dialog is always dark because it is the doorway into the exam
+                runner, which is always dark. Naming it stops the switch reading as a bug. */}
+            <p className="mt-4 rounded-2xl border border-white/10 bg-white/5 px-3.5 py-3 text-xs font-semibold leading-5 text-zinc-400">
+              The next screen is exam mode: no navigation, no hints, and a timer that keeps running if you leave.
+            </p>
             <div className="mt-5 grid grid-cols-2 gap-3">
               <div className="rounded-2xl border border-white/10 bg-white/5 p-3"><FileQuestion className="h-4 w-4 text-violet-300" /><p className="mt-2 text-sm font-black">{questionCount} questions</p></div>
               <div className="rounded-2xl border border-white/10 bg-white/5 p-3"><Clock3 className="h-4 w-4 text-violet-300" /><p className="mt-2 text-sm font-black">{timeLimitMinutes} minutes</p></div>
