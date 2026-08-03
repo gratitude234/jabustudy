@@ -77,25 +77,6 @@ export type PublicExamSetWithCoverage = PublicExamSet & {
   coverage: ExamQuestionCoverage;
 };
 
-export type ExamActiveAttempt = {
-  attemptId: string;
-  setId: string;
-  setTitle: string;
-  courseCode: string;
-  deadlineAt: string;
-  startedAt: string;
-  totalQuestions: number;
-};
-
-export type ExamRecentAttempt = {
-  attemptId: string;
-  kind: ExamAttemptKind;
-  score: number;
-  total: number;
-  percentage: number;
-  submittedAt: string | null;
-};
-
 export function examHttpError(message: string, status: number, code: string) {
   return Object.assign(new Error(message), { status, code });
 }
@@ -253,26 +234,17 @@ async function getEligibleQuestionIdsBySet(setIds: readonly string[]) {
   for (const setId of setIds) bySet.set(setId, []);
   if (setIds.length === 0) return bySet;
 
-  // Supabase/PostgREST caps a response at 1,000 rows by default. Exam coverage
-  // is catalogue-wide, so silently accepting that cap makes later banks appear
-  // empty as soon as the campaign crosses 1,000 verified questions.
-  const pageSize = 1_000;
-  for (let from = 0; ; from += pageSize) {
-    const { data, error } = await adminSupabase
-      .from("study_quiz_questions")
-      .select("id,set_id")
-      .in("set_id", [...setIds])
-      .eq("question_type", "mcq")
-      .not("exam_verified_at", "is", null)
-      .order("id", { ascending: true })
-      .range(from, from + pageSize - 1);
-    if (error) throw examHttpError(error.message, 500, "EXAM_QUESTION_LOAD_FAILED");
-    for (const row of data ?? []) {
-      const setId = String(row.set_id ?? "");
-      if (!bySet.has(setId)) continue;
-      bySet.get(setId)!.push(String(row.id));
-    }
-    if ((data ?? []).length < pageSize) break;
+  const { data, error } = await adminSupabase
+    .from("study_quiz_questions")
+    .select("id,set_id")
+    .in("set_id", [...setIds])
+    .eq("question_type", "mcq")
+    .not("exam_verified_at", "is", null);
+  if (error) throw examHttpError(error.message, 500, "EXAM_QUESTION_LOAD_FAILED");
+  for (const row of data ?? []) {
+    const setId = String(row.set_id ?? "");
+    if (!bySet.has(setId)) continue;
+    bySet.get(setId)!.push(String(row.id));
   }
   return bySet;
 }
@@ -352,7 +324,7 @@ export async function getExamCatalog(userId?: string | null) {
     userId
       ? adminSupabase
           .from("study_practice_attempts")
-          .select("id,set_id,experience,status,score,total_questions,started_at,submitted_at,deadline_at,delivery_snapshot")
+          .select("id,set_id,experience,status,score,total_questions,submitted_at,deadline_at,delivery_snapshot")
           .eq("user_id", userId)
           .eq("campaign_key", EXAM_CAMPAIGN_KEY)
           .order("created_at", { ascending: false })
@@ -406,25 +378,6 @@ export async function getExamCatalog(userId?: string | null) {
       })()
     : null;
   const diagnosticUsed = diagnostic !== null;
-  const activeAttempts: ExamActiveAttempt[] = attempts.flatMap((attempt) => {
-    if (attempt.status !== "in_progress" || attempt.experience !== "exam_mock") return [];
-    const deadlineAt = String(attempt.deadline_at ?? "");
-    const deadlineMs = new Date(deadlineAt).getTime();
-    if (!Number.isFinite(deadlineMs) || deadlineMs <= Date.now()) return [];
-    const snapshot = tryParseExamSnapshot(attempt.delivery_snapshot);
-    const set = setById.get(String(attempt.set_id));
-    const courseCode = snapshot?.courseCode || set?.courseCode || "";
-    if (!courseCode) return [];
-    return [{
-      attemptId: String(attempt.id),
-      setId: String(attempt.set_id),
-      setTitle: snapshot?.setTitle || set?.title || "Exam Sprint Mock",
-      courseCode,
-      deadlineAt,
-      startedAt: String(attempt.started_at ?? ""),
-      totalQuestions: snapshot?.questions.length || Math.max(0, Number(attempt.total_questions ?? 0)),
-    }];
-  });
   const progress = new Map<string, {
     bestDiagnostic: number;
     bestMock: number;
@@ -459,41 +412,18 @@ export async function getExamCatalog(userId?: string | null) {
     access,
     diagnosticUsed,
     diagnostic,
-    activeAttempts,
     courses: EXAM_COURSES.map((course) => {
-      const courseKey = normalizeExamCourseCode(course.code);
       const courseSets = sets.filter(
-        (set) => normalizeExamCourseCode(set.courseCode) === courseKey,
+        (set) => normalizeExamCourseCode(set.courseCode) === normalizeExamCourseCode(course.code),
       ).map((set) => ({
         ...set,
         coverage: coverageBySet.get(set.id) ?? calculateExamQuestionCoverage([], new Map()),
       } satisfies PublicExamSetWithCoverage));
-      const recentAttempts: ExamRecentAttempt[] = attempts
-        .filter((attempt) => attempt.status === "submitted")
-        .filter((attempt) => normalizeExamCourseCode(
-          setById.get(String(attempt.set_id))?.courseCode
-          || tryParseExamSnapshot(attempt.delivery_snapshot)?.courseCode,
-        ) === courseKey)
-        .slice(0, 3)
-        .map((attempt) => {
-          const total = Math.max(0, Number(attempt.total_questions ?? 0));
-          const score = Math.max(0, Number(attempt.score ?? 0));
-          return {
-            attemptId: String(attempt.id),
-            kind: attemptKind(attempt.experience),
-            score,
-            total,
-            percentage: total > 0 ? Math.round((score / total) * 100) : 0,
-            submittedAt: typeof attempt.submitted_at === "string" ? attempt.submitted_at : null,
-          };
-        });
       return {
         ...course,
         sets: courseSets,
-        activeAttempt: activeAttempts.find((attempt) => normalizeExamCourseCode(attempt.courseCode) === courseKey) ?? null,
-        recentAttempts,
         progress: (() => {
-          const value = progress.get(courseKey);
+          const value = progress.get(normalizeExamCourseCode(course.code));
           if (!value) return null;
           return {
             bestPercentage: value.mockAttempts > 0 ? value.bestMock : value.bestDiagnostic,

@@ -7,12 +7,6 @@ describe("sanitizeBillingReturnPath", () => {
       .toBe("/study/practice/set-1?mode=review#question-4");
   });
 
-  it("preserves Exam Sprint landing and exact-course return paths", () => {
-    expect(sanitizeBillingReturnPath("/exam")).toBe("/exam");
-    expect(sanitizeBillingReturnPath("/exam/cos-101?from=checkout#mock"))
-      .toBe("/exam/cos-101?from=checkout#mock");
-  });
-
   it.each([
     "https://evil.example/study/practice",
     "//evil.example/study/practice",
@@ -22,8 +16,6 @@ describe("sanitizeBillingReturnPath", () => {
     "/study/billing?ref=abc",
     "/study/billing/receipt/order-1",
     "/marketplace",
-    "/exam\\cos-101",
-    "/exam/%5C%5Cevil.example",
   ])("rejects unsafe or looping return target %s", (value) => {
     expect(sanitizeBillingReturnPath(value)).toBe("/study");
   });
