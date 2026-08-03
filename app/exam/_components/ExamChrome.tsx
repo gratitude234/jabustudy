@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { ArrowLeft, GraduationCap, Moon, Sun } from "lucide-react";
+import { ArrowLeft, Moon, Sun } from "lucide-react";
 import { useTheme } from "@/components/ThemeProvider";
 
 export default function ExamChrome({ children }: { children: React.ReactNode }) {
@@ -21,9 +21,7 @@ export default function ExamChrome({ children }: { children: React.ReactNode }) 
       <header className="sticky top-0 z-40 border-b border-border/80 bg-background/90 backdrop-blur-xl">
         <div className="mx-auto flex h-16 w-full max-w-6xl items-center justify-between px-4 md:px-6">
           <Link href="/exam" className="inline-flex items-center gap-2.5 no-underline">
-            <span className="grid h-9 w-9 place-items-center rounded-2xl bg-primary text-primary-foreground shadow-sm">
-              <GraduationCap className="h-5 w-5" aria-hidden="true" />
-            </span>
+            <img src="/logo-icon.png" alt="" className="h-9 w-9 shrink-0 object-contain" />
             <span>
               <span className="block text-sm font-black leading-none text-foreground">Exam Sprint</span>
               <span className="mt-1 block text-[10px] font-bold uppercase tracking-[0.18em] text-muted-foreground">by JabuStudy</span>
