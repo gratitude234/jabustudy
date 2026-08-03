@@ -11,7 +11,7 @@ export type ExamCourse = {
   code: string;
   slug: string;
   title: string;
-  examAt: string;
+  examAt: string | null;
   priority: boolean;
 };
 
@@ -27,6 +27,17 @@ export const EXAM_COURSES: readonly ExamCourse[] = [
   { code: "PHY 122", slug: "phy-122", title: "Physics 122", examAt: "2026-08-18T12:00:00+01:00", priority: false },
   { code: "BIO 121", slug: "bio-121", title: "Biology 121", examAt: "2026-08-18T12:00:00+01:00", priority: false },
   { code: "GNS 321", slug: "gns-321", title: "CAC and Apostle Joseph Ayo Babalola", examAt: "2026-08-19T12:00:00+01:00", priority: false },
+  { code: "BIO 101", slug: "bio-101", title: "Biology 101", examAt: null, priority: false },
+  { code: "BIO 107", slug: "bio-107", title: "Biology 107", examAt: null, priority: false },
+  { code: "CHM 101", slug: "chm-101", title: "Chemistry 101", examAt: null, priority: false },
+  { code: "CHM 107", slug: "chm-107", title: "Chemistry 107", examAt: null, priority: false },
+  { code: "PHY 101", slug: "phy-101", title: "Physics 101", examAt: null, priority: false },
+  { code: "PHY 107", slug: "phy-107", title: "Physics 107", examAt: null, priority: false },
+  { code: "MTH 101", slug: "mth-101", title: "Mathematics 101", examAt: null, priority: false },
+  { code: "COS 101", slug: "cos-101", title: "Computer Science 101", examAt: null, priority: false },
+  { code: "GNS 111", slug: "gns-111", title: "Communication in English", examAt: null, priority: false },
+  { code: "GNS 112", slug: "gns-112", title: "Fundamentals of Computing I", examAt: null, priority: false },
+  { code: "GNS 113", slug: "gns-113", title: "Use of Library", examAt: null, priority: false },
 ] as const;
 
 export function normalizeExamCourseCode(value: unknown) {
@@ -42,7 +53,8 @@ export function findExamCourse(value: unknown) {
 }
 
 export function examCourseDateLabel(course: ExamCourse) {
-  return new Intl.DateTimeFormat("en-NG", {
+  if (!course.examAt) return "Exam date to be announced";
+  const date = new Intl.DateTimeFormat("en-NG", {
     weekday: "long",
     day: "numeric",
     month: "long",
@@ -50,4 +62,5 @@ export function examCourseDateLabel(course: ExamCourse) {
     minute: "2-digit",
     timeZone: "Africa/Lagos",
   }).format(new Date(course.examAt));
+  return `${date} WAT`;
 }

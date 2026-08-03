@@ -28,7 +28,7 @@ export default async function ExamCoursePage({ params }: { params: Promise<{ cou
           <div>
             <span className="rounded-xl bg-primary/10 px-3 py-1.5 text-sm font-black text-primary">{course.code}</span>
             <h1 className="mt-4 text-3xl font-black tracking-tight">{course.title}</h1>
-            <p className="mt-3 flex items-center gap-2 text-sm font-semibold text-muted-foreground"><CalendarClock className="h-4 w-4" /> {examCourseDateLabel(course)} WAT</p>
+            <p className="mt-3 flex items-center gap-2 text-sm font-semibold text-muted-foreground"><CalendarClock className="h-4 w-4" /> {examCourseDateLabel(course)}</p>
           </div>
           {catalog.access.active ? (
             <span className="inline-flex items-center gap-2 rounded-full bg-emerald-100 px-3 py-2 text-xs font-black text-emerald-800"><CheckCircle2 className="h-4 w-4" /> Full access</span>

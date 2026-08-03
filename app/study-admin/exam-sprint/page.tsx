@@ -24,7 +24,7 @@ type ExamSet = {
   completed: number;
   learners: number;
 };
-type Course = { code: string; slug: string; title: string; examAt: string; priority: boolean; sets: ExamSet[] };
+type Course = { code: string; slug: string; title: string; examAt: string | null; priority: boolean; sets: ExamSet[] };
 type Snapshot = {
   ok: boolean;
   minimumQuestions: number;

@@ -84,7 +84,7 @@ export default async function ExamSprintPage() {
                 </div>
                 <h3 className="mt-4 text-lg font-extrabold leading-snug">{course.title}</h3>
                 <p className="mt-3 flex items-start gap-2 text-xs font-semibold leading-5 text-muted-foreground">
-                  <CalendarClock className="mt-0.5 h-4 w-4 shrink-0" /> {examCourseDateLabel(course)} WAT
+                  <CalendarClock className="mt-0.5 h-4 w-4 shrink-0" /> {examCourseDateLabel(course)}
                 </p>
                 {progress ? <p className="mt-3 text-xs font-bold text-emerald-700">Best readiness: {progress.bestPercentage}% · {progress.attempts} attempt{progress.attempts === 1 ? "" : "s"}</p> : null}
                 <div className="mt-auto pt-5">
