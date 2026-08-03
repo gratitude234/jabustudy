@@ -25,6 +25,38 @@ function forbidden() {
   return Object.assign(new Error("Only a super study admin can manage Exam Sprint."), { status: 403, code: "SUPER_ADMIN_REQUIRED" });
 }
 
+type ExamQuestionRow = {
+  id: string;
+  set_id: string;
+  exam_verified_at: string | null;
+};
+
+async function getExamQuestionRows(setIds: string[]): Promise<ExamQuestionRow[]> {
+  if (!setIds.length) return [];
+
+  // Supabase projects commonly cap a single REST response at 1,000 rows. Exam
+  // Sprint can exceed that across all banks, so page through the complete result
+  // instead of silently treating later banks as empty.
+  const pageSize = 1_000;
+  const rows: ExamQuestionRow[] = [];
+
+  for (let from = 0; ; from += pageSize) {
+    const { data, error } = await adminSupabase
+      .from("study_quiz_questions")
+      .select("id,set_id,exam_verified_at")
+      .in("set_id", setIds)
+      .order("id", { ascending: true })
+      .range(from, from + pageSize - 1);
+    if (error) throw error;
+
+    const page = (data ?? []) as ExamQuestionRow[];
+    rows.push(...page);
+    if (page.length < pageSize) break;
+  }
+
+  return rows;
+}
+
 export async function GET(req: NextRequest) {
   try {
     const auth = await requireStudyModeratorFromRequest(req);
@@ -37,13 +69,8 @@ export async function GET(req: NextRequest) {
       .order("created_at", { ascending: true });
     if (setError) throw setError;
     const setIds = (setRows ?? []).map((set) => String(set.id));
-    const [{ data: questions, error: questionError }, { data: attempts, error: attemptError }, { data: orders, error: orderError }] = await Promise.all([
-      setIds.length
-        ? adminSupabase
-            .from("study_quiz_questions")
-            .select("id,set_id,exam_verified_at")
-            .in("set_id", setIds)
-        : Promise.resolve({ data: [], error: null }),
+    const [questions, { data: attempts, error: attemptError }, { data: orders, error: orderError }] = await Promise.all([
+      getExamQuestionRows(setIds),
       adminSupabase
         .from("study_practice_attempts")
         .select("id,user_id,set_id,experience,status")
@@ -55,11 +82,10 @@ export async function GET(req: NextRequest) {
         .eq("status", "approved")
         .like("return_path", "/exam%"),
     ]);
-    if (questionError) throw questionError;
     if (attemptError) throw attemptError;
     if (orderError) throw orderError;
 
-    const questionRows = (questions ?? []) as Array<{ set_id: string; exam_verified_at: string | null }>;
+    const questionRows = questions;
     const attemptRows = (attempts ?? []) as Array<{ user_id: string; set_id: string; experience: string; status: string }>;
     const sets = (setRows ?? []).map((set) => {
       const setQuestions = questionRows.filter((question) => question.set_id === set.id);
