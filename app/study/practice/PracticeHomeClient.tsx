@@ -124,7 +124,7 @@ function practiceSetSelectFields(disabledColumns: Set<PracticeSetOptionalField>)
   ].join(",");
 }
 
-// Per-set attempt summary â€" injected into QuizSetCard for personal context
+// Per-set attempt summary — injected into QuizSetCard for personal context
 type SetAttemptSummary = {
   attemptCount: number;         // total submitted attempts on this set
   bestPct: number | null;       // highest score % across submitted attempts
@@ -520,7 +520,7 @@ function MiniTabs({ value, onChange }: { value: ViewKey; onChange: (v: ViewKey) 
   );
 }
 
-// â"€â"€â"€ Score ring â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€
+// ─── Score ring ───────────────────────────────────────────────────────────────
 
 function PracticeHeroV2({
   dueLoading,
@@ -689,7 +689,7 @@ function ScoreRingSmall({
   );
 }
 
-// â"€â"€â"€ Quiz set card â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€
+// ─── Quiz set card ─────────────────────────────────────────────────────────────
 
 function QuizSetCard({
   s,
@@ -830,11 +830,11 @@ function QuizSetCard({
   );
 }
 
-// â"€â"€â"€ Rep status â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€
+// ─── Rep status ───────────────────────────────────────────────────────────────
 
-// â"€â"€â"€ Create Set Drawer â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€
+// ─── Create Set Drawer ────────────────────────────────────────────────────────
 
-// â"€â"€â"€ "Suggested for today" widget â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€
+// ─── "Suggested for today" widget ────────────────────────────────────────────
 
 function SuggestedTodayWidget({ userId }: { userId: string | null }) {
   const [suggestion, setSuggestion] = React.useState<{
@@ -1022,7 +1022,7 @@ function PracticeHomeInner() {
   const [dueData, setDueData] = useState<DuePracticeData | null>(null);
   const [dueLoading, setDueLoading] = useState(true);
 
-  // User prefs â€" used to personalize the "For you" tab without requiring URL params
+  // User prefs — used to personalize the "For you" tab without requiring URL params
   const [userPrefs, setUserPrefs] = useState<{
     course_code?: string | null;
     level?: number | null;
@@ -1177,7 +1177,7 @@ function PracticeHomeInner() {
           setDueData(json);
         }
       } catch {
-        // non-fatal â€" Due Today card just stays hidden
+        // non-fatal — Due Today card just stays hidden
       } finally {
         if (mounted) setDueLoading(false);
       }
@@ -1185,7 +1185,7 @@ function PracticeHomeInner() {
     return () => { mounted = false; };
   }, []);
 
-  // â"€â"€ Per-set attempt summaries â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€
+  // ── Per-set attempt summaries ─────────────────────────────────────────────
   // Loaded whenever the visible set list changes. Gives each card personal
   // context: best score, attempt count, in-progress state.
   const [setAttemptMap, setSetAttemptMap] = useState<Record<string, SetAttemptSummary>>({});
@@ -1359,7 +1359,7 @@ function PracticeHomeInner() {
 
         if (!cancelled) setSetAttemptMap(map);
       } catch {
-        // Non-fatal â€" cards just show without personal context
+        // Non-fatal — cards just show without personal context
       } finally {
         if (!cancelled) setAttemptLoading(false);
       }

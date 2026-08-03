@@ -484,7 +484,7 @@ export async function notifyRepsNewPendingMaterial({
   }
 }
 
-// â”€â”€â”€ Student-created course review â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ─── Student-created course review ─────────────────────────────────────────
 
 /**
  * Notify study admins after a material upload has been verified and made live.

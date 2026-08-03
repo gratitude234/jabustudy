@@ -20,7 +20,7 @@ import {
   Zap,
 } from "lucide-react";
 
-// â”€â”€ Types â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── Types ──────────────────────────────────────────────────────────────────────
 type MaterialType = "past_question" | "handout" | "slides" | "note" | "timetable" | "other" | string;
 
 type Course = {
@@ -93,7 +93,7 @@ type PersonalizationLite = {
   courseIds?: string[];
 } | null;
 
-// â”€â”€ Helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── Helpers ────────────────────────────────────────────────────────────────────
 function norm(v: string) {
   return v.trim().replace(/\s+/g, " ");
 }
@@ -163,7 +163,7 @@ function typeMeta(t: string | null) {
 
 const TYPE_ORDER = ["past_question", "note", "handout", "slides", "timetable", "other"];
 
-// â”€â”€ Sub-components â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── Sub-components ─────────────────────────────────────────────────────────────
 function MaterialCard({ m, courseCode }: { m: Material; courseCode: string }) {
   const title = norm(String(m.title ?? "Untitled material"));
   const meta = typeMeta(m.material_type ?? "other");
@@ -255,7 +255,7 @@ function SectionHeader({ title, action }: { title: string; action?: React.ReactN
   );
 }
 
-// â”€â”€ Page â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── Page ───────────────────────────────────────────────────────────────────────
 export default function CourseHubPage() {
   const router = useRouter();
   const params = useParams<{ code: string }>();
@@ -422,7 +422,7 @@ export default function CourseHubPage() {
   return (
     <div className="space-y-3 pb-28 md:pb-8">
 
-      {/* â”€â”€ Hero â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
+      {/* ── Hero ──────────────────────────────────────────────────────────────── */}
       <div className="overflow-hidden rounded-3xl border border-border bg-card shadow-sm">
         <div className="bg-primary px-5 pt-5 pb-5">
           <div className="mb-4 flex items-center justify-between">
@@ -449,7 +449,7 @@ export default function CourseHubPage() {
             <p className="mt-0.5 text-xs text-white/50">{[dept, faculty].filter(Boolean).join(" / ")}</p>
           )}
 
-          {/* Contextual stats â€” only show non-zero */}
+          {/* Contextual stats — only show non-zero */}
           {!loading && course && (materials.length > 0 || practiceSets.length > 0) && (
             <div className="mt-4 flex flex-wrap gap-2">
               {materials.length > 0 && (
@@ -522,7 +522,7 @@ export default function CourseHubPage() {
 
       {course && (
         <>
-          {/* â”€â”€ Primary session CTA â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
+          {/* ── Primary session CTA ──────────────────────────────────────────── */}
           <div className="rounded-3xl border border-border bg-card p-4 shadow-sm space-y-3">
             <div className="flex items-center gap-2">
               <Zap className="h-4 w-4 text-primary" />
@@ -595,7 +595,7 @@ export default function CourseHubPage() {
             </div>
           </div>
 
-          {/* â”€â”€ Level filter â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
+          {/* ── Level filter ─────────────────────────────────────────────────── */}
           {availableLevels.length > 1 && (
             <div className="flex gap-2 overflow-x-auto [scrollbar-width:none] py-0.5">
               {(["all", ...availableLevels] as string[]).map((lv) => (
@@ -616,7 +616,7 @@ export default function CourseHubPage() {
             </div>
           )}
 
-          {/* â”€â”€ Past Questions â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
+          {/* ── Past Questions ───────────────────────────────────────────────── */}
           {pastQuestions.length > 0 && (
             <div className="rounded-3xl border border-border bg-card p-4 shadow-sm">
               <SectionHeader
@@ -640,7 +640,7 @@ export default function CourseHubPage() {
             </div>
           )}
 
-          {/* â”€â”€ Practice Sets â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
+          {/* ── Practice Sets ────────────────────────────────────────────────── */}
           <div className="rounded-3xl border border-border bg-card p-4 shadow-sm">
             <SectionHeader
               title="Practice Sets"
@@ -679,7 +679,7 @@ export default function CourseHubPage() {
             </a>
           </div>
 
-          {/* â”€â”€ Other Materials â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
+          {/* ── Other Materials ──────────────────────────────────────────────── */}
           {otherMaterials.length > 0 && (
             <div className="rounded-3xl border border-border bg-card p-4 shadow-sm">
               <SectionHeader title="Materials" />
@@ -743,7 +743,7 @@ export default function CourseHubPage() {
             </div>
           )}
 
-          {/* Empty â€” no materials at all */}
+          {/* Empty — no materials at all */}
           {materials.length === 0 && (
             <div className="rounded-3xl border border-dashed border-border bg-card p-6 text-center shadow-sm">
               <div className="mx-auto mb-3 grid h-12 w-12 place-items-center rounded-2xl bg-secondary">
@@ -760,7 +760,7 @@ export default function CourseHubPage() {
             </div>
           )}
 
-          {/* â”€â”€ Q&A â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
+          {/* ── Q&A ─────────────────────────────────────────────────────────── */}
           <div className="rounded-3xl border border-border bg-card p-4 shadow-sm">
             <div className="flex items-center justify-between gap-2 mb-3">
               <div className="flex items-center gap-2">
