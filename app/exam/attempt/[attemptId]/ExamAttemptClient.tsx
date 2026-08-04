@@ -6,7 +6,6 @@ import {
   AlertTriangle,
   ArrowLeft,
   ArrowRight,
-  Check,
   CheckCircle2,
   Clock3,
   Flag,
@@ -450,11 +449,11 @@ export default function ExamAttemptClient() {
   const lowTime = remainingMs !== null && remainingMs <= 5 * 60_000;
   const criticalTime = remainingMs !== null && remainingMs <= 60_000;
   const status = !online
-    ? { label: pendingCount > 0 ? "Offline — saved on this phone" : "Offline", icon: WifiOff, tone: "text-amber-700 dark:text-amber-300" }
+    ? { label: pendingCount > 0 ? "Saved on phone" : "Offline", icon: WifiOff, tone: "text-amber-700 dark:text-amber-300" }
     : syncState === "saving"
-      ? { label: "Saving", icon: Loader2, tone: "text-primary" }
+      ? { label: "Saving…", icon: Loader2, tone: "text-primary" }
       : syncState === "retrying"
-        ? { label: "Retrying", icon: RefreshCw, tone: "text-primary" }
+        ? { label: "Syncing…", icon: RefreshCw, tone: "text-primary" }
         : syncState === "error"
           ? { label: "Not synced", icon: AlertTriangle, tone: "text-rose-600 dark:text-rose-300" }
           : { label: "Saved", icon: CheckCircle2, tone: "text-emerald-700 dark:text-emerald-300" };
@@ -465,31 +464,29 @@ export default function ExamAttemptClient() {
   const firstFlaggedIndex = attempt.questions.findIndex((question) => responses[question.id]?.flagged);
 
   return (
-    <div className="min-h-dvh bg-[#f8f7fc] pb-24 text-foreground dark:bg-[#0d0a18] lg:pb-8">
+    <div className="min-h-dvh bg-background pb-20 text-foreground lg:pb-8">
       <header className="sticky top-0 z-40 border-b border-border bg-background/95 pt-[env(safe-area-inset-top)] backdrop-blur-xl">
-        <div className="mx-auto flex h-14 max-w-6xl items-center gap-2 px-3 sm:h-16 sm:px-5">
-          <button type="button" onClick={() => setLeaveDialogOpen(true)} className="grid h-10 w-10 shrink-0 place-items-center rounded-xl border border-border bg-card text-muted-foreground transition hover:bg-secondary hover:text-foreground focus-visible:ring-2 focus-visible:ring-primary" aria-label="Exit this exam"><X className="h-4 w-4" aria-hidden="true" /></button>
+        <div className="mx-auto flex h-[3.25rem] max-w-6xl items-center gap-2 px-3 sm:h-14 sm:px-5">
+          <button type="button" onClick={() => setLeaveDialogOpen(true)} className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-secondary/70 text-muted-foreground transition hover:bg-secondary hover:text-foreground focus-visible:ring-2 focus-visible:ring-primary" aria-label="Exit this exam"><X className="h-4 w-4" aria-hidden="true" /></button>
           <div className="min-w-0 flex-1 text-center sm:text-left">
-            <p className="truncate text-xs font-black sm:text-sm">{attempt.courseCode}</p>
-            <p className="mt-0.5 text-[10px] font-bold text-muted-foreground">Question {index + 1}/{attempt.questions.length}</p>
+            <p className="truncate text-xs font-bold sm:text-sm">{attempt.courseCode}</p>
+            <div className="mt-0.5 flex items-center justify-center gap-1.5 text-[9px] font-semibold text-muted-foreground sm:justify-start sm:text-[10px]">
+              <span>Question {index + 1}/{attempt.questions.length}</span>
+              <span aria-hidden="true">·</span>
+              <span className={cn("inline-flex min-w-0 items-center gap-1 truncate", status.tone)} role="status" aria-live="polite">
+                <StatusIcon className={cn("h-3 w-3 shrink-0", (syncState === "saving" || syncState === "retrying") && online && "animate-spin")} aria-hidden="true" /> {status.label}
+              </span>
+            </div>
           </div>
-          <button type="button" onClick={() => setPaletteOpen(true)} className="relative grid h-10 w-10 shrink-0 place-items-center rounded-xl border border-border bg-card text-foreground transition hover:bg-secondary focus-visible:ring-2 focus-visible:ring-primary lg:hidden" aria-label={`Open question map. ${answered} of ${attempt.questions.length} answered`}><Grid3X3 className="h-4 w-4" aria-hidden="true" />{flagged > 0 ? <span className="absolute -right-1 -top-1 grid h-4 min-w-4 place-items-center rounded-full bg-amber-400 px-1 text-[9px] font-black text-amber-950">{flagged}</span> : null}</button>
-          <div aria-label={`${msToClock(remainingMs ?? 0)} remaining`} className={cn("inline-flex h-10 min-w-[5.45rem] shrink-0 items-center justify-center gap-1.5 rounded-xl border px-2.5 font-mono text-sm font-black tabular-nums", criticalTime ? "border-rose-400/40 bg-rose-500/10 text-rose-600 dark:text-rose-300" : lowTime ? "border-amber-400/40 bg-amber-500/10 text-amber-700 dark:text-amber-300" : "border-border bg-card")}>
+          <button type="button" onClick={() => setPaletteOpen(true)} className="relative grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-secondary/70 text-foreground transition hover:bg-secondary focus-visible:ring-2 focus-visible:ring-primary lg:hidden" aria-label={`Open question map. ${answered} of ${attempt.questions.length} answered`}><Grid3X3 className="h-4 w-4" aria-hidden="true" />{flagged > 0 ? <span className="absolute -right-1 -top-1 grid h-4 min-w-4 place-items-center rounded-full bg-amber-400 px-1 text-[9px] font-black text-amber-950">{flagged}</span> : null}</button>
+          <div aria-label={`${msToClock(remainingMs ?? 0)} remaining`} className={cn("inline-flex h-9 min-w-[5.1rem] shrink-0 items-center justify-center gap-1.5 rounded-lg border border-transparent px-2 font-mono text-xs font-bold tabular-nums", criticalTime ? "border-rose-400/40 bg-rose-500/10 text-rose-600 dark:text-rose-300" : lowTime ? "border-amber-400/40 bg-amber-500/10 text-amber-700 dark:text-amber-300" : "bg-secondary/70")}>
             <Clock3 className="h-3.5 w-3.5" aria-hidden="true" /> {msToClock(remainingMs ?? 0)}
           </div>
         </div>
-        <div className="border-t border-border/60 px-3 py-1.5 sm:px-5">
-          <div className="mx-auto flex max-w-6xl items-center justify-between gap-3">
-            <p className={cn("inline-flex min-w-0 items-center gap-1.5 truncate text-[10px] font-black", status.tone)} role="status" aria-live="polite">
-              <StatusIcon className={cn("h-3.5 w-3.5 shrink-0", (syncState === "saving" || syncState === "retrying") && online && "animate-spin")} aria-hidden="true" /> {status.label}
-            </p>
-            <p className="shrink-0 text-[10px] font-bold text-muted-foreground">{answered} answered{flagged > 0 ? ` · ${flagged} flagged` : ""}</p>
-          </div>
-        </div>
-        <div className="h-0.5 bg-secondary"><div className="h-full bg-emerald-500 transition-[width]" style={{ width: `${answeredPercentage}%` }} /></div>
+        <div className="h-px bg-secondary" role="progressbar" aria-label={`${answered} of ${attempt.questions.length} questions answered`} aria-valuemin={0} aria-valuemax={attempt.questions.length} aria-valuenow={answered}><div className="h-full bg-emerald-500 transition-[width]" style={{ width: `${answeredPercentage}%` }} /></div>
       </header>
 
-      <div className="mx-auto grid max-w-6xl gap-5 px-4 py-4 sm:py-5 md:px-6 lg:grid-cols-[minmax(0,1fr)_280px]">
+      <div className="mx-auto grid max-w-6xl gap-5 px-4 py-3 sm:py-5 md:px-6 lg:grid-cols-[minmax(0,1fr)_280px]">
         <main className="min-w-0">
           {saveError ? (
             <div className="mb-4 flex items-start gap-3 rounded-xl border border-amber-300/50 bg-amber-100/50 px-4 py-3 text-sm text-amber-900 dark:bg-amber-950/30 dark:text-amber-200" role="alert">
@@ -499,14 +496,10 @@ export default function ExamAttemptClient() {
             </div>
           ) : null}
 
-          <section className="-mx-4 border-y border-border bg-card px-4 py-4 sm:mx-0 sm:rounded-2xl sm:border sm:p-6 md:p-7">
-            <div className="flex items-center justify-between gap-3">
-              <p className="text-[10px] font-black uppercase tracking-[0.16em] text-primary">Question {index + 1}</p>
-              {currentResponse.flagged ? <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2 py-1 text-[10px] font-black uppercase text-amber-800 dark:bg-amber-950/40 dark:text-amber-300"><Flag className="h-3 w-3 fill-current" aria-hidden="true" /> Flagged</span> : null}
-            </div>
-            <h1 ref={headingRef} tabIndex={-1} className="scroll-mt-28 pt-2.5 text-lg font-bold leading-7 outline-none sm:text-xl sm:leading-8">{current.prompt}</h1>
+          <section className="py-2 sm:rounded-2xl sm:border sm:border-border sm:bg-card sm:p-6 md:p-7">
+            <h1 ref={headingRef} tabIndex={-1} className="scroll-mt-20 text-[1.35rem] font-semibold leading-8 tracking-[-0.015em] outline-none sm:text-xl sm:leading-8">{current.prompt}</h1>
 
-            <div className="mt-5 space-y-2.5 sm:mt-6 sm:space-y-3" role="radiogroup" aria-label={`Answer options for question ${index + 1}`}>
+            <div className="mt-4 space-y-2.5 sm:mt-6 sm:space-y-3" role="radiogroup" aria-label={`Answer options for question ${index + 1}`}>
               {current.options.map((option, optionIndex) => {
                 const selected = currentResponse.selectedOptionId === option.id;
                 const key = String.fromCharCode(65 + optionIndex);
@@ -518,19 +511,18 @@ export default function ExamAttemptClient() {
                     aria-checked={selected}
                     disabled={submitting || timeExpired}
                     onClick={() => queueResponse(current.id, { selectedOptionId: option.id })}
-                    className={cn("flex min-h-14 w-full items-start gap-3 rounded-xl border p-3.5 text-left transition focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-background disabled:opacity-60 sm:p-4", selected ? "border-primary bg-primary/[0.09] shadow-[inset_0_0_0_1px_var(--primary)]" : "border-border bg-background hover:border-primary/35 hover:bg-secondary/40")}
+                    className={cn("flex min-h-12 w-full items-start gap-3 rounded-lg border p-3 text-left transition focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-background disabled:opacity-60 sm:p-4", selected ? "border-primary bg-primary/[0.055]" : "border-border/75 bg-card hover:border-primary/30 hover:bg-secondary/25")}
                   >
-                    <span className={cn("grid h-8 w-8 shrink-0 place-items-center rounded-lg border text-xs font-black", selected ? "border-primary bg-primary text-primary-foreground" : "border-border bg-card text-muted-foreground")}>{key}</span>
-                    <span className="min-w-0 flex-1 pt-1 text-base font-semibold leading-6">{option.text}</span>
-                    {selected ? <span className="mt-1 grid h-6 w-6 shrink-0 place-items-center rounded-full bg-primary text-primary-foreground"><Check className="h-3.5 w-3.5" aria-hidden="true" /></span> : null}
+                    <span className={cn("grid h-8 w-8 shrink-0 place-items-center rounded-lg border text-xs font-bold", selected ? "border-primary bg-primary text-primary-foreground" : "border-border/80 bg-background text-muted-foreground")}>{key}</span>
+                    <span className="min-w-0 flex-1 pt-1 text-[15px] font-medium leading-6 sm:text-base">{option.text}</span>
                   </button>
                 );
               })}
             </div>
 
-            <div className="mt-4 flex flex-wrap items-center gap-2 border-t border-border/70 pt-3">
-              <button type="button" disabled={submitting || timeExpired} onClick={() => queueResponse(current.id, { flagged: !currentResponse.flagged })} className={cn("inline-flex min-h-10 items-center gap-2 rounded-xl border px-3.5 text-xs font-black transition disabled:opacity-50", currentResponse.flagged ? "border-amber-300/60 bg-amber-100/50 text-amber-800 dark:bg-amber-950/35 dark:text-amber-300" : "border-border text-muted-foreground hover:bg-secondary hover:text-foreground")}><Flag className={cn("h-4 w-4", currentResponse.flagged && "fill-current")} aria-hidden="true" /> {currentResponse.flagged ? "Remove flag" : "Flag for review"}</button>
-              {currentResponse.selectedOptionId ? <button type="button" disabled={submitting || timeExpired} onClick={() => queueResponse(current.id, { selectedOptionId: null })} className="min-h-10 rounded-xl px-3 text-xs font-black text-muted-foreground transition hover:bg-secondary hover:text-foreground disabled:opacity-50">Clear answer</button> : null}
+            <div className="mt-3 flex flex-wrap items-center gap-x-5 gap-y-1">
+              <button type="button" disabled={submitting || timeExpired} onClick={() => queueResponse(current.id, { flagged: !currentResponse.flagged })} className={cn("inline-flex min-h-10 items-center gap-1.5 px-0.5 text-xs font-semibold transition disabled:opacity-50", currentResponse.flagged ? "text-amber-700 dark:text-amber-300" : "text-muted-foreground hover:text-foreground")}><Flag className={cn("h-4 w-4", currentResponse.flagged && "fill-current")} aria-hidden="true" /> {currentResponse.flagged ? "Remove flag" : "Flag for review"}</button>
+              {currentResponse.selectedOptionId ? <button type="button" disabled={submitting || timeExpired} onClick={() => queueResponse(current.id, { selectedOptionId: null })} className="min-h-10 px-0.5 text-xs font-semibold text-muted-foreground transition hover:text-foreground disabled:opacity-50">Clear answer</button> : null}
             </div>
           </section>
 
@@ -552,10 +544,10 @@ export default function ExamAttemptClient() {
         </aside>
       </div>
 
-      <nav className="fixed inset-x-0 bottom-0 z-40 border-t border-border bg-background/95 px-3 pb-[max(0.65rem,env(safe-area-inset-bottom))] pt-2.5 backdrop-blur-xl lg:hidden" aria-label="Exam navigation">
-        <div className="mx-auto grid max-w-lg grid-cols-[3.25rem_1fr] gap-2.5">
-          <button type="button" disabled={index === 0 || submitting || timeExpired} onClick={() => setIndex((value) => Math.max(0, value - 1))} className="grid min-h-13 place-items-center rounded-xl border border-border bg-card disabled:opacity-35" aria-label="Previous question"><ArrowLeft className="h-5 w-5" aria-hidden="true" /></button>
-          <button type="button" disabled={submitting || timeExpired} onClick={() => atLast ? setPaletteOpen(true) : setIndex((value) => Math.min(attempt.questions.length - 1, value + 1))} className="inline-flex min-h-13 items-center justify-center gap-2 rounded-xl bg-primary px-4 text-sm font-black text-primary-foreground disabled:opacity-35" aria-label={atLast ? "Open question review" : `Go to question ${index + 2}`}>{atLast ? "Review answers" : "Next question"}{atLast ? <Grid3X3 className="h-4 w-4" aria-hidden="true" /> : <ArrowRight className="h-4 w-4" aria-hidden="true" />}</button>
+      <nav className="fixed inset-x-0 bottom-0 z-40 border-t border-border/70 bg-background/95 px-3 pb-[max(0.55rem,env(safe-area-inset-bottom))] pt-2 backdrop-blur-xl lg:hidden" aria-label="Exam navigation">
+        <div className="mx-auto grid max-w-lg grid-cols-[3rem_1fr] gap-2.5">
+          <button type="button" disabled={index === 0 || submitting || timeExpired} onClick={() => setIndex((value) => Math.max(0, value - 1))} className="grid min-h-12 place-items-center rounded-lg border border-border/75 bg-card text-muted-foreground disabled:opacity-30" aria-label="Previous question"><ArrowLeft className="h-5 w-5" aria-hidden="true" /></button>
+          <button type="button" disabled={submitting || timeExpired} onClick={() => atLast ? setPaletteOpen(true) : setIndex((value) => Math.min(attempt.questions.length - 1, value + 1))} className="inline-flex min-h-12 items-center justify-center gap-2 rounded-lg bg-primary px-4 text-sm font-bold text-primary-foreground disabled:opacity-35" aria-label={atLast ? "Open question review" : `Go to question ${index + 2}`}>{atLast ? "Review answers" : "Next question"}{atLast ? <Grid3X3 className="h-4 w-4" aria-hidden="true" /> : <ArrowRight className="h-4 w-4" aria-hidden="true" />}</button>
         </div>
       </nav>
 

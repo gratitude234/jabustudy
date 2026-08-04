@@ -43,9 +43,13 @@ The interface is designed from a 360 px mobile viewport outward. Desktop adds sp
 ### Attempt runner
 
 - Removes normal site navigation and makes the question the visual focus.
-- Shows remaining time, answered progress, flagged count and save state in a compact header.
+- Shows remaining time, question position and save state in one compact header line.
+- Uses a one-pixel answered-progress line instead of a separate status band.
 - Uses large answer targets with permanent A–D labels and an explicit selected state.
+- Keeps mobile options white and lightly bordered; only the selected option receives an indigo tint.
+- Uses the filled A–D marker as the selected signal instead of stacking multiple check indicators.
 - Lets learners clear an accidental choice or flag a question for review.
+- Renders flag and clear as quiet text actions rather than additional bordered cards.
 - Keeps the primary movement label as “Next question” whether or not an answer is selected.
 - Changes the last-question action to “Review answers” instead of disabling Next.
 - Provides a six-column mobile question map with first-unanswered and first-flagged shortcuts.
@@ -78,6 +82,8 @@ The interface is designed from a 360 px mobile viewport outward. Desktop adds sp
 - Rose means wrong, failed or critically low time.
 - Large elevation is limited to the campaign header and active-attempt surface.
 - Related rows share one bordered container; they are not rendered as separate floating cards.
+- The mobile CBT runner uses one continuous paper-like background rather than stacked card surfaces.
+- Bold weight is reserved for prompts, critical status and primary actions.
 - Primary touch targets are at least 48 px high.
 - Important text remains readable without relying on colour alone.
 - Safe-area padding is used for sticky headers, sheets and bottom actions.
