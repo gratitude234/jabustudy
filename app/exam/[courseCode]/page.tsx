@@ -30,6 +30,7 @@ import CoverageMeter from "../_components/CoverageMeter";
 import ExamRemainingTime from "../_components/ExamRemainingTime";
 
 export const dynamic = "force-dynamic";
+const ATTEMPT_PREVIEW_COUNT = 3;
 
 function attemptDate(value: string | null) {
   if (!value) return "Completed recently";
@@ -53,7 +54,7 @@ function AttemptLink({ attempt, bordered = false }: { attempt: ExamRecentAttempt
     <Link
       href={`/exam/result/${attempt.attemptId}`}
       className={cn(
-        "group flex min-h-16 items-center gap-3 px-3.5 py-2.5 no-underline transition hover:bg-secondary/35 focus-visible:bg-secondary/35 focus-visible:outline-none",
+        "group flex min-h-14 items-center gap-3 px-3.5 py-2 no-underline transition hover:bg-secondary/35 focus-visible:bg-secondary/35 focus-visible:outline-none",
         bordered && "border-t border-border",
       )}
     >
@@ -96,8 +97,8 @@ export default async function ExamCoursePage({ params }: { params: Promise<{ cou
     { delivered: 0, bankTotal: 0 },
   );
   const mockAttempts = progress?.basedOn === "mock" ? progress.attempts : 0;
-  const latestAttempts = recentAttempts.slice(0, 3);
-  const olderAttempts = recentAttempts.slice(3);
+  const latestAttempts = recentAttempts.slice(0, ATTEMPT_PREVIEW_COUNT);
+  const olderAttempts = recentAttempts.slice(ATTEMPT_PREVIEW_COUNT);
 
   const primaryAction = () => {
     if (activeAttempt) {
@@ -229,8 +230,8 @@ export default async function ExamCoursePage({ params }: { params: Promise<{ cou
             {latestAttempts.map((attempt, index) => <AttemptLink key={attempt.attemptId} attempt={attempt} bordered={index > 0} />)}
             {olderAttempts.length > 0 ? (
               <details className="group border-t border-border">
-                <summary className="flex min-h-11 cursor-pointer list-none items-center justify-center gap-1.5 bg-secondary/30 px-4 text-xs font-bold text-primary marker:hidden hover:bg-secondary/55">
-                  View all {recentAttempts.length} attempts
+                <summary className="flex min-h-10 cursor-pointer list-none items-center justify-center gap-1.5 bg-secondary/30 px-4 text-[11px] font-bold text-primary marker:hidden hover:bg-secondary/55">
+                  Show {olderAttempts.length} older attempt{olderAttempts.length === 1 ? "" : "s"}
                   <ChevronDown className="h-4 w-4 transition-transform group-open:rotate-180" aria-hidden="true" />
                 </summary>
                 <div className="border-t border-border">

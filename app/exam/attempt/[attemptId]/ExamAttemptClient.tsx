@@ -459,7 +459,7 @@ export default function ExamAttemptClient() {
           : { label: "Saved", icon: CheckCircle2, tone: "text-emerald-700 dark:text-emerald-300" };
   const StatusIcon = status.icon;
   const atLast = index >= attempt.questions.length - 1;
-  const answeredPercentage = attempt.questions.length > 0 ? Math.round((answered / attempt.questions.length) * 100) : 0;
+  const questionProgressPercentage = attempt.questions.length > 0 ? Math.round(((index + 1) / attempt.questions.length) * 100) : 0;
   const firstUnansweredIndex = attempt.questions.findIndex((question) => !responses[question.id]?.selectedOptionId);
   const firstFlaggedIndex = attempt.questions.findIndex((question) => responses[question.id]?.flagged);
 
@@ -483,7 +483,7 @@ export default function ExamAttemptClient() {
             <Clock3 className="h-3.5 w-3.5" aria-hidden="true" /> {msToClock(remainingMs ?? 0)}
           </div>
         </div>
-        <div className="h-px bg-secondary" role="progressbar" aria-label={`${answered} of ${attempt.questions.length} questions answered`} aria-valuemin={0} aria-valuemax={attempt.questions.length} aria-valuenow={answered}><div className="h-full bg-emerald-500 transition-[width]" style={{ width: `${answeredPercentage}%` }} /></div>
+        <div className="h-1 bg-secondary" role="progressbar" aria-label={`Question ${index + 1} of ${attempt.questions.length}`} aria-valuemin={1} aria-valuemax={attempt.questions.length} aria-valuenow={index + 1}><div className="h-full rounded-r-full bg-primary transition-[width]" style={{ width: `${questionProgressPercentage}%` }} /></div>
       </header>
 
       <div className="mx-auto grid max-w-6xl gap-5 px-4 py-3 sm:py-5 md:px-6 lg:grid-cols-[minmax(0,1fr)_280px]">
@@ -496,10 +496,10 @@ export default function ExamAttemptClient() {
             </div>
           ) : null}
 
-          <section className="py-2 sm:rounded-2xl sm:border sm:border-border sm:bg-card sm:p-6 md:p-7">
-            <h1 ref={headingRef} tabIndex={-1} className="scroll-mt-20 text-[1.35rem] font-semibold leading-8 tracking-[-0.015em] outline-none sm:text-xl sm:leading-8">{current.prompt}</h1>
+          <section className="py-1.5 sm:rounded-2xl sm:border sm:border-border sm:bg-card sm:p-6 md:p-7">
+            <h1 ref={headingRef} tabIndex={-1} className="scroll-mt-20 text-[1.2rem] font-semibold leading-7 tracking-[-0.012em] outline-none sm:text-xl sm:leading-8">{current.prompt}</h1>
 
-            <div className="mt-4 space-y-2.5 sm:mt-6 sm:space-y-3" role="radiogroup" aria-label={`Answer options for question ${index + 1}`}>
+            <div className="mt-3.5 space-y-2 sm:mt-6 sm:space-y-3" role="radiogroup" aria-label={`Answer options for question ${index + 1}`}>
               {current.options.map((option, optionIndex) => {
                 const selected = currentResponse.selectedOptionId === option.id;
                 const key = String.fromCharCode(65 + optionIndex);
@@ -511,18 +511,18 @@ export default function ExamAttemptClient() {
                     aria-checked={selected}
                     disabled={submitting || timeExpired}
                     onClick={() => queueResponse(current.id, { selectedOptionId: option.id })}
-                    className={cn("flex min-h-12 w-full items-start gap-3 rounded-lg border p-3 text-left transition focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-background disabled:opacity-60 sm:p-4", selected ? "border-primary bg-primary/[0.055]" : "border-border/75 bg-card hover:border-primary/30 hover:bg-secondary/25")}
+                    className={cn("flex min-h-12 w-full items-start gap-2.5 rounded-xl border p-2.5 text-left transition focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-background disabled:opacity-60 sm:gap-3 sm:p-4", selected ? "border-primary bg-primary/[0.055]" : "border-border/75 bg-card hover:border-primary/30 hover:bg-secondary/25")}
                   >
-                    <span className={cn("grid h-8 w-8 shrink-0 place-items-center rounded-lg border text-xs font-bold", selected ? "border-primary bg-primary text-primary-foreground" : "border-border/80 bg-background text-muted-foreground")}>{key}</span>
-                    <span className="min-w-0 flex-1 pt-1 text-[15px] font-medium leading-6 sm:text-base">{option.text}</span>
+                    <span className={cn("grid h-8 w-8 shrink-0 place-items-center rounded-lg border text-xs font-bold", selected ? "border-primary bg-primary text-primary-foreground" : "border-border/80 bg-background text-foreground/60")}>{key}</span>
+                    <span className="min-w-0 flex-1 pt-1 text-sm font-medium leading-5 sm:text-base sm:leading-6">{option.text}</span>
                   </button>
                 );
               })}
             </div>
 
-            <div className="mt-3 flex flex-wrap items-center gap-x-5 gap-y-1">
-              <button type="button" disabled={submitting || timeExpired} onClick={() => queueResponse(current.id, { flagged: !currentResponse.flagged })} className={cn("inline-flex min-h-10 items-center gap-1.5 px-0.5 text-xs font-semibold transition disabled:opacity-50", currentResponse.flagged ? "text-amber-700 dark:text-amber-300" : "text-muted-foreground hover:text-foreground")}><Flag className={cn("h-4 w-4", currentResponse.flagged && "fill-current")} aria-hidden="true" /> {currentResponse.flagged ? "Remove flag" : "Flag for review"}</button>
-              {currentResponse.selectedOptionId ? <button type="button" disabled={submitting || timeExpired} onClick={() => queueResponse(current.id, { selectedOptionId: null })} className="min-h-10 px-0.5 text-xs font-semibold text-muted-foreground transition hover:text-foreground disabled:opacity-50">Clear answer</button> : null}
+            <div className="mt-3 flex flex-wrap items-center gap-2">
+              <button type="button" disabled={submitting || timeExpired} onClick={() => queueResponse(current.id, { flagged: !currentResponse.flagged })} className={cn("inline-flex min-h-10 items-center gap-1.5 rounded-lg px-2.5 text-[11px] font-semibold transition disabled:opacity-50", currentResponse.flagged ? "bg-amber-100 text-amber-800 dark:bg-amber-950/40 dark:text-amber-300" : "bg-secondary/70 text-foreground/70 hover:bg-secondary hover:text-foreground")}><Flag className={cn("h-3.5 w-3.5", currentResponse.flagged && "fill-current")} aria-hidden="true" /> {currentResponse.flagged ? "Remove flag" : "Flag for review"}</button>
+              {currentResponse.selectedOptionId ? <button type="button" disabled={submitting || timeExpired} onClick={() => queueResponse(current.id, { selectedOptionId: null })} className="min-h-10 rounded-lg bg-secondary/70 px-2.5 text-[11px] font-semibold text-foreground/70 transition hover:bg-secondary hover:text-foreground disabled:opacity-50">Clear answer</button> : null}
             </div>
           </section>
 
@@ -545,9 +545,9 @@ export default function ExamAttemptClient() {
       </div>
 
       <nav className="fixed inset-x-0 bottom-0 z-40 border-t border-border/70 bg-background/95 px-3 pb-[max(0.55rem,env(safe-area-inset-bottom))] pt-2 backdrop-blur-xl lg:hidden" aria-label="Exam navigation">
-        <div className="mx-auto grid max-w-lg grid-cols-[3rem_1fr] gap-2.5">
-          <button type="button" disabled={index === 0 || submitting || timeExpired} onClick={() => setIndex((value) => Math.max(0, value - 1))} className="grid min-h-12 place-items-center rounded-lg border border-border/75 bg-card text-muted-foreground disabled:opacity-30" aria-label="Previous question"><ArrowLeft className="h-5 w-5" aria-hidden="true" /></button>
-          <button type="button" disabled={submitting || timeExpired} onClick={() => atLast ? setPaletteOpen(true) : setIndex((value) => Math.min(attempt.questions.length - 1, value + 1))} className="inline-flex min-h-12 items-center justify-center gap-2 rounded-lg bg-primary px-4 text-sm font-bold text-primary-foreground disabled:opacity-35" aria-label={atLast ? "Open question review" : `Go to question ${index + 2}`}>{atLast ? "Review answers" : "Next question"}{atLast ? <Grid3X3 className="h-4 w-4" aria-hidden="true" /> : <ArrowRight className="h-4 w-4" aria-hidden="true" />}</button>
+        <div className="mx-auto grid max-w-lg grid-cols-[2.75rem_1fr] gap-2.5">
+          <button type="button" disabled={index === 0 || submitting || timeExpired} onClick={() => setIndex((value) => Math.max(0, value - 1))} className="grid min-h-11 place-items-center rounded-lg border border-border/75 bg-card text-foreground/65 disabled:opacity-30" aria-label="Previous question"><ArrowLeft className="h-4 w-4" aria-hidden="true" /></button>
+          <button type="button" disabled={submitting || timeExpired} onClick={() => atLast ? setPaletteOpen(true) : setIndex((value) => Math.min(attempt.questions.length - 1, value + 1))} className="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg bg-primary px-4 text-sm font-bold text-primary-foreground disabled:opacity-35" aria-label={atLast ? "Open question review" : `Go to question ${index + 2}`}>{atLast ? "Review answers" : "Next question"}{atLast ? <Grid3X3 className="h-4 w-4" aria-hidden="true" /> : <ArrowRight className="h-4 w-4" aria-hidden="true" />}</button>
         </div>
       </nav>
 
