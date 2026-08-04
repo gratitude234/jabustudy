@@ -6,13 +6,13 @@ import {
   BarChart3,
   CalendarDays,
   CheckCircle2,
+  ChevronDown,
   ChevronRight,
   Clock3,
   FileQuestion,
   History,
   LockKeyhole,
   PlayCircle,
-  RotateCcw,
   ShieldCheck,
   Sparkles,
 } from "lucide-react";
@@ -23,7 +23,7 @@ import {
   findExamCourse,
   normalizeExamCourseCode,
 } from "@/lib/examSprint/config";
-import { getExamCatalog } from "@/lib/examSprint/server";
+import { getExamCatalog, type ExamRecentAttempt } from "@/lib/examSprint/server";
 import { cn, formatNaira } from "@/lib/utils";
 import StartExamButton from "../_components/StartExamButton";
 import CoverageMeter from "../_components/CoverageMeter";
@@ -46,6 +46,27 @@ function scoreTone(percentage: number) {
   if (percentage >= 75) return "bg-emerald-100 text-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-300";
   if (percentage >= 50) return "bg-amber-100 text-amber-800 dark:bg-amber-950/40 dark:text-amber-300";
   return "bg-rose-100 text-rose-700 dark:bg-rose-950/40 dark:text-rose-300";
+}
+
+function AttemptLink({ attempt, bordered = false }: { attempt: ExamRecentAttempt; bordered?: boolean }) {
+  return (
+    <Link
+      href={`/exam/result/${attempt.attemptId}`}
+      className={cn(
+        "group flex min-h-16 items-center gap-3 px-3.5 py-2.5 no-underline transition hover:bg-secondary/35 focus-visible:bg-secondary/35 focus-visible:outline-none",
+        bordered && "border-t border-border",
+      )}
+    >
+      <span className={cn("grid h-9 w-11 shrink-0 place-items-center rounded-lg text-xs font-extrabold tabular-nums", scoreTone(attempt.percentage))}>{attempt.percentage}%</span>
+      <span className="min-w-0 flex-1">
+        <span className="block text-[13px] font-bold">{attempt.kind === "mock" ? "Full mock" : "Free diagnostic"}</span>
+        <span className="mt-0.5 block truncate text-[11px] text-muted-foreground">{attempt.score}/{attempt.total} correct · {attemptDate(attempt.submittedAt)}</span>
+      </span>
+      <span className="inline-flex min-h-8 shrink-0 items-center gap-0.5 text-[11px] font-bold text-primary">
+        Review <ChevronRight className="h-3.5 w-3.5 transition group-hover:translate-x-0.5" aria-hidden="true" />
+      </span>
+    </Link>
+  );
 }
 
 export default async function ExamCoursePage({ params }: { params: Promise<{ courseCode: string }> }) {
@@ -75,43 +96,45 @@ export default async function ExamCoursePage({ params }: { params: Promise<{ cou
     { delivered: 0, bankTotal: 0 },
   );
   const mockAttempts = progress?.basedOn === "mock" ? progress.attempts : 0;
+  const latestAttempts = recentAttempts.slice(0, 3);
+  const olderAttempts = recentAttempts.slice(3);
 
   const primaryAction = () => {
     if (activeAttempt) {
       return (
-        <Link href={`/exam/attempt/${activeAttempt.attemptId}`} className="inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-primary px-5 text-sm font-black text-primary-foreground no-underline shadow-sm transition hover:brightness-105 focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2">
+        <Link href={`/exam/attempt/${activeAttempt.attemptId}`} className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-xl bg-primary px-4 text-sm font-bold text-primary-foreground no-underline shadow-sm transition hover:brightness-105 focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2">
           <PlayCircle className="h-4 w-4" aria-hidden="true" /> Resume timed mock
         </Link>
       );
     }
     if (resumableDiagnostic) {
       return (
-        <Link href={`/exam/attempt/${resumableDiagnostic.attemptId}`} className="inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-primary px-5 text-sm font-black text-primary-foreground no-underline shadow-sm transition hover:brightness-105 focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2">
+        <Link href={`/exam/attempt/${resumableDiagnostic.attemptId}`} className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-xl bg-primary px-4 text-sm font-bold text-primary-foreground no-underline shadow-sm transition hover:brightness-105 focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2">
           <PlayCircle className="h-4 w-4" aria-hidden="true" /> Resume free diagnostic
         </Link>
       );
     }
     if (!primarySet) {
-      return <span className="inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-secondary px-5 text-sm font-black text-muted-foreground"><FileQuestion className="h-4 w-4" aria-hidden="true" /> Course coming soon</span>;
+      return <span className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-xl bg-secondary px-4 text-sm font-bold text-muted-foreground"><FileQuestion className="h-4 w-4" aria-hidden="true" /> Course coming soon</span>;
     }
     if (catalog.access.active) {
       return (
-        <StartExamButton setId={primarySet.id} kind="mock" questionCount={primarySet.attemptQuestionCount} timeLimitMinutes={primarySet.timeLimitMinutes} className="min-h-12 rounded-xl">
+        <StartExamButton setId={primarySet.id} kind="mock" questionCount={primarySet.attemptQuestionCount} timeLimitMinutes={primarySet.timeLimitMinutes} className="min-h-11 rounded-xl">
           {mockAttempts > 0 ? "Start next full mock" : "Start first full mock"}
         </StartExamButton>
       );
     }
     if (!diagnostic && user && diagnosticSet) {
       return (
-        <StartExamButton setId={diagnosticSet.id} kind="diagnostic" questionCount={diagnosticSet.diagnosticQuestionCount} timeLimitMinutes={diagnosticSet.diagnosticTimeLimitMinutes} className="min-h-12 rounded-xl">
+        <StartExamButton setId={diagnosticSet.id} kind="diagnostic" questionCount={diagnosticSet.diagnosticQuestionCount} timeLimitMinutes={diagnosticSet.diagnosticTimeLimitMinutes} className="min-h-11 rounded-xl">
           Start free diagnostic
         </StartExamButton>
       );
     }
     if (!diagnostic && !user) {
-      return <Link href={`/login?next=${encodeURIComponent(returnPath)}`} className="inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-primary px-5 text-sm font-black text-primary-foreground no-underline">Sign in to try free <ArrowRight className="h-4 w-4" aria-hidden="true" /></Link>;
+      return <Link href={`/login?next=${encodeURIComponent(returnPath)}`} className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-xl bg-primary px-4 text-sm font-bold text-primary-foreground no-underline">Sign in to try free <ArrowRight className="h-4 w-4" aria-hidden="true" /></Link>;
     }
-    return <Link href={billingHref} className="inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-primary px-5 text-sm font-black text-primary-foreground no-underline"><LockKeyhole className="h-4 w-4" aria-hidden="true" /> Unlock all mocks · {formatNaira(EXAM_SPRINT_PRICE_NAIRA)}</Link>;
+    return <Link href={billingHref} className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-xl bg-primary px-4 text-sm font-bold text-primary-foreground no-underline"><LockKeyhole className="h-4 w-4" aria-hidden="true" /> Unlock all mocks · {formatNaira(EXAM_SPRINT_PRICE_NAIRA)}</Link>;
   };
 
   const actionLabel = activeAttempt
@@ -135,127 +158,134 @@ export default async function ExamCoursePage({ params }: { params: Promise<{ cou
   const showMockDetails = Boolean(primarySet && !activeAttempt && !resumableDiagnostic);
 
   return (
-    <div className="space-y-6 pb-12">
+    <div className="mx-auto max-w-3xl space-y-5 pb-10">
       <nav aria-label="Course navigation">
         <Link href="/exam#courses" className="inline-flex min-h-10 items-center gap-1.5 text-sm font-bold text-primary no-underline hover:underline">
           <ArrowLeft className="h-4 w-4" aria-hidden="true" /> Back to courses
         </Link>
       </nav>
 
-      <section className="relative isolate overflow-hidden rounded-[1.5rem] bg-[#21164f] p-5 text-white shadow-[0_18px_50px_rgba(33,22,79,0.16)] sm:p-7">
-        <div className="pointer-events-none absolute -right-20 -top-20 -z-10 h-60 w-60 rounded-full bg-[#725cff]/35 blur-2xl" />
-        <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
-          <span className="rounded-lg bg-white/12 px-2.5 py-1.5 text-xs font-black">{course.code}</span>
-          {activeAttempt ? <span className="inline-flex items-center gap-1 text-[10px] font-black uppercase tracking-wide text-amber-200"><Clock3 className="h-3 w-3" aria-hidden="true" /> Mock in progress</span> : null}
-          {catalog.access.active ? <span className="inline-flex items-center gap-1 text-[10px] font-black uppercase tracking-wide text-emerald-200"><CheckCircle2 className="h-3 w-3" aria-hidden="true" /> Access active</span> : null}
+      <section className="relative isolate overflow-hidden rounded-2xl border border-primary/15 bg-gradient-to-br from-primary/[0.09] via-card to-card">
+        <div className="pointer-events-none absolute -right-16 -top-20 -z-10 h-52 w-52 rounded-full bg-primary/10 blur-2xl" />
+        <div className="p-4 pb-4 sm:p-5 sm:pb-5">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="rounded-lg bg-primary/10 px-2.5 py-1.5 text-[11px] font-extrabold text-primary">{course.code}</span>
+              {activeAttempt ? <span className="inline-flex items-center gap-1 text-[9px] font-bold uppercase tracking-[0.12em] text-amber-700 dark:text-amber-300"><Clock3 className="h-3 w-3" aria-hidden="true" /> Mock in progress</span> : null}
+            </div>
+            {catalog.access.active ? <span className="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-700 dark:text-emerald-300"><CheckCircle2 className="h-3.5 w-3.5" aria-hidden="true" /> Access active</span> : null}
+          </div>
+          <h1 className="mt-3 max-w-2xl text-[1.45rem] font-extrabold leading-[1.15] tracking-[-0.025em] sm:text-3xl">{course.title}</h1>
+          <p className="mt-1.5 flex max-w-xl items-start gap-1.5 text-[11px] font-medium leading-5 text-muted-foreground sm:text-xs"><CalendarDays className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden="true" /> {examCourseDateLabel(course)}</p>
         </div>
-        <h1 className="mt-3 max-w-2xl text-[1.8rem] font-black leading-[1.12] tracking-[-0.035em] sm:text-4xl">{course.title}</h1>
-        <p className="mt-2 flex max-w-xl items-start gap-2 text-xs font-semibold leading-5 text-violet-100/75 sm:text-sm"><CalendarDays className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" /> {examCourseDateLabel(course)}</p>
 
-        <div className="mt-5 grid grid-cols-3 divide-x divide-white/10 overflow-hidden rounded-2xl bg-white/[0.07] px-1">
-          <div className="px-3 py-3">
-            <p className="text-lg font-black tabular-nums">{progress ? `${progress.bestPercentage}%` : "New"}</p>
-            <p className="mt-0.5 text-[9px] font-bold leading-3 text-violet-200/65">Best score</p>
+        <div className="grid grid-cols-3 divide-x divide-primary/10 border-t border-primary/10 bg-card/35">
+          <div className="px-4 py-2.5 sm:py-3">
+            <p className="text-sm font-extrabold tabular-nums sm:text-base">{progress ? `${progress.bestPercentage}%` : "New"}</p>
+            <p className="mt-0.5 text-[9px] font-medium leading-3.5 text-muted-foreground">Best score</p>
           </div>
-          <div className="px-3 py-3">
-            <p className="text-lg font-black tabular-nums">{coverage.delivered}/{coverage.bankTotal || 0}</p>
-            <p className="mt-0.5 text-[9px] font-bold leading-3 text-violet-200/65">Questions seen</p>
+          <div className="px-4 py-2.5 sm:py-3">
+            <p className="text-sm font-extrabold tabular-nums sm:text-base">{coverage.delivered}/{coverage.bankTotal || 0}</p>
+            <p className="mt-0.5 text-[9px] font-medium leading-3.5 text-muted-foreground">Questions seen</p>
           </div>
-          <div className="px-3 py-3">
-            <p className="text-lg font-black tabular-nums">{progress?.attempts ?? 0}</p>
-            <p className="mt-0.5 text-[9px] font-bold leading-3 text-violet-200/65">Attempts</p>
+          <div className="px-4 py-2.5 sm:py-3">
+            <p className="text-sm font-extrabold tabular-nums sm:text-base">{progress?.attempts ?? 0}</p>
+            <p className="mt-0.5 text-[9px] font-medium leading-3.5 text-muted-foreground">Attempts</p>
           </div>
         </div>
       </section>
 
-      <section className={cn("rounded-[1.35rem] border bg-card p-4 shadow-[0_10px_30px_rgba(33,22,79,0.06)] sm:p-5", (activeAttempt || resumableDiagnostic) ? "border-amber-300/60" : "border-primary/20")} aria-labelledby="recommended-action-heading">
+      <section className={cn("rounded-2xl border bg-card p-4", (activeAttempt || resumableDiagnostic) ? "border-amber-300/60 dark:border-amber-900/60" : "border-border")} aria-labelledby="recommended-action-heading">
         <div className="flex items-start gap-3">
-          <span className={cn("grid h-11 w-11 shrink-0 place-items-center rounded-xl", (activeAttempt || resumableDiagnostic) ? "bg-amber-100 text-amber-800 dark:bg-amber-950/40 dark:text-amber-300" : "bg-primary/10 text-primary")}>
-            {(activeAttempt || resumableDiagnostic) ? <Clock3 className="h-5 w-5" aria-hidden="true" /> : <Sparkles className="h-5 w-5" aria-hidden="true" />}
+          <span className={cn("grid h-9 w-9 shrink-0 place-items-center rounded-lg", (activeAttempt || resumableDiagnostic) ? "bg-amber-100 text-amber-800 dark:bg-amber-950/40 dark:text-amber-300" : "bg-primary/10 text-primary")}>
+            {(activeAttempt || resumableDiagnostic) ? <Clock3 className="h-4 w-4" aria-hidden="true" /> : <Sparkles className="h-4 w-4" aria-hidden="true" />}
           </span>
           <div className="min-w-0 flex-1">
-            <p className="text-[10px] font-black uppercase tracking-[0.16em] text-primary">{(activeAttempt || resumableDiagnostic) ? "Continue now" : "Up next"}</p>
-            <h2 id="recommended-action-heading" className="mt-1 text-lg font-black leading-snug">{actionLabel}</h2>
-            <p className="mt-1 text-sm leading-5 text-muted-foreground">{actionDetail}</p>
+            <p className="text-[9px] font-bold uppercase tracking-[0.15em] text-primary">{(activeAttempt || resumableDiagnostic) ? "Continue now" : "Up next"}</p>
+            <h2 id="recommended-action-heading" className="mt-0.5 text-base font-extrabold leading-snug">{actionLabel}</h2>
+            <p className="mt-1 text-xs leading-5 text-muted-foreground">{actionDetail}</p>
           </div>
         </div>
 
         {showMockDetails && primarySet ? (
-          <div className="mt-4 flex flex-wrap gap-2 text-[11px] font-bold text-muted-foreground">
-            <span className="inline-flex items-center gap-1.5 rounded-full bg-secondary px-2.5 py-1.5"><FileQuestion className="h-3.5 w-3.5 text-primary" aria-hidden="true" /> {(catalog.access.active || diagnostic) ? primarySet.attemptQuestionCount : primarySet.diagnosticQuestionCount} questions</span>
-            <span className="inline-flex items-center gap-1.5 rounded-full bg-secondary px-2.5 py-1.5"><Clock3 className="h-3.5 w-3.5 text-primary" aria-hidden="true" /> {(catalog.access.active || diagnostic) ? primarySet.timeLimitMinutes : primarySet.diagnosticTimeLimitMinutes} minutes</span>
-            <span className="inline-flex items-center gap-1.5 rounded-full bg-secondary px-2.5 py-1.5"><ShieldCheck className="h-3.5 w-3.5 text-primary" aria-hidden="true" /> Auto-saved</span>
+          <div className="mt-3 flex flex-wrap gap-x-4 gap-y-2 border-y border-border py-2.5 text-[11px] font-semibold text-muted-foreground">
+            <span className="inline-flex items-center gap-1.5"><FileQuestion className="h-3.5 w-3.5 text-primary" aria-hidden="true" /> {(catalog.access.active || diagnostic) ? primarySet.attemptQuestionCount : primarySet.diagnosticQuestionCount} questions</span>
+            <span className="inline-flex items-center gap-1.5"><Clock3 className="h-3.5 w-3.5 text-primary" aria-hidden="true" /> {(catalog.access.active || diagnostic) ? primarySet.timeLimitMinutes : primarySet.diagnosticTimeLimitMinutes} minutes</span>
+            <span className="inline-flex items-center gap-1.5"><ShieldCheck className="h-3.5 w-3.5 text-primary" aria-hidden="true" /> Auto-saved</span>
           </div>
         ) : null}
 
-        {activeAttempt ? <p className="mt-3 inline-flex items-center gap-1.5 rounded-full bg-amber-100 px-2.5 py-1.5 text-xs font-black text-amber-800 dark:bg-amber-950/40 dark:text-amber-300"><Clock3 className="h-3.5 w-3.5" aria-hidden="true" /><ExamRemainingTime deadlineAt={activeAttempt.deadlineAt} /></p> : null}
-        <div className="mt-4">{primaryAction()}</div>
+        {activeAttempt ? <p className="mt-3 inline-flex items-center gap-1.5 text-xs font-bold text-amber-700 dark:text-amber-300"><Clock3 className="h-3.5 w-3.5" aria-hidden="true" /><ExamRemainingTime deadlineAt={activeAttempt.deadlineAt} /></p> : null}
+        <div className="mt-3">{primaryAction()}</div>
       </section>
 
       {recentAttempts.length > 0 ? (
         <section aria-labelledby="recent-attempts-heading">
-          <div className="mb-3 flex items-center justify-between gap-3">
-            <div><p className="text-[10px] font-black uppercase tracking-[0.16em] text-primary">Your progress</p><h2 id="recent-attempts-heading" className="mt-0.5 text-xl font-black">Recent attempts</h2></div>
-            <History className="h-5 w-5 text-muted-foreground" aria-hidden="true" />
+          <div className="mb-2.5 flex items-end justify-between gap-3">
+            <div><p className="text-[9px] font-bold uppercase tracking-[0.15em] text-primary">Your progress</p><h2 id="recent-attempts-heading" className="mt-0.5 text-lg font-extrabold">Recent attempts</h2></div>
+            <p className="inline-flex items-center gap-1.5 pb-0.5 text-[11px] font-medium text-muted-foreground"><History className="h-3.5 w-3.5" aria-hidden="true" /> {recentAttempts.length} completed</p>
           </div>
           <div className="overflow-hidden rounded-2xl border border-border bg-card">
-            {recentAttempts.map((attempt, index) => (
-              <Link key={attempt.attemptId} href={`/exam/result/${attempt.attemptId}`} className={cn("group flex min-h-[4.5rem] items-center gap-3 px-4 py-3 no-underline transition hover:bg-secondary/45", index > 0 && "border-t border-border")}>
-                <span className={cn("grid h-10 w-12 shrink-0 place-items-center rounded-xl text-sm font-black", scoreTone(attempt.percentage))}>{attempt.percentage}%</span>
-                <span className="min-w-0 flex-1"><span className="block text-sm font-extrabold">{attempt.kind === "mock" ? "Full mock" : "Free diagnostic"}</span><span className="mt-0.5 block truncate text-xs text-muted-foreground">{attempt.score}/{attempt.total} correct · {attemptDate(attempt.submittedAt)}</span></span>
-                <span className="text-[11px] font-black text-primary">Review</span>
-                <ChevronRight className="h-4 w-4 text-muted-foreground transition group-hover:translate-x-0.5 group-hover:text-primary" aria-hidden="true" />
-              </Link>
-            ))}
+            {latestAttempts.map((attempt, index) => <AttemptLink key={attempt.attemptId} attempt={attempt} bordered={index > 0} />)}
+            {olderAttempts.length > 0 ? (
+              <details className="group border-t border-border">
+                <summary className="flex min-h-11 cursor-pointer list-none items-center justify-center gap-1.5 bg-secondary/30 px-4 text-xs font-bold text-primary marker:hidden hover:bg-secondary/55">
+                  View all {recentAttempts.length} attempts
+                  <ChevronDown className="h-4 w-4 transition-transform group-open:rotate-180" aria-hidden="true" />
+                </summary>
+                <div className="border-t border-border">
+                  {olderAttempts.map((attempt, index) => <AttemptLink key={attempt.attemptId} attempt={attempt} bordered={index > 0} />)}
+                </div>
+              </details>
+            ) : null}
           </div>
         </section>
       ) : null}
 
       {sets.length > 0 ? (
         <section aria-labelledby="practice-bank-heading">
-          <div className="mb-3">
-            <p className="text-[10px] font-black uppercase tracking-[0.16em] text-primary">Practice bank</p>
-            <h2 id="practice-bank-heading" className="mt-0.5 text-xl font-black">Your question bank</h2>
-            <p className="mt-1 text-sm leading-5 text-muted-foreground">Every mock creates a fresh mix and prioritises questions you have not seen.</p>
+          <div className="mb-2.5">
+            <p className="text-[9px] font-bold uppercase tracking-[0.15em] text-primary">Practice</p>
+            <h2 id="practice-bank-heading" className="mt-0.5 text-lg font-extrabold">Question bank</h2>
+            <p className="mt-1 text-xs leading-5 text-muted-foreground">Each mock prioritises unseen questions, then revisits missed and older ones.</p>
           </div>
           <div className="overflow-hidden rounded-2xl border border-border bg-card">
             {sets.map((set, index) => {
               const selectedNext = set.id === primarySet?.id;
               return (
-                <article key={set.id} className={cn("p-4 sm:p-5", index > 0 && "border-t border-border")}>
+                <article key={set.id} className={cn("p-4", index > 0 && "border-t border-border")}>
                   <div className="flex items-start gap-3">
-                    <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-primary/10 text-primary"><FileQuestion className="h-[18px] w-[18px]" aria-hidden="true" /></span>
+                    <span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-primary/10 text-primary"><FileQuestion className="h-4 w-4" aria-hidden="true" /></span>
                     <div className="min-w-0 flex-1">
                       <div className="flex flex-wrap items-start justify-between gap-2">
                         <div>
-                          <h3 className="text-sm font-extrabold">{set.title}</h3>
-                          <p className="mt-1 text-xs font-semibold text-muted-foreground">{set.coverage.bankTotal} reviewed questions</p>
+                          <h3 className="text-[13px] font-bold">{set.title}</h3>
+                          <p className="mt-0.5 text-[11px] text-muted-foreground">{set.coverage.bankTotal} reviewed questions</p>
                         </div>
-                        {selectedNext ? <span className="rounded-full bg-primary/10 px-2 py-1 text-[9px] font-black uppercase tracking-wide text-primary">Next bank</span> : null}
+                        {selectedNext ? <span className="rounded-full bg-primary/10 px-2 py-1 text-[9px] font-bold uppercase tracking-wide text-primary">Next bank</span> : null}
                       </div>
-                      <CoverageMeter className="mt-3" label="Questions practised" delivered={set.coverage.delivered} bankTotal={set.coverage.bankTotal} complete={set.coverage.complete} />
+                      <CoverageMeter compact showDescription={false} className="mt-3" label="Questions practised" delivered={set.coverage.delivered} bankTotal={set.coverage.bankTotal} complete={set.coverage.complete} />
                     </div>
                   </div>
 
-                  <div className="mt-3 flex flex-wrap gap-x-4 gap-y-2 pl-[3.25rem] text-[11px] font-semibold text-muted-foreground">
-                    <span>{set.attemptQuestionCount} per mock</span>
+                  <div className="mt-3 flex flex-wrap gap-x-4 gap-y-2 pl-12 text-[11px] font-medium text-muted-foreground">
+                    <span>{set.attemptQuestionCount} questions per mock</span>
                     <span>{set.timeLimitMinutes} minutes</span>
                   </div>
 
                   {catalog.access.active && !activeAttempt && !resumableDiagnostic && !selectedNext ? (
-                    <div className="mt-4"><StartExamButton setId={set.id} kind="mock" questionCount={set.attemptQuestionCount} timeLimitMinutes={set.timeLimitMinutes} className="min-h-11 rounded-xl bg-secondary text-foreground shadow-none hover:bg-primary/10 hover:text-primary">Use this bank</StartExamButton></div>
+                    <div className="mt-3"><StartExamButton setId={set.id} kind="mock" questionCount={set.attemptQuestionCount} timeLimitMinutes={set.timeLimitMinutes} className="min-h-10 rounded-xl bg-secondary py-2 text-xs text-foreground shadow-none hover:bg-primary/10 hover:text-primary">Use this bank</StartExamButton></div>
                   ) : !catalog.access.active ? (
-                    <p className="mt-3 flex items-center gap-1.5 pl-[3.25rem] text-xs font-bold text-muted-foreground"><LockKeyhole className="h-3.5 w-3.5" aria-hidden="true" /> Included with full access</p>
+                    <p className="mt-2.5 flex items-center gap-1.5 pl-12 text-[11px] font-semibold text-muted-foreground"><LockKeyhole className="h-3.5 w-3.5" aria-hidden="true" /> Included with full access</p>
                   ) : selectedNext ? (
-                    <p className="mt-3 flex items-center gap-1.5 pl-[3.25rem] text-xs font-bold text-primary"><CheckCircle2 className="h-3.5 w-3.5" aria-hidden="true" /> {activeAttempt ? "Used by your current mock" : "Selected for your next mock"}</p>
+                    <p className="mt-2.5 flex items-center gap-1.5 pl-12 text-[11px] font-semibold text-primary"><CheckCircle2 className="h-3.5 w-3.5" aria-hidden="true" /> {activeAttempt ? "Used by your current mock" : "Selected for your next mock"}</p>
                   ) : null}
                 </article>
               );
             })}
-            <div className="flex flex-wrap gap-x-4 gap-y-2 border-t border-border bg-secondary/35 px-4 py-3 text-[11px] font-semibold text-muted-foreground">
+            <div className="flex flex-wrap gap-x-4 gap-y-2 border-t border-border bg-secondary/30 px-4 py-2.5 text-[10px] font-medium text-muted-foreground">
               <span className="inline-flex items-center gap-1.5"><ShieldCheck className="h-3.5 w-3.5 text-primary" aria-hidden="true" /> Reviewed</span>
-              <span className="inline-flex items-center gap-1.5"><RotateCcw className="h-3.5 w-3.5 text-primary" aria-hidden="true" /> Fresh mix</span>
-              <span className="inline-flex items-center gap-1.5"><CheckCircle2 className="h-3.5 w-3.5 text-primary" aria-hidden="true" /> Corrections after submission</span>
+              <span className="inline-flex items-center gap-1.5"><Sparkles className="h-3.5 w-3.5 text-primary" aria-hidden="true" /> Fresh mix every mock</span>
             </div>
           </div>
         </section>

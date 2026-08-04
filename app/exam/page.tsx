@@ -25,7 +25,13 @@ export default async function ExamSprintPage() {
   const diagnosticQuestions = sample?.diagnosticQuestionCount ?? EXAM_DIAGNOSTIC_QUESTION_COUNT;
   const bankSize = sample?.coverage.bankTotal || EXAM_BANK_MINIMUM;
   const courses = catalog.courses.map((course) => ({
-    ...course,
+    code: course.code,
+    slug: course.slug,
+    title: course.title,
+    priority: course.priority,
+    sets: course.sets,
+    progress: course.progress,
+    activeAttempt: course.activeAttempt,
     dateLabel: examCourseDateLabel(course),
   }));
   const activeAttempt = catalog.activeAttempts[0] ?? null;

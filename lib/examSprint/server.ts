@@ -474,7 +474,6 @@ export async function getExamCatalog(userId?: string | null) {
           setById.get(String(attempt.set_id))?.courseCode
           || tryParseExamSnapshot(attempt.delivery_snapshot)?.courseCode,
         ) === courseKey)
-        .slice(0, 3)
         .map((attempt) => {
           const total = Math.max(0, Number(attempt.total_questions ?? 0));
           const score = Math.max(0, Number(attempt.score ?? 0));
