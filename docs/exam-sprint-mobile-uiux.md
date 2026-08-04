@@ -43,11 +43,16 @@ The interface is designed from a 360 px mobile viewport outward. Desktop adds sp
 ### Attempt runner
 
 - Removes normal site navigation and makes the question the visual focus.
-- Shows remaining time, answered progress and save state at all times.
+- Shows remaining time, answered progress, flagged count and save state in a compact header.
 - Uses large answer targets with permanent A–D labels and an explicit selected state.
 - Lets learners clear an accidental choice or flag a question for review.
-- Changes the last-question action to “Review your answers” instead of disabling Next.
-- Provides a question map, first-unanswered shortcut and honest offline state.
+- Keeps the primary movement label as “Next question” whether or not an answer is selected.
+- Changes the last-question action to “Review answers” instead of disabling Next.
+- Provides a six-column mobile question map with first-unanswered and first-flagged shortcuts.
+- Keeps the question-map actions visible while the map scrolls.
+- Warns clearly before submitting unanswered questions and offers a direct review shortcut.
+- Keeps save and offline states honest while preserving a temporary on-device copy.
+- Makes “Keep answering” the safer primary action when a learner tries to exit.
 - Warns that the timer continues before a learner leaves the runner.
 
 ### Results and corrections
