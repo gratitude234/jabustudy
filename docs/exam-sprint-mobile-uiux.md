@@ -16,9 +16,11 @@ The interface is designed from a 360 px mobile viewport outward. Desktop adds sp
 ### Exam home
 
 - Starts with a compact campaign and access summary.
+- Includes a direct “Choose a course” action instead of relying on scroll discovery.
 - Surfaces an active timed attempt before every other action.
 - Keeps search and Ready/All/Soon controls sticky on mobile.
 - Treats every ready course row as one large tap target.
+- Labels row actions explicitly as Start, Continue or Resume.
 - Keeps unpublished courses visually quiet and out of the default view.
 
 ### Course page

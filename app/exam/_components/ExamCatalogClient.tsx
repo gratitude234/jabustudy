@@ -132,18 +132,16 @@ export default function ExamCatalogClient({
                 <span className="block truncate text-sm font-black">{attempt.courseCode} · {attempt.setTitle}</span>
                 <span className="mt-1.5 flex items-center gap-1.5 text-xs font-bold text-violet-200/80"><Clock3 className="h-3.5 w-3.5" aria-hidden="true" /><RemainingTime deadlineAt={attempt.deadlineAt} /> · {attempt.totalQuestions} questions</span>
               </span>
-              <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-white text-[#21164f] transition group-hover:translate-x-0.5"><ChevronRight className="h-5 w-5" aria-hidden="true" /></span>
+              <span className="inline-flex min-h-10 shrink-0 items-center gap-1 rounded-xl bg-white px-3 text-xs font-black text-[#21164f] transition group-hover:translate-x-0.5">Resume <ChevronRight className="h-4 w-4" aria-hidden="true" /></span>
             </Link>
           ))}
         </div>
       ) : null}
 
-      <div className="flex items-end justify-between gap-3 pt-1">
-        <div>
-          <p className="text-[11px] font-black uppercase tracking-[0.16em] text-primary">Course library</p>
-          <h2 id="course-picker-heading" className="mt-0.5 text-2xl font-black tracking-tight">What are you writing?</h2>
-        </div>
-        <p className="hidden text-xs font-semibold text-muted-foreground sm:block">Ready courses first</p>
+      <div className="pt-1">
+        <p className="text-[11px] font-black uppercase tracking-[0.16em] text-primary">Course library</p>
+        <h2 id="course-picker-heading" className="mt-0.5 text-2xl font-black tracking-tight">Choose a course to practise</h2>
+        <p className="mt-1 text-sm leading-5 text-muted-foreground">Tap any ready course to start or continue your CBT preparation.</p>
       </div>
 
       <div className="sticky top-[calc(3.75rem+env(safe-area-inset-top))] z-30 -mx-4 space-y-2.5 border-y border-border/70 bg-background/95 px-4 py-3 backdrop-blur-xl sm:static sm:mx-0 sm:rounded-2xl sm:border sm:bg-card sm:p-3">
@@ -191,6 +189,11 @@ export default function ExamCatalogClient({
             const destination = course.activeAttempt
               ? `/exam/attempt/${course.activeAttempt.attemptId}`
               : `/exam/${course.slug}`;
+            const actionLabel = course.activeAttempt
+              ? "Resume"
+              : course.progress
+                ? "Continue"
+                : "Start";
             const content = (
               <>
                 <span className={cn(
@@ -204,7 +207,6 @@ export default function ExamCatalogClient({
                 <span className="min-w-0 flex-1">
                   <span className="flex min-w-0 items-center gap-2">
                     <span className="min-w-0 flex-1 truncate text-sm font-extrabold">{course.title}</span>
-                    {course.activeAttempt ? <span className="shrink-0 rounded-full bg-amber-100 px-2 py-0.5 text-[9px] font-black uppercase text-amber-800 dark:bg-amber-950/40 dark:text-amber-300">Resume</span> : null}
                   </span>
                   <span className="mt-1 flex min-w-0 items-center gap-1.5 text-[11px] font-semibold text-muted-foreground">
                     <CalendarDays className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
@@ -220,7 +222,16 @@ export default function ExamCatalogClient({
                     <span className="mt-1.5 inline-flex items-center gap-1 text-[11px] font-bold text-muted-foreground"><LockKeyhole className="h-3 w-3" aria-hidden="true" /> Bank under review</span>
                   )}
                 </span>
-                {ready ? <ChevronRight className="h-5 w-5 shrink-0 text-muted-foreground transition group-hover:translate-x-0.5 group-hover:text-primary" aria-hidden="true" /> : <LockKeyhole className="h-4 w-4 shrink-0 text-muted-foreground/60" aria-hidden="true" />}
+                {ready ? (
+                  <span className={cn(
+                    "inline-flex min-h-9 shrink-0 items-center gap-0.5 rounded-lg px-2.5 text-[10px] font-black transition group-hover:translate-x-0.5",
+                    course.activeAttempt
+                      ? "bg-amber-100 text-amber-800 dark:bg-amber-950/40 dark:text-amber-300"
+                      : "bg-primary text-primary-foreground",
+                  )}>{actionLabel}<ChevronRight className="h-3.5 w-3.5" aria-hidden="true" /></span>
+                ) : (
+                  <span className="inline-flex min-h-9 shrink-0 items-center gap-1 rounded-lg bg-secondary px-2.5 text-[10px] font-black text-muted-foreground"><LockKeyhole className="h-3 w-3" aria-hidden="true" /> Soon</span>
+                )}
               </>
             );
 
@@ -228,6 +239,7 @@ export default function ExamCatalogClient({
               <Link
                 key={course.code}
                 href={destination}
+                aria-label={`${actionLabel} ${course.code}, ${course.title}`}
                 className={cn("group flex min-h-[5.75rem] items-center gap-3 px-4 py-3.5 no-underline transition hover:bg-secondary/45 focus-visible:bg-secondary/45 focus-visible:outline-none", index > 0 && "border-t border-border")}
               >
                 {content}
