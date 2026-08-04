@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { ArrowDown, CheckCircle2, ChevronDown, Clock3, Play, ShieldCheck, Target } from "lucide-react";
+import { ArrowDown, CheckCircle2, ChevronDown, Clock3, ShieldCheck, Target } from "lucide-react";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import {
   EXAM_BANK_MINIMUM,
@@ -63,18 +63,14 @@ export default async function ExamSprintPage() {
           </h1>
           <p className="mt-1.5 max-w-xl text-[12px] leading-5 text-muted-foreground sm:mt-2 sm:text-sm">
             {activeAttempt
-              ? "Your timer is still running. Resume now, or choose another course below."
+              ? "Your timer is still running. Continue from the active mock below, or choose another course."
               : "Choose a ready course, practise under a timer, then review where you lost marks."}
           </p>
-          {activeAttempt ? (
-            <Link href={"/exam/attempt/" + activeAttempt.attemptId} className="mt-3 inline-flex min-h-10 items-center justify-center gap-2 rounded-xl bg-primary px-3.5 text-xs font-bold text-primary-foreground no-underline shadow-sm">
-              <Play className="h-3.5 w-3.5 fill-current" aria-hidden="true" /> Resume timed mock
-            </Link>
-          ) : (
+          {!activeAttempt ? (
             <a href="#courses" className="mt-3 inline-flex min-h-10 items-center justify-center gap-2 rounded-xl bg-primary px-3.5 text-xs font-bold text-primary-foreground no-underline shadow-sm">
               Choose a course <ArrowDown className="h-3.5 w-3.5" aria-hidden="true" />
             </a>
-          )}
+          ) : null}
         </div>
 
         <div className="grid grid-cols-3 divide-x divide-primary/10 border-t border-primary/10">

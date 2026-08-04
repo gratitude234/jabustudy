@@ -128,7 +128,7 @@ export default function ExamCatalogClient({
               <span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-amber-100 text-amber-700 dark:bg-amber-950/45 dark:text-amber-300"><Play className="h-3.5 w-3.5 fill-current" aria-hidden="true" /></span>
               <span className="min-w-0 flex-1">
                 <span className="block text-[9px] font-bold uppercase tracking-[0.13em] text-amber-700 dark:text-amber-300">Mock in progress</span>
-                <span className="mt-0.5 block truncate text-[13px] font-bold">{attempt.courseCode} · {attempt.setTitle}</span>
+                <span className="mt-0.5 block text-[13px] font-bold">{attempt.courseCode} Mock</span>
                 <span className="mt-1 flex items-center gap-1.5 text-[11px] font-medium text-muted-foreground"><Clock3 className="h-3 w-3 text-amber-600" aria-hidden="true" /><RemainingTime deadlineAt={attempt.deadlineAt} /> · {attempt.totalQuestions} questions</span>
               </span>
               <span className="inline-flex min-h-9 shrink-0 items-center gap-0.5 rounded-lg bg-primary/10 px-2.5 text-[11px] font-bold text-primary transition group-hover:translate-x-0.5">Resume <ChevronRight className="h-3.5 w-3.5" aria-hidden="true" /></span>
@@ -220,10 +220,18 @@ export default function ExamCatalogClient({
                     <span className="truncate">{course.dateLabel}</span>
                   </span>
                   {ready ? (
-                    <span className="mt-1 flex flex-wrap gap-x-2.5 gap-y-0.5 text-[10px] font-medium text-muted-foreground">
+                    <span className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[10px] font-medium text-muted-foreground">
                       <span>{set.attemptQuestionCount} questions · {set.timeLimitMinutes} min</span>
-                      {course.progress ? <span className="font-semibold text-emerald-700 dark:text-emerald-300">Best {course.progress.bestPercentage}%</span> : <span>Not attempted</span>}
-                      {coverage.bankTotal > 0 ? <span>{coverage.delivered}/{coverage.bankTotal} seen</span> : null}
+                      <span className="inline-flex items-center gap-2">
+                        <span className="text-border" aria-hidden="true">•</span>
+                        {course.progress ? <span className="font-semibold text-emerald-700 dark:text-emerald-300">Best {course.progress.bestPercentage}%</span> : <span>Not attempted</span>}
+                      </span>
+                      {coverage.bankTotal > 0 ? (
+                        <span className="inline-flex items-center gap-2">
+                          <span className="text-border" aria-hidden="true">•</span>
+                          <span>{coverage.delivered}/{coverage.bankTotal} seen</span>
+                        </span>
+                      ) : null}
                     </span>
                   ) : (
                     <span className="mt-1 inline-flex items-center gap-1 text-[10px] font-medium text-muted-foreground"><LockKeyhole className="h-2.5 w-2.5" aria-hidden="true" /> Bank under review</span>
