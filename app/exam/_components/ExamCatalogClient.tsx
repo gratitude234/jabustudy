@@ -215,16 +215,20 @@ export default function ExamCatalogClient({
                       <span className="inline-flex min-h-6 shrink-0 items-center gap-1 text-[10px] font-semibold text-muted-foreground"><LockKeyhole className="h-2.5 w-2.5" aria-hidden="true" /> Soon</span>
                     )}
                   </span>
-                  <span className="mt-0.5 flex min-w-0 items-center gap-1.5 text-[10px] font-medium text-muted-foreground">
+                  <span className="mt-0.5 flex min-w-0 items-center gap-1.5 text-[10px] font-medium text-foreground/65 dark:text-foreground/70">
                     <CalendarDays className="h-3 w-3 shrink-0" aria-hidden="true" />
                     <span className="truncate">{course.dateLabel}</span>
                   </span>
                   {ready ? (
-                    <span className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[10px] font-medium text-muted-foreground">
+                    <span className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[10px] font-medium text-foreground/65 dark:text-foreground/70">
                       <span>{set.attemptQuestionCount} questions · {set.timeLimitMinutes} min</span>
                       <span className="inline-flex items-center gap-2">
                         <span className="text-border" aria-hidden="true">•</span>
-                        {course.progress ? <span className="font-semibold text-emerald-700 dark:text-emerald-300">Best {course.progress.bestPercentage}%</span> : <span>Not attempted</span>}
+                        {course.progress
+                          ? course.progress.bestPercentage > 0
+                            ? <span className="font-semibold text-emerald-700 dark:text-emerald-300">Best {course.progress.bestPercentage}%</span>
+                            : <span className="font-semibold text-foreground/75 dark:text-foreground/80">Attempted</span>
+                          : <span>Not attempted</span>}
                       </span>
                       {coverage.bankTotal > 0 ? (
                         <span className="inline-flex items-center gap-2">
