@@ -25,11 +25,20 @@ The interface is designed from a 360 px mobile viewport outward. Desktop adds sp
 
 ### Course page
 
-- Shows course identity, official date, best score, question coverage and available mocks in one header.
-- Recommends exactly one next action based on learner state.
-- Keeps that action reachable in a mobile bottom bar.
-- Places recent results before the full mock bank so progress is easy to continue.
-- Uses one list surface for mock papers instead of separate cards.
+- Shows course identity, official date, best score, question coverage and attempt count in one compact header.
+- Recommends exactly one next action based on learner state, with running attempts taking priority.
+- Keeps the primary action above the fold instead of repeating it in a permanent mobile bottom bar.
+- Places recent results before the question bank so progress is easy to review.
+- Describes the bank as a source of fresh question mixes rather than implying that one reusable set is a fixed paper.
+- Does not repeat the recommended start action inside the selected question-bank row.
+- Shows diagnostic results only on the course where the diagnostic was taken.
+
+### Start confirmation
+
+- Uses a short bottom sheet that fits on common mobile screens without hiding the primary action.
+- Shows question count, duration and the non-pausable timer warning first.
+- Keeps autosave and correction information compact and secondary.
+- Uses one dominant start button; close, backdrop tap and Escape return the learner to the course.
 
 ### Attempt runner
 
