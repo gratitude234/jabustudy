@@ -555,12 +555,12 @@ export default function ExamAttemptClient() {
         <div className="fixed inset-0 z-50 flex items-end bg-zinc-950/60 backdrop-blur-sm lg:hidden" onClick={(event) => { if (event.target === event.currentTarget) setPaletteOpen(false); }}>
           <div className="max-h-[min(90dvh,760px)] w-full overflow-y-auto rounded-t-[1.75rem] border border-border bg-background px-4 pb-0 pt-3 shadow-2xl" role="dialog" aria-modal="true" aria-labelledby="question-review-title" aria-describedby="question-review-description">
             <div className="mx-auto max-w-lg">
-              <div className="mx-auto mb-3 h-1 w-10 rounded-full bg-border" aria-hidden="true" />
-              <div className="flex items-start justify-between gap-3"><div><p className="text-[10px] font-black uppercase tracking-[0.16em] text-primary">Question map</p><h2 id="question-review-title" className="mt-0.5 text-2xl font-black">Navigate your paper</h2><p id="question-review-description" className="mt-1 text-xs leading-5 text-muted-foreground">Jump to any question or find the ones that still need attention.</p></div><button type="button" onClick={() => setPaletteOpen(false)} className="grid h-10 w-10 shrink-0 place-items-center rounded-xl border border-border bg-card focus-visible:ring-2 focus-visible:ring-primary" aria-label="Close question map"><X className="h-4 w-4" aria-hidden="true" /></button></div>
-              <div className="mt-4 grid grid-cols-3 overflow-hidden rounded-xl border border-border bg-card text-center">
-                <div className="p-3"><p className="text-xl font-black text-emerald-700 dark:text-emerald-300">{answered}</p><p className="text-[10px] font-bold text-muted-foreground">Answered</p></div>
-                <div className="border-l border-border p-3"><p className="text-xl font-black text-amber-700 dark:text-amber-300">{unanswered}</p><p className="text-[10px] font-bold text-muted-foreground">Unanswered</p></div>
-                <div className="border-l border-border p-3"><p className="text-xl font-black text-amber-700 dark:text-amber-300">{flagged}</p><p className="text-[10px] font-bold text-muted-foreground">Flagged</p></div>
+              <div className="mx-auto mb-2.5 h-1 w-9 rounded-full bg-border" aria-hidden="true" />
+              <div className="flex items-start justify-between gap-3"><div><p className="text-[9px] font-bold uppercase tracking-[0.15em] text-primary">Question map</p><h2 id="question-review-title" className="mt-0.5 text-xl font-extrabold">Navigate your paper</h2><p id="question-review-description" className="mt-1 text-[11px] leading-4 text-muted-foreground">Jump to any question or find what still needs attention.</p></div><button type="button" onClick={() => setPaletteOpen(false)} className="grid h-10 w-10 shrink-0 place-items-center rounded-xl border border-border bg-card focus-visible:ring-2 focus-visible:ring-primary" aria-label="Close question map"><X className="h-4 w-4" aria-hidden="true" /></button></div>
+              <div className="mt-3 grid grid-cols-3 overflow-hidden rounded-xl border border-border bg-card text-center">
+                <div className="p-2.5"><p className="text-lg font-extrabold text-emerald-700 dark:text-emerald-300">{answered}</p><p className="text-[9px] font-semibold text-muted-foreground">Answered</p></div>
+                <div className="border-l border-border p-2.5"><p className="text-lg font-extrabold text-amber-700 dark:text-amber-300">{unanswered}</p><p className="text-[9px] font-semibold text-muted-foreground">Unanswered</p></div>
+                <div className="border-l border-border p-2.5"><p className="text-lg font-extrabold text-amber-700 dark:text-amber-300">{flagged}</p><p className="text-[9px] font-semibold text-muted-foreground">Flagged</p></div>
               </div>
               <QuestionPalette questions={attempt.questions} responses={responses} currentIndex={index} onPick={(next) => { setIndex(next); setPaletteOpen(false); }} />
               <PaletteLegend />
@@ -571,7 +571,7 @@ export default function ExamAttemptClient() {
                 </div>
               ) : null}
               <div className="sticky bottom-0 -mx-4 mt-4 grid grid-cols-[0.8fr_1.2fr] gap-2.5 border-t border-border bg-background/95 px-4 pb-[max(1rem,env(safe-area-inset-bottom))] pt-3 backdrop-blur-xl">
-                <button type="button" onClick={() => setPaletteOpen(false)} className="min-h-12 rounded-xl border border-border bg-card px-3 text-sm font-black">Continue</button>
+                <button type="button" onClick={() => setPaletteOpen(false)} className="inline-flex min-h-12 items-center justify-center gap-1.5 rounded-xl border border-border bg-card px-3 text-xs font-bold"><ArrowLeft className="h-3.5 w-3.5" aria-hidden="true" /> Back to Q{index + 1}</button>
                 <button type="button" onClick={() => { setPaletteOpen(false); setSubmitDialogOpen(true); }} className="inline-flex min-h-12 items-center justify-center gap-2 rounded-xl bg-primary px-4 text-sm font-black text-primary-foreground"><Send className="h-4 w-4" aria-hidden="true" /> Review & submit</button>
               </div>
             </div>
@@ -625,7 +625,7 @@ export default function ExamAttemptClient() {
 function PaletteLegend() {
   return (
     <div className="mt-4 flex flex-wrap gap-x-4 gap-y-2 text-[11px] font-bold text-muted-foreground" aria-label="Question status legend">
-      <span className="inline-flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-sm bg-primary" /> Current</span>
+      <span className="inline-flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-sm bg-card ring-2 ring-primary ring-offset-1 ring-offset-background" /> Current</span>
       <span className="inline-flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-sm bg-emerald-500" /> Answered</span>
       <span className="inline-flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-full bg-amber-400" /> Flagged</span>
       <span className="inline-flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-sm border border-border bg-card" /> Unanswered</span>
@@ -646,7 +646,13 @@ function QuestionPalette({ questions, responses, currentIndex, onPick }: { quest
             onClick={() => onPick(index)}
             aria-label={`Question ${index + 1}, ${states}`}
             aria-current={currentIndex === index ? "step" : undefined}
-            className={cn("relative grid min-h-11 aspect-square place-items-center rounded-xl border text-xs font-black transition", currentIndex === index ? "border-primary bg-primary text-primary-foreground" : response?.selectedOptionId ? "border-emerald-400/40 bg-emerald-100/60 text-emerald-800 dark:bg-emerald-950/35 dark:text-emerald-300" : "border-border bg-card text-muted-foreground hover:border-primary/30 hover:text-foreground")}
+            className={cn(
+              "relative grid min-h-11 aspect-square place-items-center rounded-xl border text-xs font-black transition",
+              response?.selectedOptionId
+                ? "border-emerald-400/40 bg-emerald-100/60 text-emerald-800 dark:bg-emerald-950/35 dark:text-emerald-300"
+                : "border-border bg-card text-muted-foreground hover:border-primary/30 hover:text-foreground",
+              currentIndex === index && "ring-2 ring-primary ring-offset-2 ring-offset-background",
+            )}
           >
             {index + 1}
             {response?.flagged ? <span className="absolute -right-0.5 -top-0.5 h-2.5 w-2.5 rounded-full border-2 border-background bg-amber-400" aria-hidden="true" /> : null}

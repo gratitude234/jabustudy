@@ -56,6 +56,16 @@ function paceLabel(seconds: number) {
   return rest > 0 ? `${minutes}m ${rest}s` : `${minutes}m`;
 }
 
+function WeakTopicRow({ topic, missed, rank, bordered = false }: { topic: string; missed: number; rank: number; bordered?: boolean }) {
+  return (
+    <li className={cn("flex min-h-11 items-center gap-2.5 px-3 py-2.5", bordered && "border-t border-amber-200/70 dark:border-amber-900/45")}>
+      <span className="grid h-6 w-6 shrink-0 place-items-center rounded-md bg-amber-100 text-[10px] font-extrabold text-amber-800 dark:bg-amber-900/45 dark:text-amber-200">{rank}</span>
+      <span className="min-w-0 flex-1 text-xs font-semibold leading-4">{topic}</span>
+      <span className="shrink-0 rounded-md bg-amber-100/80 px-2 py-1 text-[10px] font-bold text-amber-800 dark:bg-amber-900/35 dark:text-amber-200">{missed} missed</span>
+    </li>
+  );
+}
+
 export default async function ExamResultPage({ params }: { params: Promise<{ attemptId: string }> }) {
   const { attemptId } = await params;
   const supabase = await createSupabaseServerClient();
@@ -77,6 +87,8 @@ export default async function ExamResultPage({ params }: { params: Promise<{ att
     && result.coverageAfter !== null
     && result.newQuestionsThisAttempt !== null
     && result.bankTotal !== null;
+  const priorityTopics = result.weakTopics.slice(0, 3);
+  const additionalTopics = result.weakTopics.slice(3);
 
   return (
     <div className="mx-auto max-w-3xl space-y-5 pb-12">
@@ -95,7 +107,7 @@ export default async function ExamResultPage({ params }: { params: Promise<{ att
               <p className="text-[10px] font-black uppercase tracking-[0.16em] text-primary">
                 {result.kind === "diagnostic" ? "Diagnostic complete" : "Mock complete"} · {result.courseCode}
               </p>
-              <h1 id="result-heading" className="mt-1 truncate text-lg font-black sm:text-xl">
+              <h1 id="result-heading" className="mt-1 text-lg font-black leading-snug sm:text-xl">
                 {course?.title ?? result.setTitle}
               </h1>
             </div>
@@ -155,23 +167,32 @@ export default async function ExamResultPage({ params }: { params: Promise<{ att
       </section>
 
       {result.weakTopics.length > 0 ? (
-        <section className="rounded-2xl bg-amber-50/80 p-4 text-amber-950 dark:bg-amber-950/20 dark:text-amber-100" aria-labelledby="weak-topics-heading">
+        <section className="rounded-2xl border border-amber-200/70 bg-card p-4 text-amber-950 dark:border-amber-900/50 dark:text-amber-100" aria-labelledby="weak-topics-heading">
           <div className="flex items-start gap-3">
-            <span className="mt-0.5 grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-amber-100 text-amber-800 dark:bg-amber-900/45 dark:text-amber-200">
+            <span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-amber-100 text-amber-800 dark:bg-amber-900/45 dark:text-amber-200">
               <TrendingUp className="h-4 w-4" aria-hidden="true" />
             </span>
             <div className="min-w-0 flex-1">
               <h2 id="weak-topics-heading" className="text-sm font-black">Revise before your next mock</h2>
-              <p className="mt-1 text-xs leading-5 text-amber-900/70 dark:text-amber-100/65">These topics cost you the most marks.</p>
-              <div className="mt-3 flex flex-wrap gap-2">
-                {result.weakTopics.map(({ topic, missed }) => (
-                  <span key={topic} className="rounded-lg bg-white/80 px-2.5 py-1.5 text-xs font-bold shadow-sm dark:bg-white/10">
-                    {topic} · {missed} missed
-                  </span>
-                ))}
-              </div>
+              <p className="mt-0.5 text-[11px] leading-4 text-amber-900/70 dark:text-amber-100/65">Start with the topics costing you the most marks.</p>
             </div>
           </div>
+
+          <ol className="mt-3 overflow-hidden rounded-xl border border-amber-200/70 bg-amber-50/55 dark:border-amber-900/45 dark:bg-amber-950/20">
+            {priorityTopics.map(({ topic, missed }, index) => <WeakTopicRow key={topic} topic={topic} missed={missed} rank={index + 1} bordered={index > 0} />)}
+          </ol>
+
+          {additionalTopics.length > 0 ? (
+            <details className="group mt-2 overflow-hidden rounded-xl border border-amber-200/70 dark:border-amber-900/45">
+              <summary className="flex min-h-10 cursor-pointer list-none items-center justify-center gap-1.5 px-3 text-[11px] font-bold text-amber-800 marker:hidden hover:bg-amber-50 dark:text-amber-200 dark:hover:bg-amber-950/20">
+                Show {additionalTopics.length} more topic{additionalTopics.length === 1 ? "" : "s"}
+                <ChevronDown className="h-3.5 w-3.5 transition-transform group-open:rotate-180" aria-hidden="true" />
+              </summary>
+              <ol className="border-t border-amber-200/70 dark:border-amber-900/45" start={4}>
+                {additionalTopics.map(({ topic, missed }, index) => <WeakTopicRow key={topic} topic={topic} missed={missed} rank={index + 4} bordered={index > 0} />)}
+              </ol>
+            </details>
+          ) : null}
         </section>
       ) : null}
 

@@ -139,7 +139,7 @@ export default async function ExamCoursePage({ params }: { params: Promise<{ cou
   };
 
   const actionLabel = activeAttempt
-    ? "Finish the mock you started"
+    ? "Continue your mock"
     : resumableDiagnostic
       ? "Your diagnostic is still running"
       : !primarySet
@@ -150,7 +150,7 @@ export default async function ExamCoursePage({ params }: { params: Promise<{ cou
             ? "Check your level for free"
             : "Unlock the complete practice bank";
   const actionDetail = activeAttempt
-    ? "Your timer continues while you are away. Return to your saved answers now."
+    ? "Return to your saved answers before time runs out."
     : resumableDiagnostic
       ? "Finish your free check before its timer runs out. Your answers are already saved."
       : primarySet
@@ -172,7 +172,6 @@ export default async function ExamCoursePage({ params }: { params: Promise<{ cou
           <div className="flex flex-wrap items-center justify-between gap-2">
             <div className="flex flex-wrap items-center gap-2">
               <span className="rounded-lg bg-primary/10 px-2.5 py-1.5 text-[11px] font-extrabold text-primary">{course.code}</span>
-              {activeAttempt ? <span className="inline-flex items-center gap-1 text-[9px] font-bold uppercase tracking-[0.12em] text-amber-700 dark:text-amber-300"><Clock3 className="h-3 w-3" aria-hidden="true" /> Mock in progress</span> : null}
             </div>
             {catalog.access.active ? <span className="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-700 dark:text-emerald-300"><CheckCircle2 className="h-3.5 w-3.5" aria-hidden="true" /> Access active</span> : null}
           </div>
@@ -196,7 +195,7 @@ export default async function ExamCoursePage({ params }: { params: Promise<{ cou
         </div>
       </section>
 
-      <section className={cn("rounded-2xl border bg-card p-4", (activeAttempt || resumableDiagnostic) ? "border-amber-300/60 dark:border-amber-900/60" : "border-border")} aria-labelledby="recommended-action-heading">
+      <section className={cn("rounded-2xl border bg-card p-3.5 sm:p-4", (activeAttempt || resumableDiagnostic) ? "border-amber-300/60 dark:border-amber-900/60" : "border-border")} aria-labelledby="recommended-action-heading">
         <div className="flex items-start gap-3">
           <span className={cn("grid h-9 w-9 shrink-0 place-items-center rounded-lg", (activeAttempt || resumableDiagnostic) ? "bg-amber-100 text-amber-800 dark:bg-amber-950/40 dark:text-amber-300" : "bg-primary/10 text-primary")}>
             {(activeAttempt || resumableDiagnostic) ? <Clock3 className="h-4 w-4" aria-hidden="true" /> : <Sparkles className="h-4 w-4" aria-hidden="true" />}
@@ -204,7 +203,7 @@ export default async function ExamCoursePage({ params }: { params: Promise<{ cou
           <div className="min-w-0 flex-1">
             <p className="text-[9px] font-bold uppercase tracking-[0.15em] text-primary">{(activeAttempt || resumableDiagnostic) ? "Continue now" : "Up next"}</p>
             <h2 id="recommended-action-heading" className="mt-0.5 text-base font-extrabold leading-snug">{actionLabel}</h2>
-            <p className="mt-1 text-xs leading-5 text-muted-foreground">{actionDetail}</p>
+            {!activeAttempt ? <p className="mt-1 text-xs leading-5 text-muted-foreground">{actionDetail}</p> : null}
           </div>
         </div>
 
@@ -216,8 +215,8 @@ export default async function ExamCoursePage({ params }: { params: Promise<{ cou
           </div>
         ) : null}
 
-        {activeAttempt ? <p className="mt-3 inline-flex items-center gap-1.5 text-xs font-bold text-amber-700 dark:text-amber-300"><Clock3 className="h-3.5 w-3.5" aria-hidden="true" /><ExamRemainingTime deadlineAt={activeAttempt.deadlineAt} /></p> : null}
-        <div className="mt-3">{primaryAction()}</div>
+        {activeAttempt ? <p className="mt-1.5 inline-flex items-center gap-1.5 text-xs font-bold text-amber-700 dark:text-amber-300"><Clock3 className="h-3.5 w-3.5" aria-hidden="true" /><ExamRemainingTime deadlineAt={activeAttempt.deadlineAt} /></p> : null}
+        <div className={activeAttempt ? "mt-2.5" : "mt-3"}>{primaryAction()}</div>
       </section>
 
       {recentAttempts.length > 0 ? (

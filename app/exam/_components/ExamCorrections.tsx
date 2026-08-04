@@ -18,6 +18,7 @@ export type ExamCorrectionItem = {
 };
 
 type Filter = "mistakes" | "flagged" | "all";
+const PAGE_SIZE = 6;
 
 function outcomeOf(item: ExamCorrectionItem) {
   if (!item.selectedOptionId) return "skipped" as const;
@@ -27,7 +28,7 @@ function outcomeOf(item: ExamCorrectionItem) {
 export default function ExamCorrections({ items }: { items: ExamCorrectionItem[] }) {
   const [filter, setFilter] = useState<Filter>("mistakes");
   const [expandedId, setExpandedId] = useState<string | null>(null);
-  const [limit, setLimit] = useState(10);
+  const [limit, setLimit] = useState(PAGE_SIZE);
 
   const counts = useMemo(() => {
     let mistakes = 0;
@@ -61,24 +62,26 @@ export default function ExamCorrections({ items }: { items: ExamCorrectionItem[]
         <p className="mt-1 text-sm leading-5 text-muted-foreground">Open a question to see the correct answer and explanation.</p>
       </div>
 
-      <div className="grid grid-cols-3 gap-1 rounded-xl bg-secondary p-1" role="group" aria-label="Filter answer review">
-        {tabs.map(({ key, label, count }) => (
-          <button
-            key={key}
-            type="button"
-            onClick={() => { setFilter(key); setExpandedId(null); setLimit(10); }}
-            aria-pressed={filter === key}
-            disabled={count === 0 && key !== "all"}
-            className={cn(
-              "inline-flex min-h-10 items-center justify-center gap-1.5 rounded-lg px-2 text-[11px] font-extrabold transition disabled:cursor-not-allowed disabled:opacity-35 sm:text-xs",
-              filter === key
-                ? "bg-card text-foreground shadow-sm"
-                : "text-muted-foreground hover:text-foreground",
-            )}
-          >
-            {label}<span className="font-mono text-[10px] opacity-65">{count}</span>
-          </button>
-        ))}
+      <div className="sticky top-[calc(3.75rem+env(safe-area-inset-top))] z-20 -mx-1 bg-[#f8f7fc]/95 px-1 py-2 backdrop-blur-xl dark:bg-[#0d0a18]/95">
+        <div className="grid grid-cols-3 gap-1 rounded-xl bg-secondary p-1" role="group" aria-label="Filter answer review">
+          {tabs.map(({ key, label, count }) => (
+            <button
+              key={key}
+              type="button"
+              onClick={() => { setFilter(key); setExpandedId(null); setLimit(PAGE_SIZE); }}
+              aria-pressed={filter === key}
+              disabled={count === 0 && key !== "all"}
+              className={cn(
+                "inline-flex min-h-10 items-center justify-center gap-1.5 rounded-lg px-2 text-[11px] font-extrabold transition disabled:cursor-not-allowed disabled:opacity-35 sm:text-xs",
+                filter === key
+                  ? "bg-card text-foreground shadow-sm"
+                  : "text-muted-foreground hover:text-foreground",
+              )}
+            >
+              {label}<span className="font-mono text-[10px] opacity-65">{count}</span>
+            </button>
+          ))}
+        </div>
       </div>
 
       {visible.length === 0 ? (
@@ -102,10 +105,10 @@ export default function ExamCorrections({ items }: { items: ExamCorrectionItem[]
       )}
 
       {remaining > 0 ? (
-        <button type="button" onClick={() => setLimit((value) => value + 10)} className="inline-flex min-h-11 w-full items-center justify-center rounded-xl border border-border bg-card px-4 text-sm font-extrabold text-primary hover:bg-secondary">
-          Show 10 more · {remaining} remaining
+        <button type="button" onClick={() => setLimit((value) => value + PAGE_SIZE)} className="inline-flex min-h-11 w-full items-center justify-center rounded-xl border border-border bg-card px-4 text-sm font-extrabold text-primary hover:bg-secondary">
+          Show {Math.min(PAGE_SIZE, remaining)} more · {remaining} remaining
         </button>
-      ) : filtered.length > 10 ? <p className="text-center text-xs font-semibold text-muted-foreground">All {filtered.length} questions in this view are shown.</p> : null}
+      ) : filtered.length > PAGE_SIZE ? <p className="text-center text-xs font-semibold text-muted-foreground">All {filtered.length} questions in this view are shown.</p> : null}
     </section>
   );
 }
@@ -136,15 +139,14 @@ function CorrectionRow({ item, expanded, onToggle }: { item: ExamCorrectionItem;
           <Icon className="h-4 w-4" aria-hidden="true" />
         </span>
         <span className="min-w-0 flex-1">
-          <span className="flex min-w-0 items-center gap-1.5 text-[10px] font-black uppercase tracking-wide">
-            <span className="text-muted-foreground">Question {item.position}</span>
-            <span aria-hidden="true" className="text-border">·</span>
-            <span className={tone.text}>{label}</span>
+          <span className="flex min-w-0 items-center gap-1.5 text-[10px] font-semibold">
+            <span className="shrink-0 text-foreground/65">Question {item.position}</span>
             {item.sourceTopic ? <><span aria-hidden="true" className="text-border">·</span><span className="truncate text-muted-foreground">{item.sourceTopic}</span></> : null}
           </span>
-          <span className={cn("mt-1 block text-sm font-bold leading-5", !expanded && "line-clamp-2")}>{item.prompt}</span>
+          <span className={cn("mt-1 block text-[13px] font-semibold leading-5", !expanded && "line-clamp-2")}>{item.prompt}</span>
         </span>
-        <span className="flex shrink-0 items-center gap-2">
+        <span className="flex shrink-0 items-center gap-1.5">
+          <span className={cn("text-[9px] font-bold", tone.text)}>{label}</span>
           {item.flagged ? <Flag className="mt-1 h-3.5 w-3.5 text-amber-600" aria-label="Flagged" /> : null}
           <ChevronDown className={cn("mt-0.5 h-4 w-4 text-muted-foreground transition-transform", expanded && "rotate-180")} aria-hidden="true" />
         </span>
