@@ -1,6 +1,16 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { ArrowLeft, CheckCircle2, Clock3, Flag, RotateCcw, Timer, XCircle } from "lucide-react";
+import {
+  ArrowLeft,
+  ArrowRight,
+  CheckCircle2,
+  Clock3,
+  Flag,
+  RotateCcw,
+  Target,
+  Timer,
+  TrendingUp,
+} from "lucide-react";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { findExamCourse } from "@/lib/examSprint/config";
 import { getExamResult } from "@/lib/examSprint/server";
@@ -11,28 +21,9 @@ import CoverageMeter from "../../_components/CoverageMeter";
 export const dynamic = "force-dynamic";
 
 function readiness(percentage: number) {
-  if (percentage >= 85) {
-    return {
-      label: "Strong",
-      note: "Keep your accuracy steady under time pressure.",
-      tone: "border-emerald-300/50 bg-emerald-100/40 text-emerald-900 dark:bg-emerald-950/25 dark:text-emerald-300",
-      bar: "bg-emerald-500",
-    };
-  }
-  if (percentage >= 65) {
-    return {
-      label: "Building",
-      note: "Review your misses below, then take another randomized mock.",
-      tone: "border-amber-300/50 bg-amber-100/40 text-amber-900 dark:bg-amber-950/25 dark:text-amber-300",
-      bar: "bg-amber-500",
-    };
-  }
-  return {
-    label: "Needs more practice",
-    note: "Work through the weak topics below before your next attempt.",
-    tone: "border-rose-300/50 bg-rose-100/40 text-rose-900 dark:bg-rose-950/25 dark:text-rose-300",
-    bar: "bg-rose-500",
-  };
+  if (percentage >= 85) return { label: "Strong", note: "Your accuracy is in a good place. Keep it steady under time pressure.", color: "#34d399", chip: "bg-emerald-300/15 text-emerald-200" };
+  if (percentage >= 65) return { label: "Building", note: "You are close. Review the missed questions before taking another mock.", color: "#fbbf24", chip: "bg-amber-300/15 text-amber-200" };
+  return { label: "Needs practice", note: "Slow down, fix the weak topics below, then try a fresh question mix.", color: "#fb7185", chip: "bg-rose-300/15 text-rose-200" };
 }
 
 function paceLabel(seconds: number) {
@@ -43,27 +34,17 @@ function paceLabel(seconds: number) {
   return rest > 0 ? `${minutes}m ${rest}s` : `${minutes}m`;
 }
 
-function Stat({
-  icon: Icon,
-  value,
-  label,
-  hint,
-  tone,
-}: {
-  icon: typeof CheckCircle2;
-  value: string;
-  label: string;
-  hint?: string;
-  tone: string;
-}) {
+function ScoreRing({ percentage, score, total, color }: { percentage: number; score: number; total: number; color: string }) {
   return (
-    <div className="rounded-3xl border border-border bg-card p-4 shadow-sm">
-      <span className={cn("grid h-9 w-9 place-items-center rounded-2xl", tone)}>
-        <Icon className="h-4.5 w-4.5" style={{ width: 18, height: 18 }} />
-      </span>
-      <p className="mt-3 text-2xl font-black tabular-nums">{value}</p>
-      <p className="text-xs font-bold text-muted-foreground">{label}</p>
-      {hint ? <p className="mt-1 text-[11px] text-muted-foreground">{hint}</p> : null}
+    <div
+      className="relative grid h-36 w-36 shrink-0 place-items-center rounded-full p-2 sm:h-40 sm:w-40"
+      style={{ background: `conic-gradient(${color} ${percentage}%, rgba(255,255,255,0.12) ${percentage}% 100%)` }}
+      role="img"
+      aria-label={`${percentage} percent, ${score} of ${total} correct`}
+    >
+      <div className="grid h-full w-full place-items-center rounded-full bg-[#21164f] text-center">
+        <div><p className="text-4xl font-black tracking-tight tabular-nums sm:text-5xl">{percentage}%</p><p className="mt-1 text-[11px] font-bold text-violet-200/70">{score} of {total} correct</p></div>
+      </div>
     </div>
   );
 }
@@ -76,140 +57,92 @@ export default async function ExamResultPage({ params }: { params: Promise<{ att
   const result = await getExamResult(user.id, attemptId);
   const course = findExamCourse(result.courseCode);
   const status = readiness(result.percentage);
-
   const skipped = result.total - result.answered;
   const wrong = Math.max(0, result.answered - result.score);
+  const mistakes = wrong + skipped;
   const flagged = result.items.filter((item) => item.flagged).length;
   const avgSpent = result.total > 0 ? result.timeSpentSeconds / result.total : 0;
   const avgAllowed = result.total > 0 ? result.allowedSeconds / result.total : 0;
   const ranOutOfTime = result.submissionReason === "timeup";
-
-  const coverageBefore = result.coverageBefore ?? 0;
-  const coverageAfter = result.coverageAfter ?? 0;
-  const newQuestionsThisAttempt = result.newQuestionsThisAttempt ?? 0;
-  const bankTotal = result.bankTotal ?? 0;
-  const showCoverage = result.kind === "mock"
-    && result.coverageBefore !== null
-    && result.coverageAfter !== null
-    && result.newQuestionsThisAttempt !== null
-    && result.bankTotal !== null;
+  const showCoverage = result.kind === "mock" && result.coverageBefore !== null && result.coverageAfter !== null && result.newQuestionsThisAttempt !== null && result.bankTotal !== null;
+  const correctWidth = result.total > 0 ? (result.score / result.total) * 100 : 0;
+  const wrongWidth = result.total > 0 ? (wrong / result.total) * 100 : 0;
+  const skippedWidth = Math.max(0, 100 - correctWidth - wrongWidth);
 
   return (
-    <div className="space-y-6 pb-12">
-      <Link href="/exam" className="inline-flex items-center gap-1.5 text-sm font-bold text-primary no-underline hover:underline">
-        <ArrowLeft className="h-4 w-4" /> Exam Sprint home
-      </Link>
+    <div className="space-y-5 pb-12">
+      <Link href={course ? `/exam/${course.slug}` : "/exam"} className="inline-flex min-h-10 items-center gap-1.5 text-sm font-bold text-primary no-underline hover:underline"><ArrowLeft className="h-4 w-4" aria-hidden="true" /> {course ? course.code : "Exam Sprint"}</Link>
 
-      <section className="overflow-hidden rounded-[2rem] border border-border bg-card shadow-sm">
-        <div className="grid gap-6 p-6 md:grid-cols-[1fr_auto] md:items-center md:p-8">
-          <div className="min-w-0">
-            <p className="text-xs font-black uppercase tracking-[0.16em] text-primary">
-              {result.kind === "diagnostic" ? "Diagnostic complete" : "Mock exam complete"}
-            </p>
+      <section className="relative isolate overflow-hidden rounded-[1.5rem] bg-[#21164f] p-5 text-white shadow-[0_18px_50px_rgba(33,22,79,0.18)] sm:p-7">
+        <div className="pointer-events-none absolute -right-20 -top-20 -z-10 h-64 w-64 rounded-full bg-[#725cff]/30 blur-3xl" />
+        <div className="flex flex-col items-center gap-5 text-center sm:flex-row sm:text-left">
+          <ScoreRing percentage={result.percentage} score={result.score} total={result.total} color={status.color} />
+          <div className="min-w-0 flex-1">
+            <p className="text-[10px] font-black uppercase tracking-[0.18em] text-violet-200">{result.kind === "diagnostic" ? "Diagnostic complete" : "Mock complete"}</p>
             <h1 className="mt-2 text-3xl font-black tracking-tight">{result.courseCode} result</h1>
-            <p className="mt-1.5 text-sm text-muted-foreground">
-              {course ? `${course.title} · ` : ""}{result.setTitle}
-            </p>
-            <div className="mt-5 h-2.5 overflow-hidden rounded-full bg-secondary" aria-hidden="true">
-              <div className={cn("h-full rounded-full", status.bar)} style={{ width: `${result.percentage}%` }} />
-            </div>
+            <p className="mt-1.5 text-sm font-semibold text-violet-100/65">{course?.title ?? result.setTitle}</p>
+            <span className={cn("mt-4 inline-flex rounded-full px-3 py-1.5 text-xs font-black", status.chip)}>Readiness · {status.label}</span>
+            <p className="mx-auto mt-3 max-w-md text-sm leading-6 text-violet-100/75 sm:mx-0">{status.note}</p>
           </div>
-          <div className="grid min-w-44 place-items-center rounded-3xl bg-zinc-950 p-6 text-white dark:bg-white dark:text-zinc-950">
-            <p className="text-5xl font-black tabular-nums">{result.percentage}%</p>
-            <p className="mt-2 text-xs font-bold opacity-70">{result.score} of {result.total} correct</p>
-          </div>
-        </div>
-        <div className={cn("border-t px-6 py-4 md:px-8", status.tone)}>
-          <p className="font-extrabold">Readiness: {status.label}</p>
-          <p className="mt-1 text-sm">{status.note}</p>
         </div>
       </section>
 
-      <section className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <Stat
-          icon={CheckCircle2}
-          value={String(result.score)}
-          label="Correct"
-          tone="bg-emerald-100/60 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-400"
-        />
-        <Stat
-          icon={XCircle}
-          value={String(wrong)}
-          label="Wrong"
-          tone="bg-rose-100/60 text-rose-700 dark:bg-rose-950/40 dark:text-rose-400"
-        />
-        <Stat
-          icon={Flag}
-          value={String(skipped)}
-          label="Left blank"
-          hint={skipped > 0 && ranOutOfTime ? "Time expired" : undefined}
-          tone="bg-amber-100/60 text-amber-800 dark:bg-amber-950/40 dark:text-amber-400"
-        />
-        <Stat
-          icon={Timer}
-          value={paceLabel(avgSpent)}
-          label="Average per question"
-          hint={avgAllowed > 0 ? `${paceLabel(avgAllowed)} allowed` : undefined}
-          tone="bg-primary/10 text-primary"
-        />
+      <section className="grid gap-3 sm:grid-cols-2" aria-label="Recommended next actions">
+        <a href="#corrections" className="inline-flex min-h-13 items-center justify-center gap-2 rounded-xl bg-primary px-5 text-sm font-black text-primary-foreground no-underline shadow-sm"><Target className="h-4 w-4" aria-hidden="true" /> {mistakes > 0 ? `Review ${mistakes} mistake${mistakes === 1 ? "" : "s"}` : "Review your answers"}</a>
+        {course ? (
+          <Link href={`/exam/${course.slug}`} className="inline-flex min-h-13 items-center justify-center gap-2 rounded-xl border border-border bg-card px-5 text-sm font-black text-foreground no-underline hover:bg-secondary"><RotateCcw className="h-4 w-4" aria-hidden="true" /> {result.kind === "mock" ? "Take another mock" : "Continue this course"}</Link>
+        ) : (
+          <Link href="/exam" className="inline-flex min-h-13 items-center justify-center gap-2 rounded-xl border border-border bg-card px-5 text-sm font-black no-underline">Choose a course <ArrowRight className="h-4 w-4" aria-hidden="true" /></Link>
+        )}
       </section>
 
-      <div className="flex flex-wrap items-center gap-3 rounded-2xl border border-border bg-card px-4 py-3 text-xs font-bold text-muted-foreground shadow-sm">
-        <span className="inline-flex items-center gap-1.5">
-          <Clock3 className="h-4 w-4" /> {formatDuration(result.timeSpentSeconds)} spent
-        </span>
-        {result.allowedSeconds > 0 ? (
-          <span className="inline-flex items-center gap-1.5">
-            <Timer className="h-4 w-4" /> {formatDuration(result.allowedSeconds)} allowed
-          </span>
-        ) : null}
-        {flagged > 0 ? (
-          <span className="inline-flex items-center gap-1.5">
-            <Flag className="h-4 w-4" /> {flagged} flagged during the exam
-          </span>
-        ) : null}
-        {ranOutOfTime ? (
-          <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-100/60 px-2.5 py-1 text-amber-800 dark:bg-amber-950/40 dark:text-amber-400">
-            Submitted automatically when time ran out
-          </span>
-        ) : null}
-      </div>
+      <section className="overflow-hidden rounded-2xl border border-border bg-card" aria-labelledby="performance-heading">
+        <div className="border-b border-border px-4 py-4 sm:px-5">
+          <p className="text-[10px] font-black uppercase tracking-[0.16em] text-primary">Performance</p>
+          <h2 id="performance-heading" className="mt-0.5 text-xl font-black">Where your marks went</h2>
+        </div>
+        <div className="p-4 sm:p-5">
+          <div className="flex h-2.5 overflow-hidden rounded-full bg-secondary" aria-hidden="true">
+            <span className="bg-emerald-500" style={{ width: `${correctWidth}%` }} />
+            <span className="bg-rose-500" style={{ width: `${wrongWidth}%` }} />
+            <span className="bg-amber-400" style={{ width: `${skippedWidth}%` }} />
+          </div>
+          <div className="mt-4 grid grid-cols-3 divide-x divide-border">
+            <div className="pr-3"><p className="text-2xl font-black text-emerald-700 dark:text-emerald-300">{result.score}</p><p className="text-[11px] font-bold text-muted-foreground">Correct</p></div>
+            <div className="px-3"><p className="text-2xl font-black text-rose-600 dark:text-rose-300">{wrong}</p><p className="text-[11px] font-bold text-muted-foreground">Wrong</p></div>
+            <div className="pl-3"><p className="text-2xl font-black text-amber-700 dark:text-amber-300">{skipped}</p><p className="text-[11px] font-bold text-muted-foreground">Unanswered</p></div>
+          </div>
+        </div>
+        <div className="grid gap-3 border-t border-border bg-secondary/30 px-4 py-3 text-xs font-bold text-muted-foreground sm:grid-cols-2 sm:px-5">
+          <span className="inline-flex items-center gap-2"><Timer className="h-4 w-4 text-primary" aria-hidden="true" /> Average pace: <strong className="text-foreground">{paceLabel(avgSpent)} / question</strong></span>
+          <span className="inline-flex items-center gap-2 sm:justify-end"><Clock3 className="h-4 w-4 text-primary" aria-hidden="true" /> {formatDuration(result.timeSpentSeconds)} used{result.allowedSeconds > 0 ? ` of ${formatDuration(result.allowedSeconds)}` : ""}</span>
+          {avgAllowed > 0 ? <span className="sr-only">Average allowed time was {paceLabel(avgAllowed)} per question.</span> : null}
+          {flagged > 0 ? <span className="inline-flex items-center gap-2"><Flag className="h-4 w-4 text-amber-600" aria-hidden="true" /> {flagged} question{flagged === 1 ? "" : "s"} flagged</span> : null}
+          {ranOutOfTime ? <span className="inline-flex items-center gap-2 text-amber-700 dark:text-amber-300 sm:justify-end"><Clock3 className="h-4 w-4" aria-hidden="true" /> Submitted automatically at time-up</span> : null}
+        </div>
+      </section>
+
+      {result.weakTopics.length > 0 ? (
+        <section className="overflow-hidden rounded-2xl border border-amber-300/40 bg-card" aria-labelledby="weak-topics-heading">
+          <div className="flex gap-3 p-4 sm:p-5">
+            <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-amber-100 text-amber-800 dark:bg-amber-950/40 dark:text-amber-300"><TrendingUp className="h-[18px] w-[18px]" aria-hidden="true" /></span>
+            <div className="min-w-0 flex-1"><p className="text-[10px] font-black uppercase tracking-[0.16em] text-amber-700 dark:text-amber-300">Revise next</p><h2 id="weak-topics-heading" className="mt-0.5 text-lg font-black">Topics that cost you marks</h2><p className="mt-1 text-sm text-muted-foreground">Start here before attempting another randomised paper.</p></div>
+          </div>
+          <div className="flex flex-wrap gap-2 border-t border-amber-300/30 bg-amber-50/50 px-4 py-3 dark:bg-amber-950/15 sm:px-5">{result.weakTopics.map(({ topic, missed }) => <span key={topic} className="rounded-full border border-amber-300/50 bg-card px-3 py-1.5 text-xs font-bold">{topic} · {missed} missed</span>)}</div>
+        </section>
+      ) : null}
 
       {showCoverage ? (
-        <section className="rounded-3xl border border-primary/20 bg-primary/[0.04] p-5 shadow-sm">
-          <p className="text-xs font-black uppercase tracking-[0.16em] text-primary">Question-bank coverage</p>
-          <h2 className="mt-1 text-xl font-extrabold">
-            This mock showed you {newQuestionsThisAttempt} new question{newQuestionsThisAttempt === 1 ? "" : "s"}
-          </h2>
-          <p className="mt-2 text-sm text-muted-foreground">
-            You had seen {coverageBefore} of {bankTotal} before this attempt.
-          </p>
-          <CoverageMeter
-            className="mt-4"
-            label="Bank coverage now"
-            delivered={coverageAfter}
-            bankTotal={bankTotal}
-            complete={Boolean(result.coverageComplete)}
-          />
+        <section className="rounded-2xl border border-border bg-card p-4 sm:p-5">
+          <div className="flex items-start justify-between gap-3"><div><p className="text-[10px] font-black uppercase tracking-[0.16em] text-primary">Question rotation</p><h2 className="mt-0.5 text-lg font-black">{result.newQuestionsThisAttempt} new question{result.newQuestionsThisAttempt === 1 ? "" : "s"} added to your coverage</h2></div><CheckCircle2 className="h-5 w-5 shrink-0 text-emerald-600" aria-hidden="true" /></div>
+          <CoverageMeter className="mt-4" label="Questions seen overall" delivered={result.coverageAfter ?? 0} bankTotal={result.bankTotal ?? 0} complete={Boolean(result.coverageComplete)} />
         </section>
       ) : null}
 
       <ExamCorrections items={result.items} />
 
-      <div className="flex flex-col gap-3 sm:flex-row">
-        {course ? (
-          <Link href={`/exam/${course.slug}`} className="inline-flex flex-1 items-center justify-center gap-2 rounded-2xl bg-primary px-5 py-3 text-sm font-extrabold text-primary-foreground no-underline hover:brightness-105">
-            <RotateCcw className="h-4 w-4" /> {result.kind === "mock" ? "Take another mock" : "Continue with this course"}
-          </Link>
-        ) : null}
-        <Link href="/exam" className="inline-flex flex-1 items-center justify-center rounded-2xl border border-border bg-card px-5 py-3 text-sm font-extrabold text-foreground no-underline hover:bg-secondary">
-          Choose another course
-        </Link>
-      </div>
-
-      <p className="text-center text-xs text-muted-foreground">
-        This readiness score is based on JabuStudy practice performance and does not predict an official result.
-      </p>
+      <Link href="/exam" className="inline-flex min-h-12 w-full items-center justify-center rounded-xl border border-border bg-card px-5 text-sm font-extrabold text-foreground no-underline hover:bg-secondary">Choose another course</Link>
+      <p className="text-center text-[11px] leading-5 text-muted-foreground">This readiness score reflects JabuStudy practice performance and does not predict an official result.</p>
     </div>
   );
 }

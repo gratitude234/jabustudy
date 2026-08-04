@@ -10,9 +10,11 @@ import {
   CheckCircle2,
   Copy,
   ExternalLink,
+  LockKeyhole,
   Loader2,
   RefreshCw,
   RotateCcw,
+  ShieldCheck,
   UploadCloud,
   X,
   Zap,
@@ -302,7 +304,8 @@ export default function StudyBillingPage() {
     const timer = window.setTimeout(async () => {
       const query = new URLSearchParams(window.location.search);
       setQueryReturnPath(sanitizeBillingReturnPath(query.get("returnTo")));
-      setOffer(query.get("offer"));
+      const requestedOffer = query.get("offer");
+      setOffer(requestedOffer);
       const data = await loadBilling();
       if (!active || !data) return;
       const callbackReference = new URLSearchParams(window.location.search).get("ref");
@@ -315,6 +318,8 @@ export default function StudyBillingPage() {
         return;
       }
       const target = selectBillingVisitOrder(data.orders, callbackReference);
+      const contextualReturnPath = callbackOrder?.returnPath || target?.returnPath || query.get("returnTo") || "";
+      if (!requestedOffer && contextualReturnPath.startsWith("/exam")) setOffer("exam-sprint");
       if (target && target.status !== "approved") {
         setCheckoutOrderId(target.id);
         void pollPayment(target.reference);
@@ -531,8 +536,8 @@ export default function StudyBillingPage() {
   }
 
   return (
-    <div className="space-y-6 pb-24">
-      <StudyTabs />
+    <div data-hide-nav={offer === "exam-sprint" ? "true" : undefined} className={cn("space-y-6 pb-24", offer === "exam-sprint" && "pb-28 md:pb-10")}>
+      {offer === "exam-sprint" ? null : <StudyTabs />}
 
       <div className="sr-only" aria-live="polite" aria-atomic="true">{statusMessage}</div>
       {toast ? (
@@ -548,15 +553,21 @@ export default function StudyBillingPage() {
         </div>
       ) : null}
 
-      <div className="flex items-start justify-between gap-4">
-        <div>
-          <p className="text-xs font-bold uppercase tracking-wide text-muted-foreground">Billing</p>
-          <h1 className="mt-0.5 text-2xl font-extrabold tracking-tight">Plans &amp; AI credits</h1>
+      {offer === "exam-sprint" ? (
+        <section className="relative isolate overflow-hidden rounded-[1.5rem] bg-[#21164f] p-5 text-white shadow-[0_18px_50px_rgba(33,22,79,0.16)] sm:p-7">
+          <div className="pointer-events-none absolute -right-16 -top-20 -z-10 h-56 w-56 rounded-full bg-[#725cff]/35 blur-2xl" />
+          <Link href={returnPath} className={cn("inline-flex min-h-10 items-center gap-1.5 rounded-xl border border-white/15 bg-white/10 px-3 text-xs font-black text-white no-underline", focusRing)}><ArrowLeft className="h-4 w-4" aria-hidden="true" /> Back to course</Link>
+          <div className="mt-5 flex items-start gap-3">
+            <span className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-white/10 text-violet-100"><LockKeyhole className="h-5 w-5" aria-hidden="true" /></span>
+            <div><p className="text-[10px] font-black uppercase tracking-[0.18em] text-violet-200">Exam Sprint access</p><h1 className="mt-1 text-3xl font-black tracking-tight">Unlock every ready mock</h1><p className="mt-2 max-w-xl text-sm leading-6 text-violet-100/75">One secure payment gives you 30 days across every published Exam Sprint course.</p></div>
+          </div>
+        </section>
+      ) : (
+        <div className="flex items-start justify-between gap-4">
+          <div><p className="text-xs font-bold uppercase tracking-wide text-muted-foreground">Billing</p><h1 className="mt-0.5 text-2xl font-extrabold tracking-tight">Plans & AI credits</h1></div>
+          <Link href={returnPath} className={cn("mt-1 inline-flex shrink-0 items-center gap-1 text-sm font-bold text-primary no-underline hover:underline", focusRing)}><ArrowLeft className="h-4 w-4" aria-hidden="true" /> Back</Link>
         </div>
-        <Link href={returnPath} className={cn("mt-1 inline-flex shrink-0 items-center gap-1 text-sm font-bold text-primary no-underline hover:underline", focusRing)}>
-          <ArrowLeft className="h-4 w-4" aria-hidden="true" /> Back
-        </Link>
-      </div>
+      )}
 
       {pageError ? (
         <div role="alert" className="flex flex-col gap-3 rounded-2xl border border-rose-300 bg-rose-50 p-4 text-rose-950 dark:border-rose-800 dark:bg-rose-950/30 dark:text-rose-100 sm:flex-row sm:items-center sm:justify-between">
@@ -600,18 +611,17 @@ export default function StudyBillingPage() {
         </div>
       ) : null}
 
-      {snapshot ? (
+      {snapshot && offer !== "exam-sprint" ? (
         <div className="flex flex-wrap items-center gap-x-4 gap-y-2 rounded-2xl border border-border bg-card px-4 py-3 text-sm">
           <span className="flex items-center gap-1.5 font-semibold">
             <BadgeCheck className="h-4 w-4 text-primary" aria-hidden="true" />
             {snapshot.plus.active ? `Plus · expires ${formatDate(snapshot.plus.activeUntil)}` : "Free plan"}
           </span>
-          <span className="text-muted-foreground"><Zap className="mr-1 inline h-4 w-4 text-amber-500" aria-hidden="true" />{snapshot.credits.balance} AI credit{snapshot.credits.balance === 1 ? "" : "s"}</span>
-          <span className="text-muted-foreground">
-            {snapshot.practice.limit === null
-              ? "Unlimited practice"
-              : `${snapshot.practice.remaining ?? 0} of ${snapshot.practice.limit} questions left today`}
-          </span>
+          <><span className="text-muted-foreground"><Zap className="mr-1 inline h-4 w-4 text-amber-500" aria-hidden="true" />{snapshot.credits.balance} AI credit{snapshot.credits.balance === 1 ? "" : "s"}</span><span className="text-muted-foreground">{snapshot.practice.limit === null ? "Unlimited practice" : `${snapshot.practice.remaining ?? 0} of ${snapshot.practice.limit} questions left today`}</span></>
+        </div>
+      ) : snapshot && offer === "exam-sprint" && snapshot.plus.active ? (
+        <div className="flex items-start gap-3 rounded-2xl border border-emerald-300/50 bg-emerald-100/45 p-4 text-emerald-900 dark:bg-emerald-950/25 dark:text-emerald-200">
+          <BadgeCheck className="mt-0.5 h-5 w-5 shrink-0" aria-hidden="true" /><div><p className="text-sm font-extrabold">You already have full access</p><p className="mt-0.5 text-xs leading-5">Active until {formatDate(snapshot.plus.activeUntil)}. Another payment will extend this date.</p></div>
         </div>
       ) : null}
 
@@ -712,29 +722,33 @@ export default function StudyBillingPage() {
       {!blocksPlans && snapshot ? (
         <section className="space-y-6" aria-labelledby="plans-heading">
           <div>
-            <h2 id="plans-heading" className="text-lg font-extrabold">{offer === "exam-sprint" ? "Unlock Exam Sprint" : "JabuStudy Plus"}</h2>
-            {offer === "exam-sprint" ? <p className="mt-1 text-sm text-muted-foreground">Get every available Exam Sprint mock plus all normal Plus benefits for 30 days.</p> : null}
+            <h2 id="plans-heading" className="text-xl font-extrabold">{offer === "exam-sprint" ? "One plan. No confusing options." : "JabuStudy Plus"}</h2>
             <p className="mt-1 text-sm text-muted-foreground">
-              {snapshot.plus.active
-                ? "Buying Plus again extends your current expiry; you do not lose remaining time."
-                : "Recommended for regular study: unlimited practice plus included AI credits."}
+              {offer === "exam-sprint"
+                ? snapshot.plus.active
+                  ? "Extend your current access without losing any remaining days."
+                  : "Everything needed for focused CBT preparation, active for 30 days."
+                : snapshot.plus.active
+                  ? "Buying Plus again extends your current expiry; you do not lose remaining time."
+                  : "Recommended for regular study: unlimited practice plus included AI credits."}
             </p>
-            <div className="mt-3 grid gap-3 sm:grid-cols-2">
+            <div className={cn("mt-4 grid gap-3", offer === "exam-sprint" ? "max-w-2xl" : "sm:grid-cols-2")}>
               {visiblePlusPlans.map((plan) => {
                 const recommended = plan.key === "plus_monthly";
                 return (
-                  <article key={plan.key} className={cn("relative flex flex-col rounded-2xl border p-5 shadow-sm", recommended ? "border-primary/50 bg-primary/5" : "border-border bg-card")}>
-                    {recommended ? <span className="absolute -top-2.5 left-4 rounded-full bg-primary px-3 py-1 text-[11px] font-extrabold text-primary-foreground">Best value</span> : null}
-                    <div className="flex items-start justify-between gap-3"><h3 className="font-extrabold">{plan.plusDays}-day Plus</h3><p className="text-xl font-black">{money(plan.amountNaira)}</p></div>
-                    <ul className="mt-3 space-y-2 text-sm text-muted-foreground">{offer === "exam-sprint" ? <li className="flex gap-2"><CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-emerald-600" />All published Exam Sprint mocks</li> : null}<li className="flex gap-2"><CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-emerald-600" />Unlimited daily practice</li><li className="flex gap-2"><CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-emerald-600" />{plan.credits} AI credits included</li></ul>
-                    <button type="button" onClick={() => void startPayment(plan.key)} disabled={busyPlan !== null} className={cn("mt-4 inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-extrabold disabled:opacity-60", recommended ? "bg-primary text-primary-foreground" : "border border-primary text-primary hover:bg-primary/10", focusRing)}>{busyPlan === plan.key ? <Loader2 className="h-4 w-4 animate-spin" /> : null}{snapshot.plus.active ? "Extend Plus" : "Get Plus"} · {money(plan.amountNaira)}</button>
+                  <article key={plan.key} className={cn("relative flex flex-col rounded-[1.5rem] border bg-card p-5", recommended ? "border-primary/40" : "border-border", offer === "exam-sprint" && "shadow-[0_14px_40px_rgba(33,22,79,0.08)] sm:p-6")}>
+                    {recommended && offer !== "exam-sprint" ? <span className="absolute -top-2.5 left-4 rounded-full bg-primary px-3 py-1 text-[11px] font-extrabold text-primary-foreground">Best value</span> : null}
+                    <div className="flex items-start justify-between gap-3"><div><p className="text-[10px] font-black uppercase tracking-[0.16em] text-primary">{offer === "exam-sprint" ? "Full access" : "Plus plan"}</p><h3 className="mt-1 font-extrabold">{offer === "exam-sprint" ? "30 days of Exam Sprint" : `${plan.plusDays}-day Plus`}</h3></div><div className="text-right"><p className={cn("font-black", offer === "exam-sprint" ? "text-3xl tracking-tight" : "text-xl")}>{money(plan.amountNaira)}</p>{offer === "exam-sprint" ? <p className="text-[10px] font-bold text-muted-foreground">one payment</p> : null}</div></div>
+                    <ul className="mt-5 space-y-3 text-sm text-muted-foreground">{offer === "exam-sprint" ? <><li className="flex gap-2"><CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-emerald-600" aria-hidden="true" /><span><strong className="text-foreground">Every published Exam Sprint mock</strong><span className="mt-0.5 block text-xs">Across all ready supplementary courses.</span></span></li><li className="flex gap-2"><CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-emerald-600" aria-hidden="true" /><span><strong className="text-foreground">Results and full corrections</strong><span className="mt-0.5 block text-xs">Including weak topics and question coverage.</span></span></li></> : null}<li className="flex gap-2"><CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-emerald-600" aria-hidden="true" /><span><strong className="text-foreground">Unlimited daily Study practice</strong></span></li><li className="flex gap-2"><CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-emerald-600" aria-hidden="true" /><span><strong className="text-foreground">{plan.credits} AI credits included</strong></span></li></ul>
+                    <button type="button" onClick={() => void startPayment(plan.key)} disabled={busyPlan !== null} className={cn("mt-5 inline-flex min-h-13 items-center justify-center gap-2 rounded-xl px-4 text-sm font-extrabold disabled:opacity-60", recommended ? "bg-primary text-primary-foreground" : "border border-primary text-primary hover:bg-primary/10", focusRing)}>{busyPlan === plan.key ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : offer === "exam-sprint" ? <ShieldCheck className="h-4 w-4" aria-hidden="true" /> : null}{offer === "exam-sprint" ? snapshot.plus.active ? "Extend access" : "Continue to secure payment" : snapshot.plus.active ? "Extend Plus" : "Get Plus"} {offer !== "exam-sprint" ? `· ${money(plan.amountNaira)}` : ""}</button>
+                    {offer === "exam-sprint" ? <p className="mt-3 text-center text-[11px] font-semibold text-muted-foreground">Access activates only after payment is verified.</p> : null}
                   </article>
                 );
               })}
             </div>
           </div>
 
-          <div>
+          {offer !== "exam-sprint" ? <div>
             <h2 className="text-lg font-extrabold">AI credit top-ups</h2>
             <p className="mt-1 text-sm text-muted-foreground">One-off top-ups for AI question generation. Plus is usually better value for free users who practise often.</p>
             <div className="mt-3 grid gap-3 sm:grid-cols-3">
@@ -747,12 +761,21 @@ export default function StudyBillingPage() {
                 </article>
               ))}
             </div>
-          </div>
+          </div> : null}
           <p className="text-center text-xs text-muted-foreground">{snapshot.paystackEnabled ? "Secure checkout by Paystack. Access activates after verified payment." : "Legacy bank transfer is available while Paystack is offline."}</p>
         </section>
       ) : null}
 
-      {historyItems.length > 0 ? (
+      {offer === "exam-sprint" && !blocksPlans && snapshot && visiblePlusPlans[0] && !confirmedOrder ? (
+        <div className="fixed inset-x-0 bottom-0 z-[60] border-t border-border bg-background/95 px-4 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-3 backdrop-blur-xl md:hidden">
+          <div className="mx-auto flex max-w-lg items-center gap-3">
+            <div className="shrink-0"><p className="text-[10px] font-bold text-muted-foreground">30 days</p><p className="text-lg font-black">{money(visiblePlusPlans[0].amountNaira)}</p></div>
+            <button type="button" onClick={() => void startPayment(visiblePlusPlans[0].key)} disabled={busyPlan !== null} className={cn("inline-flex min-h-12 flex-1 items-center justify-center gap-2 rounded-xl bg-primary px-4 text-sm font-extrabold text-primary-foreground disabled:opacity-60", focusRing)}>{busyPlan === visiblePlusPlans[0].key ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : <ShieldCheck className="h-4 w-4" aria-hidden="true" />}{snapshot.plus.active ? "Extend access" : "Pay securely"}</button>
+          </div>
+        </div>
+      ) : null}
+
+      {offer !== "exam-sprint" && historyItems.length > 0 ? (
         <section aria-labelledby="history-heading">
           <div className="mb-3 flex items-center justify-between gap-3"><h2 id="history-heading" className="text-base font-extrabold">Payment history</h2>{refreshing ? <span className="inline-flex items-center gap-1 text-xs text-muted-foreground" role="status"><Loader2 className="h-3.5 w-3.5 animate-spin" />Refreshing</span> : null}</div>
           <div className="overflow-hidden rounded-2xl border border-border bg-card">
