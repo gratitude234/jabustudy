@@ -17,6 +17,7 @@ import {
   X,
 } from "lucide-react";
 import { cn, msToClock } from "@/lib/utils";
+import { examTabLeaseBelongsToAnotherTab, parseExamTabLease } from "@/lib/examSprint/workflow";
 
 type ExamOption = { id: string; text: string };
 type ExamQuestion = { id: string; position: number; prompt: string; options: ExamOption[] };
@@ -73,6 +74,7 @@ export default function ExamAttemptClient() {
   const router = useRouter();
   const attemptId = String(params.attemptId ?? "");
   const storageKey = `jabu-exam-draft:${attemptId}`;
+  const leaseKey = `jabu-exam-tab:${attemptId}`;
 
   const [attempt, setAttempt] = useState<AttemptPayload | null>(null);
   const [responses, setResponses] = useState<Record<string, ExamResponse>>({});
@@ -90,6 +92,8 @@ export default function ExamAttemptClient() {
   const [leaveDialogOpen, setLeaveDialogOpen] = useState(false);
   const [leaving, setLeaving] = useState(false);
   const [timeExpired, setTimeExpired] = useState(false);
+  const [entryNotice, setEntryNotice] = useState<string | null>(null);
+  const [duplicateTab, setDuplicateTab] = useState(false);
 
   const attemptRef = useRef<AttemptPayload | null>(null);
   const responsesRef = useRef<Record<string, ExamResponse>>({});
@@ -98,6 +102,66 @@ export default function ExamAttemptClient() {
   const flushPromiseRef = useRef<Promise<boolean> | null>(null);
   const submittingRef = useRef(false);
   const headingRef = useRef<HTMLHeadingElement | null>(null);
+  const tabIdRef = useRef("");
+  const ownsTabLeaseRef = useRef(false);
+
+  const takeOverTab = useCallback(() => {
+    if (typeof window === "undefined") return;
+    if (!tabIdRef.current) {
+      tabIdRef.current = typeof crypto.randomUUID === "function"
+        ? crypto.randomUUID()
+        : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    }
+    window.localStorage.setItem(leaseKey, JSON.stringify({
+      tabId: tabIdRef.current,
+      expiresAt: Date.now() + 7_000,
+    }));
+    ownsTabLeaseRef.current = true;
+    setDuplicateTab(false);
+  }, [leaseKey]);
+
+  useEffect(() => {
+    if (!attemptId) return;
+    if (!tabIdRef.current) {
+      tabIdRef.current = typeof crypto.randomUUID === "function"
+        ? crypto.randomUUID()
+        : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    }
+
+    const tabId = tabIdRef.current;
+    const inspectOrClaim = () => {
+      const current = window.localStorage.getItem(leaseKey);
+      if (examTabLeaseBelongsToAnotherTab(current, tabId)) {
+        ownsTabLeaseRef.current = false;
+        setDuplicateTab(true);
+        return;
+      }
+      window.localStorage.setItem(leaseKey, JSON.stringify({ tabId, expiresAt: Date.now() + 7_000 }));
+      ownsTabLeaseRef.current = true;
+      setDuplicateTab(false);
+    };
+
+    inspectOrClaim();
+    const heartbeat = window.setInterval(inspectOrClaim, 2_000);
+    const onStorage = (event: StorageEvent) => {
+      if (event.key !== leaseKey) return;
+      if (examTabLeaseBelongsToAnotherTab(event.newValue, tabId)) {
+        ownsTabLeaseRef.current = false;
+        setDuplicateTab(true);
+      } else if (!event.newValue || !parseExamTabLease(event.newValue)) {
+        inspectOrClaim();
+      }
+    };
+    window.addEventListener("storage", onStorage);
+
+    return () => {
+      window.clearInterval(heartbeat);
+      window.removeEventListener("storage", onStorage);
+      const lease = parseExamTabLease(window.localStorage.getItem(leaseKey));
+      if (ownsTabLeaseRef.current && lease?.tabId === tabId) window.localStorage.removeItem(leaseKey);
+      ownsTabLeaseRef.current = false;
+    };
+  }, [attemptId, leaseKey]);
 
   const updateResponses = useCallback((next: Record<string, ExamResponse>) => {
     responsesRef.current = next;
@@ -180,7 +244,7 @@ export default function ExamAttemptClient() {
           const isOffline = typeof navigator !== "undefined" && !navigator.onLine;
           setOnline(!isOffline);
           setSyncState(isOffline ? "offline" : "error");
-          setSaveError(cause instanceof Error ? cause.message : "Your answer is saved on this phone but has not synced yet.");
+          setSaveError(cause instanceof Error ? cause.message : "Your recent change is only on this phone and has not synced yet.");
           persistPendingDraft();
           return false;
         }
@@ -226,6 +290,13 @@ export default function ExamAttemptClient() {
         const loadedAttempt = data.attempt;
         attemptRef.current = loadedAttempt;
         setAttempt(loadedAttempt);
+
+        const noticeKey = `jabu-exam-entry-notice:${loadedAttempt.id}`;
+        const storedNotice = window.sessionStorage.getItem(noticeKey);
+        if (storedNotice) {
+          setEntryNotice(storedNotice);
+          window.sessionStorage.removeItem(noticeKey);
+        }
 
         const localDraft = parseLocalDraft(window.localStorage.getItem(storageKey));
         const canRestore = localDraft?.deadlineAt === loadedAttempt.deadlineAt;
@@ -288,7 +359,7 @@ export default function ExamAttemptClient() {
       const flushed = await flushPending();
       if (!flushed && Object.keys(pendingRef.current).length > 0) {
         throw new Error(reason === "timeup"
-          ? "Time is up. Reconnect so we can finish submitting the answers that reached this phone."
+          ? "Time is up. Changes that did not reach the server before 00:00 may not count. Reconnect to finish loading your result."
           : "Some answers are still only on this phone. Reconnect or retry before submitting.");
       }
 
@@ -438,6 +509,22 @@ export default function ExamAttemptClient() {
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [attempt, current, index, overlayOpen, queueResponse, submitting, timeExpired]);
 
+  if (duplicateTab) {
+    return (
+      <div className="grid min-h-dvh place-items-center bg-background px-4">
+        <div className="w-full max-w-md rounded-2xl border border-amber-300/60 bg-card p-6 text-center dark:border-amber-900/60">
+          <span className="mx-auto grid h-11 w-11 place-items-center rounded-xl bg-amber-100 text-amber-800 dark:bg-amber-950/40 dark:text-amber-300"><AlertTriangle className="h-5 w-5" aria-hidden="true" /></span>
+          <h1 className="mt-4 text-xl font-black">This attempt is open elsewhere</h1>
+          <p className="mt-2 text-sm leading-6 text-muted-foreground">Only one tab should control this timed mock. Its countdown is still running.</p>
+          <div className="mt-5 grid gap-2.5">
+            <button type="button" onClick={takeOverTab} className="min-h-11 rounded-xl bg-primary px-4 text-sm font-black text-primary-foreground">Use this tab instead</button>
+            <button type="button" onClick={() => router.push(attempt ? coursePath(attempt.courseCode) : "/exam")} className="min-h-11 rounded-xl border border-border bg-card px-4 text-sm font-black text-muted-foreground">Return to Exam Sprint</button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   if (loading) {
     return <div className="grid min-h-dvh place-items-center bg-background"><div className="text-center"><Loader2 className="mx-auto h-7 w-7 animate-spin text-primary" /><p className="mt-3 text-sm font-semibold text-muted-foreground">Preparing your secure exam…</p></div></div>;
   }
@@ -449,7 +536,7 @@ export default function ExamAttemptClient() {
   const lowTime = remainingMs !== null && remainingMs <= 5 * 60_000;
   const criticalTime = remainingMs !== null && remainingMs <= 60_000;
   const status = !online
-    ? { label: pendingCount > 0 ? "Saved on phone" : "Offline", icon: WifiOff, tone: "text-amber-700 dark:text-amber-300" }
+    ? { label: pendingCount > 0 ? "On phone only" : "Offline", icon: WifiOff, tone: "text-amber-700 dark:text-amber-300" }
     : syncState === "saving"
       ? { label: "Saving…", icon: Loader2, tone: "text-primary" }
       : syncState === "retrying"
@@ -459,6 +546,8 @@ export default function ExamAttemptClient() {
           : { label: "Saved", icon: CheckCircle2, tone: "text-emerald-700 dark:text-emerald-300" };
   const StatusIcon = status.icon;
   const atLast = index >= attempt.questions.length - 1;
+  const hasCurrentAnswer = Boolean(currentResponse.selectedOptionId);
+  const nextQuestionLabel = hasCurrentAnswer ? "Next question" : "Skip for now";
   const questionProgressPercentage = attempt.questions.length > 0 ? Math.round(((index + 1) / attempt.questions.length) * 100) : 0;
   const firstUnansweredIndex = attempt.questions.findIndex((question) => !responses[question.id]?.selectedOptionId);
   const firstFlaggedIndex = attempt.questions.findIndex((question) => responses[question.id]?.flagged);
@@ -483,12 +572,25 @@ export default function ExamAttemptClient() {
             <Clock3 className="h-3.5 w-3.5" aria-hidden="true" /> {msToClock(remainingMs ?? 0)}
           </div>
         </div>
-        <div className="h-1 bg-secondary" role="progressbar" aria-label={`Question ${index + 1} of ${attempt.questions.length}`} aria-valuemin={1} aria-valuemax={attempt.questions.length} aria-valuenow={index + 1}><div className="h-full rounded-r-full bg-primary transition-[width]" style={{ width: `${questionProgressPercentage}%` }} /></div>
+        <div className="h-1.5 overflow-hidden bg-primary/10" role="progressbar" aria-label={`Question ${index + 1} of ${attempt.questions.length}`} aria-valuemin={1} aria-valuemax={attempt.questions.length} aria-valuenow={index + 1} aria-valuetext={`${questionProgressPercentage}% through this paper`}><div className="h-full rounded-r-full bg-primary transition-[width] duration-300" style={{ width: `${questionProgressPercentage}%` }} /></div>
       </header>
 
       <div className="mx-auto grid max-w-6xl gap-5 px-4 py-3 sm:py-5 md:px-6 lg:grid-cols-[minmax(0,1fr)_280px]">
         <main className="min-w-0">
-          {saveError ? (
+          {entryNotice ? (
+            <div className="mb-3 flex items-start gap-3 rounded-xl border border-amber-300/60 bg-amber-50 px-3.5 py-2.5 text-xs font-semibold text-amber-950 dark:border-amber-900/60 dark:bg-amber-950/30 dark:text-amber-100" role="status">
+              <Clock3 className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
+              <span className="min-w-0 flex-1">{entryNotice}</span>
+              <button type="button" onClick={() => setEntryNotice(null)} className="grid h-7 w-7 shrink-0 place-items-center rounded-lg hover:bg-amber-100 dark:hover:bg-amber-900/40" aria-label="Dismiss notice"><X className="h-3.5 w-3.5" aria-hidden="true" /></button>
+            </div>
+          ) : null}
+
+          {!online && pendingCount > 0 ? (
+            <div className="mb-4 flex items-start gap-3 rounded-xl border border-amber-300/60 bg-amber-100/60 px-4 py-3 text-xs font-semibold leading-5 text-amber-950 dark:border-amber-900/60 dark:bg-amber-950/35 dark:text-amber-100" role="alert">
+              <WifiOff className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
+              <span><strong>{pendingCount} change{pendingCount === 1 ? " is" : "s are"} only on this phone.</strong> Reconnect before the timer reaches 00:00 so {pendingCount === 1 ? "it" : "they"} can count.</span>
+            </div>
+          ) : saveError ? (
             <div className="mb-4 flex items-start gap-3 rounded-xl border border-amber-300/50 bg-amber-100/50 px-4 py-3 text-sm text-amber-900 dark:bg-amber-950/30 dark:text-amber-200" role="alert">
               <WifiOff className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
               <span className="min-w-0 flex-1">{saveError}</span>
@@ -496,10 +598,10 @@ export default function ExamAttemptClient() {
             </div>
           ) : null}
 
-          <section className="py-1.5 sm:rounded-2xl sm:border sm:border-border sm:bg-card sm:p-6 md:p-7">
+          <section className="py-[clamp(0.375rem,1.2dvh,0.75rem)] sm:rounded-2xl sm:border sm:border-border sm:bg-card sm:p-6 md:p-7">
             <h1 ref={headingRef} tabIndex={-1} className="scroll-mt-20 text-[1.2rem] font-semibold leading-7 tracking-[-0.012em] outline-none sm:text-xl sm:leading-8">{current.prompt}</h1>
 
-            <div className="mt-3.5 space-y-2 sm:mt-6 sm:space-y-3" role="radiogroup" aria-label={`Answer options for question ${index + 1}`}>
+            <div className="mt-[clamp(0.875rem,2.2dvh,1.5rem)] flex flex-col gap-[clamp(0.5rem,1.6dvh,0.875rem)] sm:mt-6 sm:gap-3" role="radiogroup" aria-label={`Answer options for question ${index + 1}`}>
               {current.options.map((option, optionIndex) => {
                 const selected = currentResponse.selectedOptionId === option.id;
                 const key = String.fromCharCode(65 + optionIndex);
@@ -511,7 +613,7 @@ export default function ExamAttemptClient() {
                     aria-checked={selected}
                     disabled={submitting || timeExpired}
                     onClick={() => queueResponse(current.id, { selectedOptionId: option.id })}
-                    className={cn("flex min-h-12 w-full items-start gap-2.5 rounded-xl border p-2.5 text-left transition focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-background disabled:opacity-60 sm:gap-3 sm:p-4", selected ? "border-primary bg-primary/[0.055]" : "border-border/75 bg-card hover:border-primary/30 hover:bg-secondary/25")}
+                    className={cn("flex min-h-[clamp(3rem,7dvh,3.75rem)] w-full items-start gap-2.5 rounded-xl border p-2.5 text-left transition focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-background disabled:opacity-60 sm:min-h-14 sm:gap-3 sm:p-4", selected ? "border-primary bg-primary/[0.055]" : "border-border/75 bg-card hover:border-primary/30 hover:bg-secondary/25")}
                   >
                     <span className={cn("grid h-8 w-8 shrink-0 place-items-center rounded-lg border text-xs font-bold", selected ? "border-primary bg-primary text-primary-foreground" : "border-border/80 bg-background text-foreground/60")}>{key}</span>
                     <span className="min-w-0 flex-1 pt-1 text-sm font-medium leading-5 sm:text-base sm:leading-6">{option.text}</span>
@@ -520,15 +622,15 @@ export default function ExamAttemptClient() {
               })}
             </div>
 
-            <div className="mt-3 flex flex-wrap items-center gap-2">
+            <div className="mt-[clamp(0.75rem,2dvh,1.25rem)] flex flex-wrap items-center gap-2">
               <button type="button" disabled={submitting || timeExpired} onClick={() => queueResponse(current.id, { flagged: !currentResponse.flagged })} className={cn("inline-flex min-h-10 items-center gap-1.5 rounded-lg px-2.5 text-[11px] font-semibold transition disabled:opacity-50", currentResponse.flagged ? "bg-amber-100 text-amber-800 dark:bg-amber-950/40 dark:text-amber-300" : "bg-secondary/70 text-foreground/70 hover:bg-secondary hover:text-foreground")}><Flag className={cn("h-3.5 w-3.5", currentResponse.flagged && "fill-current")} aria-hidden="true" /> {currentResponse.flagged ? "Remove flag" : "Flag for review"}</button>
               {currentResponse.selectedOptionId ? <button type="button" disabled={submitting || timeExpired} onClick={() => queueResponse(current.id, { selectedOptionId: null })} className="min-h-10 rounded-lg bg-secondary/70 px-2.5 text-[11px] font-semibold text-foreground/70 transition hover:bg-secondary hover:text-foreground disabled:opacity-50">Clear answer</button> : null}
             </div>
           </section>
 
           <div className="mt-4 hidden items-center justify-between gap-3 lg:flex">
-            <button type="button" disabled={index === 0 || submitting || timeExpired} onClick={() => setIndex((value) => Math.max(0, value - 1))} className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-border bg-card px-4 text-sm font-black disabled:opacity-35"><ArrowLeft className="h-4 w-4" aria-hidden="true" /> Previous</button>
-            <button type="button" disabled={submitting || timeExpired} onClick={() => atLast ? setSubmitDialogOpen(true) : setIndex((value) => Math.min(attempt.questions.length - 1, value + 1))} className="inline-flex min-h-11 items-center gap-2 rounded-xl bg-primary px-5 text-sm font-black text-primary-foreground disabled:opacity-35">{atLast ? "Review & submit" : "Next question"} {atLast ? <Send className="h-4 w-4" aria-hidden="true" /> : <ArrowRight className="h-4 w-4" aria-hidden="true" />}</button>
+            <button type="button" disabled={index === 0 || submitting || timeExpired} onClick={() => setIndex((value) => Math.max(0, value - 1))} className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-border bg-card px-4 text-sm font-black disabled:cursor-not-allowed disabled:border-border/50 disabled:bg-secondary/35 disabled:text-foreground/35 disabled:opacity-100" aria-label={index === 0 ? "Previous question unavailable — this is the first question" : "Previous question"}><ArrowLeft className="h-4 w-4" aria-hidden="true" /> Previous</button>
+            <button type="button" disabled={submitting || timeExpired} onClick={() => atLast ? setSubmitDialogOpen(true) : setIndex((value) => Math.min(attempt.questions.length - 1, value + 1))} className="inline-flex min-h-11 items-center gap-2 rounded-xl bg-primary px-5 text-sm font-black text-primary-foreground disabled:opacity-35">{atLast ? "Review & submit" : nextQuestionLabel} {atLast ? <Send className="h-4 w-4" aria-hidden="true" /> : <ArrowRight className="h-4 w-4" aria-hidden="true" />}</button>
           </div>
         </main>
 
@@ -546,8 +648,8 @@ export default function ExamAttemptClient() {
 
       <nav className="fixed inset-x-0 bottom-0 z-40 border-t border-border/70 bg-background/95 px-3 pb-[max(0.55rem,env(safe-area-inset-bottom))] pt-2 backdrop-blur-xl lg:hidden" aria-label="Exam navigation">
         <div className="mx-auto grid max-w-lg grid-cols-[2.75rem_1fr] gap-2.5">
-          <button type="button" disabled={index === 0 || submitting || timeExpired} onClick={() => setIndex((value) => Math.max(0, value - 1))} className="grid min-h-11 place-items-center rounded-lg border border-border/75 bg-card text-foreground/65 disabled:opacity-30" aria-label="Previous question"><ArrowLeft className="h-4 w-4" aria-hidden="true" /></button>
-          <button type="button" disabled={submitting || timeExpired} onClick={() => atLast ? setPaletteOpen(true) : setIndex((value) => Math.min(attempt.questions.length - 1, value + 1))} className="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg bg-primary px-4 text-sm font-bold text-primary-foreground disabled:opacity-35" aria-label={atLast ? "Open question review" : `Go to question ${index + 2}`}>{atLast ? "Review answers" : "Next question"}{atLast ? <Grid3X3 className="h-4 w-4" aria-hidden="true" /> : <ArrowRight className="h-4 w-4" aria-hidden="true" />}</button>
+          <button type="button" disabled={index === 0 || submitting || timeExpired} onClick={() => setIndex((value) => Math.max(0, value - 1))} className="grid min-h-11 place-items-center rounded-lg border border-border/75 bg-card text-foreground/65 disabled:cursor-not-allowed disabled:border-border/50 disabled:bg-secondary/35 disabled:text-foreground/35 disabled:opacity-100" aria-label={index === 0 ? "Previous question unavailable — this is the first question" : "Previous question"}><ArrowLeft className="h-4 w-4" aria-hidden="true" /></button>
+          <button type="button" disabled={submitting || timeExpired} onClick={() => atLast ? setPaletteOpen(true) : setIndex((value) => Math.min(attempt.questions.length - 1, value + 1))} className="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg bg-primary px-4 text-sm font-bold text-primary-foreground disabled:opacity-35" aria-label={atLast ? "Open question review" : hasCurrentAnswer ? `Go to question ${index + 2}` : `Skip question ${index + 1} for now and go to question ${index + 2}`}>{atLast ? "Review answers" : nextQuestionLabel}{atLast ? <Grid3X3 className="h-4 w-4" aria-hidden="true" /> : <ArrowRight className="h-4 w-4" aria-hidden="true" />}</button>
         </div>
       </nav>
 
@@ -581,13 +683,13 @@ export default function ExamAttemptClient() {
 
       {leaveDialogOpen ? (
         <div className="fixed inset-0 z-[60] flex items-end bg-zinc-950/60 backdrop-blur-sm sm:grid sm:place-items-center sm:p-4" onClick={(event) => { if (event.target === event.currentTarget && !leaving) setLeaveDialogOpen(false); }}>
-          <div className="w-full rounded-t-[1.75rem] border border-border bg-background p-5 pb-[max(1rem,env(safe-area-inset-bottom))] shadow-2xl sm:max-w-md sm:rounded-2xl sm:p-6" role="dialog" aria-modal="true" aria-labelledby="leave-exam-title" aria-describedby="leave-exam-description">
-            <p className="text-[10px] font-black uppercase tracking-[0.16em] text-amber-700 dark:text-amber-300">Your timer will continue</p>
-            <h2 id="leave-exam-title" className="mt-1 text-2xl font-black">Exit to the course page?</h2>
-            <p id="leave-exam-description" className="mt-2 text-sm leading-6 text-muted-foreground">Your saved answers will remain, but the countdown cannot be paused while you are away.</p>
-            {pendingCount > 0 ? <p className="mt-4 flex items-start gap-2 rounded-xl bg-amber-100/60 px-3 py-2.5 text-xs font-bold text-amber-900 dark:bg-amber-950/35 dark:text-amber-200"><WifiOff className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />{pendingCount} recent change{pendingCount === 1 ? " is" : "s are"} still syncing. This phone is keeping a temporary copy.</p> : null}
+          <div className="w-full rounded-t-[1.75rem] border border-border bg-background p-5 pb-[max(1rem,env(safe-area-inset-bottom))] shadow-2xl sm:max-w-md sm:rounded-2xl sm:p-6" role="dialog" aria-modal="true" aria-labelledby="leave-exam-title" aria-describedby="leave-exam-timer leave-exam-description">
+            <p id="leave-exam-timer" className="inline-flex items-center gap-1.5 text-[10px] font-black uppercase tracking-[0.13em] text-amber-700 dark:text-amber-300"><Clock3 className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />{msToClock(remainingMs ?? 0)} remaining · timer keeps running</p>
+            <h2 id="leave-exam-title" className="mt-1.5 text-2xl font-black">Leave this timed mock?</h2>
+            <p id="leave-exam-description" className="mt-2 text-sm leading-6 text-muted-foreground">Answers that reached the server are saved. You can return before time runs out, but the countdown cannot be paused.</p>
+            {pendingCount > 0 ? <p className="mt-4 flex items-start gap-2 rounded-xl bg-amber-100/60 px-3 py-2.5 text-xs font-bold text-amber-900 dark:bg-amber-950/35 dark:text-amber-200"><WifiOff className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />{pendingCount} recent change{pendingCount === 1 ? " is" : "s are"} still syncing. Reconnect before 00:00 so {pendingCount === 1 ? "it" : "they"} can count.</p> : null}
             <div className="mt-5 grid grid-cols-2 gap-3">
-              <button type="button" onClick={() => void leaveAttempt()} disabled={leaving} className="inline-flex min-h-12 items-center justify-center gap-2 rounded-xl border border-border bg-card px-3 text-sm font-black text-muted-foreground disabled:opacity-60">{leaving ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : <ArrowLeft className="h-4 w-4" aria-hidden="true" />}{leaving ? "Saving…" : "Return to course"}</button>
+              <button type="button" onClick={() => void leaveAttempt()} disabled={leaving} className="inline-flex min-h-12 items-center justify-center gap-2 whitespace-nowrap rounded-xl border border-border bg-card px-3 text-sm font-black text-muted-foreground disabled:opacity-60">{leaving ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : <ArrowLeft className="h-4 w-4" aria-hidden="true" />}{leaving ? "Saving…" : "Exit mock"}</button>
               <button type="button" onClick={() => setLeaveDialogOpen(false)} disabled={leaving} className="min-h-12 rounded-xl bg-primary px-4 text-sm font-black text-primary-foreground">Keep answering</button>
             </div>
           </div>
@@ -606,7 +708,7 @@ export default function ExamAttemptClient() {
             {!timeExpired && unanswered > 0 ? <p className="mt-4 flex items-start gap-2 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2.5 text-xs font-bold text-amber-950 dark:border-amber-900/60 dark:bg-amber-950/30 dark:text-amber-100"><AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />{unanswered} unanswered question{unanswered === 1 ? "" : "s"} will count as unanswered if you submit now.</p> : null}
             <p className={cn("mt-4 flex items-start gap-2 rounded-xl px-3 py-2.5 text-xs font-bold", pendingCount > 0 ? "bg-amber-100/60 text-amber-900 dark:bg-amber-950/35 dark:text-amber-200" : "bg-emerald-100/60 text-emerald-900 dark:bg-emerald-950/35 dark:text-emerald-200")}>
               {pendingCount > 0 ? <Loader2 className="mt-0.5 h-4 w-4 shrink-0 animate-spin" /> : <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0" />}
-              {pendingCount > 0 ? `${pendingCount} answer change${pendingCount === 1 ? " is" : "s are"} still syncing. Submission will wait.` : "Every answer change has reached the server."}
+              {pendingCount > 0 ? `${pendingCount} answer change${pendingCount === 1 ? " is" : "s are"} still syncing. Reconnect before 00:00; submission will wait.` : "Every answer change has reached the server."}
             </p>
             {saveError ? <p className="mt-3 text-sm font-semibold text-rose-600 dark:text-rose-300" role="alert">{saveError}</p> : null}
             <div className="mt-5 grid grid-cols-2 gap-3">

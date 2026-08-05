@@ -6,7 +6,7 @@ export const runtime = "nodejs";
 
 export async function POST(
   _req: NextRequest,
-  { params }: { params: { setId: string } | Promise<{ setId: string }> }
+  { params }: { params: Promise<{ setId: string }> }
 ) {
   const supabase = await createSupabaseServerClient();
   const {

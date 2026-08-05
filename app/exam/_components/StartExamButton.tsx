@@ -72,6 +72,7 @@ export default function StartExamButton({
       const data = await response.json().catch(() => null) as {
         ok?: boolean;
         attempt?: { id?: string };
+        resumeReason?: "same_set" | "active_session" | null;
         checkoutUrl?: string;
         message?: string;
       } | null;
@@ -89,6 +90,9 @@ export default function StartExamButton({
         throw new Error(data?.message || "Could not start this attempt.");
       }
       setReviewing(false);
+      if (data.resumeReason === "active_session" && data.message) {
+        window.sessionStorage.setItem(`jabu-exam-entry-notice:${data.attempt.id}`, data.message);
+      }
       router.push(`/exam/attempt/${encodeURIComponent(data.attempt.id)}`);
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Could not start this attempt.");
@@ -97,9 +101,12 @@ export default function StartExamButton({
     }
   }
 
-  const title = kind === "mock" ? "Start this timed mock?" : "Start your free diagnostic?";
+  const title = kind === "mock" ? "Start this timed mock?" : "Use your free diagnostic here?";
   const action = kind === "mock" ? "Start mock now" : "Start diagnostic now";
   const descriptionId = `exam-instructions-description-${setId}`;
+  const reviewDescription = kind === "mock"
+    ? "Check the format and begin when you are settled."
+    : "You receive one free diagnostic across this Exam Sprint campaign. Starting now uses it for this course.";
 
   return (
     <div>
@@ -135,7 +142,7 @@ export default function StartExamButton({
               <div className="min-w-0">
                 <p className="text-[9px] font-bold uppercase tracking-[0.15em] text-primary">Before you begin</p>
                 <h2 id={`exam-instructions-${setId}`} className="mt-0.5 text-lg font-extrabold tracking-tight sm:text-xl">{title}</h2>
-                <p id={descriptionId} className="mt-1 text-xs leading-5 text-muted-foreground">Check the format and begin when you are settled.</p>
+                <p id={descriptionId} className="mt-1 text-xs leading-5 text-muted-foreground">{reviewDescription}</p>
               </div>
               <button type="button" onClick={closeReview} disabled={busy} className="grid h-10 w-10 shrink-0 place-items-center rounded-lg border border-border bg-card text-muted-foreground hover:bg-secondary focus-visible:ring-2 focus-visible:ring-primary" aria-label="Close and return to course"><X className="h-4 w-4" aria-hidden="true" /></button>
             </div>
@@ -151,7 +158,7 @@ export default function StartExamButton({
             </div>
 
             <div className="mt-3 divide-y divide-border rounded-xl border border-border bg-card">
-              <div className="flex gap-2.5 px-3 py-2.5"><span className="grid h-7 w-7 shrink-0 place-items-center rounded-lg bg-emerald-100 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300"><CheckCircle2 className="h-3.5 w-3.5" aria-hidden="true" /></span><div><p className="text-xs font-bold">Answers save automatically</p><p className="mt-0.5 text-[10px] leading-4 text-muted-foreground">This phone keeps a temporary copy if your network drops.</p></div></div>
+              <div className="flex gap-2.5 px-3 py-2.5"><span className="grid h-7 w-7 shrink-0 place-items-center rounded-lg bg-emerald-100 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300"><CheckCircle2 className="h-3.5 w-3.5" aria-hidden="true" /></span><div><p className="text-xs font-bold">Short network drops are protected</p><p className="mt-0.5 text-[10px] leading-4 text-muted-foreground">This phone retries recent changes. Reconnect before 00:00 so they can count.</p></div></div>
               <div className="flex gap-2.5 px-3 py-2.5"><span className="grid h-7 w-7 shrink-0 place-items-center rounded-lg bg-primary/10 text-primary"><ShieldCheck className="h-3.5 w-3.5" aria-hidden="true" /></span><div><p className="text-xs font-bold">Corrections come afterwards</p><p className="mt-0.5 text-[10px] leading-4 text-muted-foreground">Answers and explanations unlock after submission.</p></div></div>
             </div>
 

@@ -9,10 +9,11 @@ npm run dev      # Start development server (localhost:3000)
 npm run build    # Production build (also type-checks — run this to verify changes)
 npm run start    # Start production server
 npm run lint     # ESLint check
+npm test         # Run the Vitest unit suite
+npm run test:e2e:list # Validate Playwright mobile workflow discovery
+npm run test:e2e # Run Playwright mobile workflow tests (browser required)
 npx shadcn@latest add <component>  # Add a shadcn/ui component to components/ui/
 ```
-
-No test suite is configured.
 
 ## Environment Variables
 

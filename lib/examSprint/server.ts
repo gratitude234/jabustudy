@@ -345,6 +345,27 @@ export async function getPublishedExamSets(course?: ExamCourse | null) {
   return sets.filter((set) => normalizeExamCourseCode(set.courseCode) === wanted);
 }
 
+export type ExamOfferSummary = {
+  readyCourseCount: number;
+  reviewedQuestionCount: number;
+};
+
+export async function getExamOfferSummary(): Promise<ExamOfferSummary> {
+  const sets = await getPublishedExamSets();
+  const eligibleQuestionIdsBySet = await getEligibleQuestionIdsBySet(sets.map((set) => set.id));
+  const readyCourseCodes = new Set(
+    sets.map((set) => normalizeExamCourseCode(set.courseCode)).filter(Boolean),
+  );
+  const reviewedQuestionIds = new Set<string>();
+  for (const questionIds of eligibleQuestionIdsBySet.values()) {
+    for (const questionId of questionIds) reviewedQuestionIds.add(questionId);
+  }
+  return {
+    readyCourseCount: readyCourseCodes.size,
+    reviewedQuestionCount: reviewedQuestionIds.size,
+  };
+}
+
 export async function getExamCatalog(userId?: string | null) {
   const [sets, access, attemptsResult] = await Promise.all([
     getPublishedExamSets(),
@@ -396,6 +417,8 @@ export async function getExamCatalog(userId?: string | null) {
           attemptId: String(diagnosticRow.id),
           setId: String(diagnosticRow.set_id),
           courseCode: setById.get(String(diagnosticRow.set_id))?.courseCode ?? null,
+          deadlineAt: typeof diagnosticRow.deadline_at === "string" ? diagnosticRow.deadline_at : null,
+          totalQuestions: Math.max(0, Number(diagnosticRow.total_questions ?? 0)),
           // Expired-but-unsubmitted counts as finished: getExamResult finalizes it on open.
           resumable: diagnosticRow.status === "in_progress"
             && Number.isFinite(deadlineMs)
@@ -424,7 +447,7 @@ export async function getExamCatalog(userId?: string | null) {
       startedAt: String(attempt.started_at ?? ""),
       totalQuestions: snapshot?.questions.length || Math.max(0, Number(attempt.total_questions ?? 0)),
     }];
-  });
+  }).sort((left, right) => new Date(left.deadlineAt).getTime() - new Date(right.deadlineAt).getTime());
   const progress = new Map<string, {
     bestDiagnostic: number;
     bestMock: number;

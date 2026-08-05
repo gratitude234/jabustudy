@@ -3,18 +3,22 @@ import { redirect } from "next/navigation";
 import {
   ArrowLeft,
   ArrowRight,
+  CheckCircle2,
   ChevronDown,
   Clock3,
   Flag,
+  LockKeyhole,
   RotateCcw,
+  ShieldCheck,
   Target,
   Timer,
   TrendingUp,
 } from "lucide-react";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
-import { findExamCourse } from "@/lib/examSprint/config";
-import { getExamResult } from "@/lib/examSprint/server";
-import { cn, formatDuration } from "@/lib/utils";
+import { EXAM_SPRINT_PRICE_NAIRA, findExamCourse } from "@/lib/examSprint/config";
+import { buildExamSprintBillingHref } from "@/lib/examSprint/offer";
+import { getExamResult, getMonthlyExamAccess } from "@/lib/examSprint/server";
+import { cn, formatDuration, formatNaira } from "@/lib/utils";
 import ExamCorrections from "../../_components/ExamCorrections";
 import CoverageMeter from "../../_components/CoverageMeter";
 
@@ -72,7 +76,10 @@ export default async function ExamResultPage({ params }: { params: Promise<{ att
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) redirect(`/login?next=${encodeURIComponent(`/exam/result/${attemptId}`)}`);
 
-  const result = await getExamResult(user.id, attemptId);
+  const [result, access] = await Promise.all([
+    getExamResult(user.id, attemptId),
+    getMonthlyExamAccess(user.id),
+  ]);
   const course = findExamCourse(result.courseCode);
   const status = readiness(result.percentage);
   const skipped = result.total - result.answered;
@@ -89,6 +96,12 @@ export default async function ExamResultPage({ params }: { params: Promise<{ att
     && result.bankTotal !== null;
   const priorityTopics = result.weakTopics.slice(0, 3);
   const additionalTopics = result.weakTopics.slice(3);
+  const topWeakTopic = result.weakTopics[0]?.topic ?? null;
+  const billingHref = buildExamSprintBillingHref({
+    returnTo: course ? `/exam/${course.slug}` : "/exam",
+    diagnosticScore: result.kind === "diagnostic" ? result.percentage : null,
+    focusTopic: result.kind === "diagnostic" ? topWeakTopic : null,
+  });
 
   return (
     <div className="mx-auto max-w-3xl space-y-5 pb-12">
@@ -193,6 +206,34 @@ export default async function ExamResultPage({ params }: { params: Promise<{ att
               </ol>
             </details>
           ) : null}
+        </section>
+      ) : null}
+
+      {result.kind === "diagnostic" && !access.active ? (
+        <section className="rounded-2xl border border-primary/25 bg-gradient-to-br from-primary/[0.09] via-card to-card p-4 sm:p-5" aria-labelledby="diagnostic-pass-heading">
+          <div className="flex items-start gap-3">
+            <span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-primary/10 text-primary"><ShieldCheck className="h-4 w-4" aria-hidden="true" /></span>
+            <div className="min-w-0 flex-1">
+              <p className="text-[9px] font-black uppercase tracking-[0.15em] text-primary">Your free check is complete</p>
+              <h2 id="diagnostic-pass-heading" className="mt-0.5 text-base font-black leading-snug">Build beyond your {result.percentage}% diagnostic</h2>
+              <p className="mt-1 text-xs leading-5 text-muted-foreground">
+                {topWeakTopic
+                  ? `Start with ${topWeakTopic}, then practise with fresh 40-question mocks across every ready course.`
+                  : "Keep building with fresh 40-question mocks across every ready course."}
+              </p>
+            </div>
+          </div>
+
+          <div className="mt-3 flex flex-wrap gap-x-3 gap-y-1.5 border-y border-primary/10 py-2.5 text-[10px] font-bold text-foreground/75">
+            <span className="inline-flex items-center gap-1"><CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" aria-hidden="true" /> Every ready course</span>
+            <span className="inline-flex items-center gap-1"><CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" aria-hidden="true" /> 30 days</span>
+            <span className="inline-flex items-center gap-1"><CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" aria-hidden="true" /> No subscription</span>
+          </div>
+
+          <Link href={billingHref} className="mt-3 inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-xl bg-primary px-4 text-sm font-black text-primary-foreground no-underline shadow-sm">
+            <LockKeyhole className="h-4 w-4" aria-hidden="true" /> Unlock all mocks · {formatNaira(EXAM_SPRINT_PRICE_NAIRA)}
+          </Link>
+          <p className="mt-2 text-center text-[10px] font-medium text-muted-foreground">Your free corrections remain available below.</p>
         </section>
       ) : null}
 

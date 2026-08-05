@@ -35,6 +35,8 @@ export default async function ExamSprintPage() {
     dateLabel: examCourseDateLabel(course),
   }));
   const activeAttempt = catalog.activeAttempts[0] ?? null;
+  const activeDiagnostic = catalog.diagnostic?.resumable ? catalog.diagnostic : null;
+  const activeSession = activeAttempt ?? activeDiagnostic;
 
   return (
     <div className="mx-auto max-w-3xl space-y-5 pb-10">
@@ -49,7 +51,7 @@ export default async function ExamSprintPage() {
               </span>
             ) : (
               <Link href="/study/billing?offer=exam-sprint&returnTo=/exam" className="inline-flex min-h-8 items-center rounded-lg bg-primary/10 px-2.5 text-[10px] font-bold text-primary no-underline">
-                Unlock · {formatNaira(EXAM_SPRINT_PRICE_NAIRA)}
+                30-day pass · {formatNaira(EXAM_SPRINT_PRICE_NAIRA)}
               </Link>
             )
           ) : (
@@ -61,18 +63,22 @@ export default async function ExamSprintPage() {
 
         <div className="max-w-2xl pb-4 pt-2.5 sm:pb-5 sm:pt-4">
           <h1 className="max-w-xl text-[1.45rem] font-extrabold leading-[1.15] tracking-[-0.025em] sm:text-4xl">
-            {catalog.activeAttempts.length > 0
+            {activeAttempt
               ? "Your mock is waiting."
+              : activeDiagnostic
+                ? "Your diagnostic is waiting."
               : user
                 ? "Your exam prep, organised."
                 : "Practise like the real CBT."}
           </h1>
           <p className="mt-1.5 max-w-xl text-[12px] leading-5 text-muted-foreground sm:mt-2 sm:text-sm">
             {activeAttempt
-              ? "Your timer is still running. Continue from the active mock below, or choose another course."
+              ? "Your timer is still running. Finish the active mock below before starting another course."
+              : activeDiagnostic
+                ? "Your free check is still running. Continue it below before its timer ends."
               : "Choose a ready course, practise under a timer, then review where you lost marks."}
           </p>
-          {!activeAttempt ? (
+          {!activeSession ? (
             <a href="#courses" className="mt-3 inline-flex min-h-10 items-center justify-center gap-2 rounded-xl bg-primary px-3.5 text-xs font-bold text-primary-foreground no-underline shadow-sm">
               Choose a course <ArrowDown className="h-3.5 w-3.5" aria-hidden="true" />
             </a>
@@ -89,13 +95,13 @@ export default async function ExamSprintPage() {
             <p className="mt-0.5 text-[10px] font-medium leading-4 text-muted-foreground">Questions / mock</p>
           </div>
           <div className="py-2.5 pl-2.5 sm:py-3 sm:pl-4">
-            <p className="text-sm font-extrabold tabular-nums sm:text-base">{diagnosticQuestions}</p>
-            <p className="mt-0.5 text-[10px] font-medium leading-4 text-muted-foreground">Free diagnostic</p>
+            <p className="text-sm font-extrabold tabular-nums sm:text-base">1</p>
+            <p className="mt-0.5 text-[10px] font-medium leading-4 text-muted-foreground">Free diagnostic total</p>
           </div>
         </div>
       </section>
 
-      <ExamCatalogClient courses={courses} activeAttempts={catalog.activeAttempts} />
+      <ExamCatalogClient courses={courses} activeAttempts={catalog.activeAttempts} activeDiagnostic={activeDiagnostic} />
 
       <details className="group overflow-hidden rounded-2xl border border-border bg-card">
         <summary className="flex min-h-14 cursor-pointer list-none items-center gap-3 px-3.5 py-3 marker:hidden sm:px-4">
@@ -105,9 +111,9 @@ export default async function ExamSprintPage() {
         </summary>
         <div className="border-t border-border">
           {[
+            { icon: Target, title: "Try it before paying", body: `Use one free ${diagnosticQuestions}-question diagnostic on the course you choose. It is one free attempt across this campaign.` },
             { icon: Clock3, title: "Real exam rhythm", body: "One question at a time, a fixed timer and automatic submission." },
-            { icon: Target, title: "Smarter question rotation", body: `Unseen questions are prioritised across the reviewed ${bankSize}+ question pool.` },
-            { icon: ShieldCheck, title: "Clear corrections", body: "See your mistakes, explanations and weak topics immediately after submitting." },
+            { icon: ShieldCheck, title: "Smarter review", body: `See corrections and weak topics, then practise from the reviewed ${bankSize}+ question pool.` },
           ].map(({ icon: Icon, title, body }, index) => (
             <article key={title} className={`flex gap-3 px-3.5 py-3.5 sm:px-4 ${index > 0 ? "border-t border-border" : ""}`}>
               <span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-primary/10 text-primary"><Icon className="h-3.5 w-3.5" aria-hidden="true" /></span>

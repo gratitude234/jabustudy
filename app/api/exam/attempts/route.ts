@@ -14,6 +14,7 @@ import {
   type ExamAttemptKind,
   type ExamAttemptRow,
 } from "@/lib/examSprint/server";
+import { partitionTimedExamAttempts } from "@/lib/examSprint/workflow";
 
 function jsonError(error: unknown) {
   const value = error as { message?: string; status?: number; code?: string };
@@ -23,10 +24,18 @@ function jsonError(error: unknown) {
   );
 }
 
-function startPayload(attempt: ExamAttemptRow, resumed: boolean) {
+function startPayload(
+  attempt: ExamAttemptRow,
+  resumed: boolean,
+  resumeReason: "same_set" | "active_session" | null = null,
+) {
   return {
     ok: true,
     resumed,
+    resumeReason,
+    message: resumeReason === "active_session"
+      ? "You already have a timed Exam Sprint session running. We brought you back to it."
+      : null,
     attempt: {
       id: attempt.id,
       setId: attempt.set_id,
@@ -55,6 +64,28 @@ export async function POST(req: NextRequest) {
     const { row: setRow, set, course } = await getPublishedExamSet(setId);
 
     const experience = examExperience(kind);
+    const { data: currentRows, error: currentError } = await adminSupabase
+      .from("study_practice_attempts")
+      .select("id,user_id,set_id,status,experience,campaign_key,started_at,deadline_at,submitted_at,submission_reason,delivery_snapshot,score,total_questions,time_spent_seconds")
+      .eq("user_id", user.id)
+      .eq("campaign_key", EXAM_CAMPAIGN_KEY)
+      .in("experience", ["exam_diagnostic", "exam_mock"])
+      .eq("status", "in_progress")
+      .order("deadline_at", { ascending: true });
+    if (currentError) throw examHttpError(currentError.message, 500, "ATTEMPT_LOAD_FAILED");
+    const running = partitionTimedExamAttempts((currentRows ?? []) as ExamAttemptRow[]);
+    if (running.expired.length > 0) {
+      await Promise.all(running.expired.map((attempt) => finalizeExamAttempt(attempt, "timeup")));
+    }
+    if (running.primary) {
+      const sameSession = running.primary.set_id === setId && running.primary.experience === experience;
+      return NextResponse.json(startPayload(
+        running.primary,
+        true,
+        sameSession ? "same_set" : "active_session",
+      ));
+    }
+
     if (kind === "diagnostic") {
       const { data: used, error: usedError } = await adminSupabase
         .from("study_practice_attempts")
@@ -67,7 +98,7 @@ export async function POST(req: NextRequest) {
       if (used) {
         const previous = used as ExamAttemptRow;
         if (previous.status === "in_progress" && !attemptExpired(previous) && previous.set_id === setId) {
-          return NextResponse.json(startPayload(previous, true));
+          return NextResponse.json(startPayload(previous, true, "same_set"));
         }
         if (previous.status === "in_progress" && attemptExpired(previous)) {
           await finalizeExamAttempt(previous, "timeup");
@@ -79,29 +110,14 @@ export async function POST(req: NextRequest) {
         );
       }
     } else {
-      const { data: current, error: currentError } = await adminSupabase
-        .from("study_practice_attempts")
-        .select("id,user_id,set_id,status,experience,campaign_key,started_at,deadline_at,submitted_at,submission_reason,delivery_snapshot,score,total_questions,time_spent_seconds")
-        .eq("user_id", user.id)
-        .eq("set_id", setId)
-        .eq("experience", "exam_mock")
-        .eq("status", "in_progress")
-        .maybeSingle();
-      if (currentError) throw examHttpError(currentError.message, 500, "ATTEMPT_LOAD_FAILED");
-      if (current) {
-        const previous = current as ExamAttemptRow;
-        if (!attemptExpired(previous)) return NextResponse.json(startPayload(previous, true));
-        await finalizeExamAttempt(previous, "timeup");
-      }
-
       const access = await getMonthlyExamAccess(user.id);
       if (!access.active || setRow.access_tier !== "plus_monthly") {
         return NextResponse.json(
           {
             ok: false,
             code: "EXAM_ACCESS_REQUIRED",
-            message: "30-day JabuStudy Plus is required for full Exam Sprint mocks.",
-            checkoutUrl: "/study/billing?offer=exam-sprint&returnTo=/exam",
+            message: "A 30-Day Exam Sprint Pass is required for full mocks.",
+            checkoutUrl: `/study/billing?offer=exam-sprint&returnTo=${encodeURIComponent(`/exam/${course.slug}`)}`,
           },
           { status: 402 },
         );
@@ -137,21 +153,33 @@ export async function POST(req: NextRequest) {
       .single();
 
     if (createError) {
-      if (createError.code === "23505") {
+      if (createError.code === "23505" || createError.message.includes("ACTIVE_EXAM_EXISTS")) {
         const { data: duplicate } = await adminSupabase
           .from("study_practice_attempts")
           .select("id")
           .eq("user_id", user.id)
-          .eq(kind === "diagnostic" ? "campaign_key" : "set_id", kind === "diagnostic" ? EXAM_CAMPAIGN_KEY : setId)
-          .eq("experience", experience)
+          .eq("campaign_key", EXAM_CAMPAIGN_KEY)
+          .in("experience", ["exam_diagnostic", "exam_mock"])
+          .eq("status", "in_progress")
           .order("created_at", { ascending: false })
           .limit(1)
           .maybeSingle();
         if (duplicate?.id) {
           const existing = await getOwnedExamAttempt(user.id, String(duplicate.id));
           if (existing.status === "in_progress" && !attemptExpired(existing)) {
-            return NextResponse.json(startPayload(existing, true));
+            return NextResponse.json(startPayload(
+              existing,
+              true,
+              existing.set_id === setId && existing.experience === experience ? "same_set" : "active_session",
+            ));
           }
+        }
+        if (kind === "diagnostic") {
+          throw examHttpError(
+            "Your free diagnostic has already been used. Unlock Exam Sprint to continue.",
+            409,
+            "DIAGNOSTIC_ALREADY_USED",
+          );
         }
       }
       throw examHttpError(createError.message, 500, "ATTEMPT_CREATE_FAILED");

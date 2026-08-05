@@ -7,9 +7,9 @@ import QuestionDetailClient from "./QuestionDetailClient";
 export async function generateMetadata({
   params,
 }: {
-  params: { id: string } | Promise<{ id: string }>;
+  params: Promise<{ id: string }>;
 }): Promise<Metadata> {
-  const { id } = await Promise.resolve(params);
+  const { id } = await params;
   const supabase = await createSupabaseServerClient();
 
   const { data } = await supabase
@@ -58,9 +58,9 @@ function QuestionDetailFallback() {
 export default async function QuestionDetailPage({
   params,
 }: {
-  params: { id: string } | Promise<{ id: string }>;
+  params: Promise<{ id: string }>;
 }) {
-  const { id } = await Promise.resolve(params);
+  const { id } = await params;
   return (
     <Suspense fallback={<QuestionDetailFallback />}>
       <QuestionDetailClient id={id} />

@@ -92,7 +92,7 @@ async function markRunReadyIfCovered(runId: string, quizSetId: string) {
 
 export async function POST(
   req: NextRequest,
-  { params }: { params: { runId: string } | Promise<{ runId: string }> }
+  { params }: { params: Promise<{ runId: string }> }
 ) {
   let runIdForError: string | null = null;
   let materialRowIdForError: string | null = null;

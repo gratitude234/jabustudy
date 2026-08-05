@@ -81,10 +81,15 @@ export default async function ExamCoursePage({ params }: { params: Promise<{ cou
   const courseState = catalog.courses.find((item) => item.slug === course.slug);
   const sets = courseState?.sets ?? [];
   const activeAttempt = courseState?.activeAttempt ?? null;
+  const campaignActiveAttempt = catalog.activeAttempts[0] ?? null;
+  const campaignAttemptBelongsToCourse = campaignActiveAttempt
+    ? normalizeExamCourseCode(campaignActiveAttempt.courseCode) === normalizeExamCourseCode(course.code)
+    : false;
   const recentAttempts = courseState?.recentAttempts ?? [];
   const progress = courseState?.progress ?? null;
   const diagnostic = catalog.diagnostic;
   const resumableDiagnostic = diagnostic?.resumable ? diagnostic : null;
+  const diagnosticCourse = resumableDiagnostic?.courseCode ? findExamCourse(resumableDiagnostic.courseCode) : null;
   const diagnosticBelongsToCourse = diagnostic?.courseCode
     ? normalizeExamCourseCode(diagnostic.courseCode) === normalizeExamCourseCode(course.code)
     : false;
@@ -96,22 +101,24 @@ export default async function ExamCoursePage({ params }: { params: Promise<{ cou
     (value, set) => ({ delivered: value.delivered + set.coverage.delivered, bankTotal: value.bankTotal + set.coverage.bankTotal }),
     { delivered: 0, bankTotal: 0 },
   );
+  const diagnosticScore = diagnosticBelongsToCourse && diagnostic?.submitted ? diagnostic.percentage : null;
+  const reviewedQuestionCount = Math.max(coverage.bankTotal, primarySet?.questionCount ?? 0);
   const mockAttempts = progress?.basedOn === "mock" ? progress.attempts : 0;
   const latestAttempts = recentAttempts.slice(0, ATTEMPT_PREVIEW_COUNT);
   const olderAttempts = recentAttempts.slice(ATTEMPT_PREVIEW_COUNT);
 
   const primaryAction = () => {
-    if (activeAttempt) {
+    if (campaignActiveAttempt) {
       return (
-        <Link href={`/exam/attempt/${activeAttempt.attemptId}`} className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-xl bg-primary px-4 text-sm font-bold text-primary-foreground no-underline shadow-sm transition hover:brightness-105 focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2">
-          <PlayCircle className="h-4 w-4" aria-hidden="true" /> Resume timed mock
+        <Link href={`/exam/attempt/${campaignActiveAttempt.attemptId}`} className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-xl bg-primary px-4 text-sm font-bold text-primary-foreground no-underline shadow-sm transition hover:brightness-105 focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2">
+          <PlayCircle className="h-4 w-4" aria-hidden="true" /> {campaignAttemptBelongsToCourse ? "Resume timed mock" : `Resume ${campaignActiveAttempt.courseCode} mock`}
         </Link>
       );
     }
     if (resumableDiagnostic) {
       return (
         <Link href={`/exam/attempt/${resumableDiagnostic.attemptId}`} className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-xl bg-primary px-4 text-sm font-bold text-primary-foreground no-underline shadow-sm transition hover:brightness-105 focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2">
-          <PlayCircle className="h-4 w-4" aria-hidden="true" /> Resume free diagnostic
+          <PlayCircle className="h-4 w-4" aria-hidden="true" /> {diagnosticBelongsToCourse ? "Resume free diagnostic" : `Resume ${diagnosticCourse?.code ?? "active"} diagnostic`}
         </Link>
       );
     }
@@ -133,30 +140,42 @@ export default async function ExamCoursePage({ params }: { params: Promise<{ cou
       );
     }
     if (!diagnostic && !user) {
-      return <Link href={`/login?next=${encodeURIComponent(returnPath)}`} className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-xl bg-primary px-4 text-sm font-bold text-primary-foreground no-underline">Sign in to try free <ArrowRight className="h-4 w-4" aria-hidden="true" /></Link>;
+      return <Link href={`/login?next=${encodeURIComponent(returnPath)}`} className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-xl bg-primary px-4 text-sm font-bold text-primary-foreground no-underline">Sign in to save your free check <ArrowRight className="h-4 w-4" aria-hidden="true" /></Link>;
     }
     return <Link href={billingHref} className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-xl bg-primary px-4 text-sm font-bold text-primary-foreground no-underline"><LockKeyhole className="h-4 w-4" aria-hidden="true" /> Unlock all mocks · {formatNaira(EXAM_SPRINT_PRICE_NAIRA)}</Link>;
   };
 
-  const actionLabel = activeAttempt
-    ? "Continue your mock"
+  const actionLabel = campaignActiveAttempt
+    ? campaignAttemptBelongsToCourse ? "Continue your mock" : `${campaignActiveAttempt.courseCode} is still running`
     : resumableDiagnostic
-      ? "Your diagnostic is still running"
+      ? diagnosticBelongsToCourse ? "Your diagnostic is still running" : `Your ${diagnosticCourse?.code ?? "other"} diagnostic is still running`
       : !primarySet
         ? "This question bank is being reviewed"
         : catalog.access.active
           ? mockAttempts > 0 ? "Build on your last attempt" : "Take your first full mock"
           : !diagnostic
             ? "Check your level for free"
-            : "Unlock the complete practice bank";
-  const actionDetail = activeAttempt
-    ? "Return to your saved answers before time runs out."
+            : diagnosticScore !== null
+              ? `Build beyond your ${diagnosticScore}% diagnostic`
+              : "Unlock the complete practice bank";
+  const actionDetail = campaignActiveAttempt
+    ? campaignAttemptBelongsToCourse
+      ? "Return to your saved answers before time runs out."
+      : `Finish the ${campaignActiveAttempt.courseCode} mock before starting ${course.code}. Only one timed mock can run at once.`
     : resumableDiagnostic
-      ? "Finish your free check before its timer runs out. Your answers are already saved."
-      : primarySet
-        ? "You will get a fresh mix that prioritises questions you have not seen."
-        : "We will open this course as soon as its reviewed questions are published.";
-  const showMockDetails = Boolean(primarySet && !activeAttempt && !resumableDiagnostic);
+      ? diagnosticBelongsToCourse
+        ? "Finish your free check before its timer runs out."
+        : `Finish the ${diagnosticCourse?.code ?? "active"} free check before starting another course.`
+      : !primarySet
+        ? "We will open this course as soon as its reviewed questions are published."
+        : catalog.access.active
+          ? "You will get a fresh mix that prioritises questions you have not seen."
+          : !diagnostic
+            ? `You get one free ${diagnosticSet?.diagnosticQuestionCount ?? 10}-question diagnostic across this Exam Sprint campaign. Choose this course to use it here; your score and corrections will be saved.`
+            : diagnosticScore !== null
+              ? `Unlock ${reviewedQuestionCount} reviewed questions, fresh timed mocks and full corrections for this course.`
+              : "Your free diagnostic has been used. Unlock every ready course, fresh timed mocks and full corrections.";
+  const showMockDetails = Boolean(primarySet && !campaignActiveAttempt && !resumableDiagnostic);
 
   return (
     <div className="mx-auto max-w-3xl space-y-5 pb-10">
@@ -195,15 +214,15 @@ export default async function ExamCoursePage({ params }: { params: Promise<{ cou
         </div>
       </section>
 
-      <section className={cn("rounded-2xl border bg-card p-3.5 sm:p-4", (activeAttempt || resumableDiagnostic) ? "border-amber-300/60 dark:border-amber-900/60" : "border-border")} aria-labelledby="recommended-action-heading">
+      <section className={cn("rounded-2xl border bg-card p-3.5 sm:p-4", (campaignActiveAttempt || resumableDiagnostic) ? "border-amber-300/60 dark:border-amber-900/60" : "border-border")} aria-labelledby="recommended-action-heading">
         <div className="flex items-start gap-3">
-          <span className={cn("grid h-9 w-9 shrink-0 place-items-center rounded-lg", (activeAttempt || resumableDiagnostic) ? "bg-amber-100 text-amber-800 dark:bg-amber-950/40 dark:text-amber-300" : "bg-primary/10 text-primary")}>
-            {(activeAttempt || resumableDiagnostic) ? <Clock3 className="h-4 w-4" aria-hidden="true" /> : <Sparkles className="h-4 w-4" aria-hidden="true" />}
+          <span className={cn("grid h-9 w-9 shrink-0 place-items-center rounded-lg", (campaignActiveAttempt || resumableDiagnostic) ? "bg-amber-100 text-amber-800 dark:bg-amber-950/40 dark:text-amber-300" : "bg-primary/10 text-primary")}>
+            {(campaignActiveAttempt || resumableDiagnostic) ? <Clock3 className="h-4 w-4" aria-hidden="true" /> : <Sparkles className="h-4 w-4" aria-hidden="true" />}
           </span>
           <div className="min-w-0 flex-1">
-            <p className="text-[9px] font-bold uppercase tracking-[0.15em] text-primary">{(activeAttempt || resumableDiagnostic) ? "Continue now" : "Up next"}</p>
+            <p className="text-[9px] font-bold uppercase tracking-[0.15em] text-primary">{(campaignActiveAttempt || resumableDiagnostic) ? "Continue now" : "Up next"}</p>
             <h2 id="recommended-action-heading" className="mt-0.5 text-base font-extrabold leading-snug">{actionLabel}</h2>
-            {!activeAttempt ? <p className="mt-1 text-xs leading-5 text-muted-foreground">{actionDetail}</p> : null}
+            {(!campaignActiveAttempt || !campaignAttemptBelongsToCourse) ? <p className="mt-1 text-xs leading-5 text-muted-foreground">{actionDetail}</p> : null}
           </div>
         </div>
 
@@ -215,8 +234,9 @@ export default async function ExamCoursePage({ params }: { params: Promise<{ cou
           </div>
         ) : null}
 
-        {activeAttempt ? <p className="mt-1.5 inline-flex items-center gap-1.5 text-xs font-bold text-amber-700 dark:text-amber-300"><Clock3 className="h-3.5 w-3.5" aria-hidden="true" /><ExamRemainingTime deadlineAt={activeAttempt.deadlineAt} /></p> : null}
-        <div className={activeAttempt ? "mt-2.5" : "mt-3"}>{primaryAction()}</div>
+        {campaignActiveAttempt ? <p className="mt-1.5 inline-flex items-center gap-1.5 text-xs font-bold text-amber-700 dark:text-amber-300"><Clock3 className="h-3.5 w-3.5" aria-hidden="true" /><ExamRemainingTime deadlineAt={campaignActiveAttempt.deadlineAt} /></p> : null}
+        <div className={campaignActiveAttempt ? "mt-2.5" : "mt-3"}>{primaryAction()}</div>
+        {!catalog.access.active && diagnostic ? <p className="mt-2.5 text-center text-[10px] font-semibold text-muted-foreground">One payment · 30 days · no recurring charge</p> : null}
       </section>
 
       {recentAttempts.length > 0 ? (
@@ -273,12 +293,12 @@ export default async function ExamCoursePage({ params }: { params: Promise<{ cou
                     <span>{set.timeLimitMinutes} minutes</span>
                   </div>
 
-                  {catalog.access.active && !activeAttempt && !resumableDiagnostic && !selectedNext ? (
+                  {catalog.access.active && !campaignActiveAttempt && !resumableDiagnostic && !selectedNext ? (
                     <div className="mt-3"><StartExamButton setId={set.id} kind="mock" questionCount={set.attemptQuestionCount} timeLimitMinutes={set.timeLimitMinutes} className="min-h-10 rounded-xl bg-secondary py-2 text-xs text-foreground shadow-none hover:bg-primary/10 hover:text-primary">Use this bank</StartExamButton></div>
                   ) : !catalog.access.active ? (
-                    <p className="mt-2.5 flex items-center gap-1.5 pl-12 text-[11px] font-semibold text-muted-foreground"><LockKeyhole className="h-3.5 w-3.5" aria-hidden="true" /> Included with full access</p>
+                    <p className="mt-2.5 flex items-center gap-1.5 pl-12 text-[11px] font-semibold text-muted-foreground"><LockKeyhole className="h-3.5 w-3.5" aria-hidden="true" /> Included with the 30-day pass</p>
                   ) : selectedNext ? (
-                    <p className="mt-2.5 flex items-center gap-1.5 pl-12 text-[11px] font-semibold text-primary"><CheckCircle2 className="h-3.5 w-3.5" aria-hidden="true" /> {activeAttempt ? "Used by your current mock" : "Selected for your next mock"}</p>
+                    <p className="mt-2.5 flex items-center gap-1.5 pl-12 text-[11px] font-semibold text-primary"><CheckCircle2 className="h-3.5 w-3.5" aria-hidden="true" /> {activeAttempt ? "Used by your current mock" : campaignActiveAttempt ? "Available after your active mock" : "Selected for your next mock"}</p>
                   ) : null}
                 </article>
               );

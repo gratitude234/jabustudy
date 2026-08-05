@@ -13,6 +13,13 @@ type BankRunRow = {
   quiz_set_id: string;
 };
 
+type CourseNotificationRow = {
+  course_code: string | null;
+  department_id: string | null;
+  level: number | string | null;
+  semester: string | null;
+};
+
 type RouteError = {
   message?: string;
   status?: number;
@@ -24,7 +31,7 @@ type RouteError = {
 
 export async function POST(
   req: NextRequest,
-  { params }: { params: { runId: string } | Promise<{ runId: string }> }
+  { params }: { params: Promise<{ runId: string }> }
 ) {
   try {
     const { scope, isSuper } = await requireStudyModeratorFromRequest(req);
@@ -113,24 +120,25 @@ export async function POST(
           .eq("id", bankRun.course_id)
           .maybeSingle();
 
-        if (!course?.department_id) return;
+        const courseRow = course as CourseNotificationRow | null;
+        if (!courseRow?.department_id) return;
 
-        const level = (course as any).level;
-        const semester = String((course as any).semester ?? "").trim().toLowerCase();
+        const level = courseRow.level;
+        const semester = String(courseRow.semester ?? "").trim().toLowerCase();
 
         let usersQuery = adminSupabase
           .from("study_preferences")
           .select("user_id")
-          .eq("department_id", (course as any).department_id)
+          .eq("department_id", courseRow.department_id)
           .limit(200);
-        if (level) usersQuery = (usersQuery as any).or(`level.eq.${level},level.is.null`);
-        if (semester) usersQuery = (usersQuery as any).or(`semester.eq.${semester},semester.is.null`);
+        if (level) usersQuery = usersQuery.or(`level.eq.${level},level.is.null`);
+        if (semester) usersQuery = usersQuery.or(`semester.eq.${semester},semester.is.null`);
 
         const { data: users } = await usersQuery;
         if (!users?.length) return;
 
         const href = `/study/practice/${bankRun.quiz_set_id}`;
-        const notifBody = `${(course as any).course_code} — ${count} question${count === 1 ? "" : "s"} ready to practice`;
+        const notifBody = `${courseRow.course_code || "A course"} — ${count} question${count === 1 ? "" : "s"} ready to practice`;
 
         const rows = (users as { user_id: string }[]).map((u) => ({
           user_id: u.user_id,

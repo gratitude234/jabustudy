@@ -4,6 +4,8 @@ import { randomBytes } from "node:crypto";
 import { adminSupabase } from "@/lib/supabase/admin";
 import { sanitizeBillingReturnPath } from "@/lib/billingReturnPath";
 import { canReusePaystackCheckout } from "@/lib/billingWorkflow";
+import { projectedExamAccessUntil } from "@/lib/examSprint/offer";
+import { getExamOfferSummary } from "@/lib/examSprint/server";
 import { verifyPaystackTransaction } from "@/lib/paystack";
 
 export const FREE_DAILY_PRACTICE_LIMIT = 40;
@@ -574,8 +576,8 @@ async function notifyBillingUser(userId: string, message: { title: string; body:
   }
 }
 
-export async function getBillingSnapshot(userId: string) {
-  const [plus, freeTrial, practice, creditBalance, ordersResult, activePaystackResult] = await Promise.all([
+export async function getBillingSnapshot(userId: string, options?: { includeExamOffer?: boolean }) {
+  const [plus, freeTrial, practice, creditBalance, ordersResult, activePaystackResult, examOffer] = await Promise.all([
     getPlusAccess(userId),
     getFreeAiTrialUsage(userId),
     getPracticeAccess(userId),
@@ -595,6 +597,7 @@ export async function getBillingSnapshot(userId: string) {
       .order("created_at", { ascending: false })
       .limit(1)
       .maybeSingle(),
+    options?.includeExamOffer ? getExamOfferSummary() : Promise.resolve(null),
   ]);
   if (ordersResult.error) throw httpError(ordersResult.error.message, 500, "DB_ERROR");
   if (activePaystackResult.error) throw httpError(activePaystackResult.error.message, 500, "DB_ERROR");
@@ -614,6 +617,13 @@ export async function getBillingSnapshot(userId: string) {
     bank: getBankDetails(),
     paystackEnabled: isPaystackEnabled(),
     plans: Object.values(BILLING_PLANS),
+    examOffer: examOffer ? {
+      ...examOffer,
+      accessUntilIfPurchased: projectedExamAccessUntil({
+        activeUntil: plus.activeUntil,
+        days: BILLING_PLANS.plus_monthly.plusDays,
+      }),
+    } : null,
     orders: visibleRows.map(normalizeOrder),
     historyNextCursor: recentRows.length >= 10 ? recentRows.at(-1)?.created_at ?? null : null,
   };

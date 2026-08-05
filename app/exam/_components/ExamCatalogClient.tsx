@@ -31,6 +31,13 @@ type CatalogActiveAttempt = {
   totalQuestions: number;
 };
 
+type CatalogActiveDiagnostic = {
+  attemptId: string;
+  courseCode: string | null;
+  deadlineAt: string | null;
+  totalQuestions: number;
+};
+
 type CatalogCourse = {
   code: string;
   slug: string;
@@ -75,13 +82,16 @@ function courseCoverage(course: CatalogCourse) {
 export default function ExamCatalogClient({
   courses,
   activeAttempts,
+  activeDiagnostic,
 }: {
   courses: CatalogCourse[];
   activeAttempts: CatalogActiveAttempt[];
+  activeDiagnostic: CatalogActiveDiagnostic | null;
 }) {
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState<Filter>("ready");
   const [showAllComing, setShowAllComing] = useState(false);
+  const activeSessionId = activeAttempts[0]?.attemptId ?? activeDiagnostic?.attemptId ?? null;
   const uniqueCourses = useMemo(
     () => Array.from(new Map(courses.map((course) => [course.slug, course])).values()),
     [courses],
@@ -117,6 +127,21 @@ export default function ExamCatalogClient({
 
   return (
     <section id="courses" className="scroll-mt-20 space-y-3.5" aria-labelledby="course-picker-heading">
+      {activeDiagnostic ? (
+        <Link
+          href={`/exam/attempt/${activeDiagnostic.attemptId}`}
+          className="group flex min-h-[4.75rem] items-center gap-3 rounded-2xl border border-amber-200/70 bg-card p-3.5 text-foreground no-underline transition hover:border-primary/30 hover:bg-secondary/25 focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 dark:border-amber-900/50"
+        >
+          <span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-amber-100 text-amber-700 dark:bg-amber-950/45 dark:text-amber-300"><Play className="h-3.5 w-3.5 fill-current" aria-hidden="true" /></span>
+          <span className="min-w-0 flex-1">
+            <span className="block text-[9px] font-bold uppercase tracking-[0.13em] text-amber-700 dark:text-amber-300">Free diagnostic in progress</span>
+            <span className="mt-0.5 block text-[13px] font-bold">{activeDiagnostic.courseCode ? `${activeDiagnostic.courseCode} Diagnostic` : "Exam Sprint Diagnostic"}</span>
+            <span className="mt-1 flex items-center gap-1.5 text-[11px] font-medium text-muted-foreground"><Clock3 className="h-3 w-3 text-amber-600" aria-hidden="true" />{activeDiagnostic.deadlineAt ? <RemainingTime deadlineAt={activeDiagnostic.deadlineAt} /> : "Timer is running"} · {activeDiagnostic.totalQuestions} questions</span>
+          </span>
+          <span className="inline-flex min-h-9 shrink-0 items-center gap-0.5 rounded-lg bg-primary/10 px-2.5 text-[11px] font-bold text-primary transition group-hover:translate-x-0.5">Resume <ChevronRight className="h-3.5 w-3.5" aria-hidden="true" /></span>
+        </Link>
+      ) : null}
+
       {activeAttempts.length > 0 ? (
         <div id="active-mock" className="scroll-mt-20 space-y-2">
           {activeAttempts.map((attempt) => (
@@ -185,11 +210,11 @@ export default function ExamCatalogClient({
             const ready = course.sets.length > 0;
             const set = course.sets[0];
             const coverage = courseCoverage(course);
-            const destination = course.activeAttempt
-              ? `/exam/attempt/${course.activeAttempt.attemptId}`
+            const destination = activeSessionId
+              ? `/exam/attempt/${activeSessionId}`
               : `/exam/${course.slug}`;
-            const actionLabel = course.activeAttempt
-              ? "Resume"
+            const actionLabel = activeSessionId
+              ? "Resume timer"
               : course.progress
                 ? "Continue"
                 : "Start";
@@ -220,22 +245,25 @@ export default function ExamCatalogClient({
                     <span className="truncate">{course.dateLabel}</span>
                   </span>
                   {ready ? (
-                    <span className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[10px] font-medium text-foreground/65 dark:text-foreground/70">
-                      <span>{set.attemptQuestionCount} questions · {set.timeLimitMinutes} min</span>
-                      <span className="inline-flex items-center gap-2">
-                        <span className="text-border" aria-hidden="true">•</span>
+                    <span className="mt-1 grid min-w-0 grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-x-1.5 text-[9px] font-medium tracking-tight text-foreground/65 min-[380px]:gap-x-2 min-[380px]:text-[10px] dark:text-foreground/70">
+                      <span
+                        className="whitespace-nowrap"
+                        aria-label={`${set.attemptQuestionCount} questions, ${set.timeLimitMinutes} minutes`}
+                      >
+                        <span className="min-[380px]:hidden">{set.attemptQuestionCount} Q</span>
+                        <span className="hidden min-[380px]:inline">{set.attemptQuestionCount} questions</span>
+                        {" · "}{set.timeLimitMinutes} min
+                      </span>
+                      <span className="min-w-0 truncate text-center">
                         {course.progress
                           ? course.progress.bestPercentage > 0
                             ? <span className="font-semibold text-emerald-700 dark:text-emerald-300">Best {course.progress.bestPercentage}%</span>
                             : <span className="font-semibold text-foreground/75 dark:text-foreground/80">Attempted</span>
-                          : <span>Not attempted</span>}
+                          : <span>No attempts</span>}
                       </span>
                       {coverage.bankTotal > 0 ? (
-                        <span className="inline-flex items-center gap-2">
-                          <span className="text-border" aria-hidden="true">•</span>
-                          <span>{coverage.delivered}/{coverage.bankTotal} seen</span>
-                        </span>
-                      ) : null}
+                        <span className="whitespace-nowrap text-right">{coverage.delivered}/{coverage.bankTotal} seen</span>
+                      ) : <span aria-hidden="true" />}
                     </span>
                   ) : (
                     <span className="mt-1 inline-flex items-center gap-1 text-[10px] font-medium text-muted-foreground"><LockKeyhole className="h-2.5 w-2.5" aria-hidden="true" /> Bank under review</span>
