@@ -8,6 +8,7 @@ import {
   EXAM_SPRINT_PRICE_NAIRA,
   examCourseDateLabel,
 } from "@/lib/examSprint/config";
+import { dedupeExamCourses } from "@/lib/examSprint/catalog";
 import { getExamCatalog } from "@/lib/examSprint/server";
 import { formatNaira } from "@/lib/utils";
 import { isExamSprintOnlyMode } from "@/lib/systemMode";
@@ -20,13 +21,14 @@ export default async function ExamSprintPage() {
   const supabase = await createSupabaseServerClient();
   const { data: { user } } = await supabase.auth.getUser();
   const catalog = await getExamCatalog(user?.id);
-  const readySets = catalog.courses.flatMap((course) => course.sets);
-  const available = catalog.courses.filter((course) => course.sets.length > 0).length;
+  const uniqueCourses = dedupeExamCourses(catalog.courses);
+  const readySets = uniqueCourses.flatMap((course) => course.sets);
+  const available = uniqueCourses.filter((course) => course.sets.length > 0).length;
   const sample = readySets[0] ?? null;
   const mockQuestions = sample?.attemptQuestionCount ?? EXAM_MOCK_QUESTION_COUNT;
   const diagnosticQuestions = sample?.diagnosticQuestionCount ?? EXAM_DIAGNOSTIC_QUESTION_COUNT;
   const bankSize = sample?.coverage.bankTotal || EXAM_BANK_MINIMUM;
-  const courses = catalog.courses.map((course) => ({
+  const courses = uniqueCourses.map((course) => ({
     code: course.code,
     slug: course.slug,
     title: course.title,
@@ -43,12 +45,16 @@ export default async function ExamSprintPage() {
   return (
     <div className="mx-auto max-w-3xl space-y-5 pb-10">
       {examOnlyMode ? (
-        <aside className="flex items-start gap-2.5 rounded-xl border border-primary/15 bg-primary/[0.06] px-3.5 py-3 text-foreground" role="status">
-          <LockKeyhole className="mt-0.5 h-4 w-4 shrink-0 text-primary" aria-hidden="true" />
-          <p className="text-[11px] leading-4.5 text-muted-foreground">
-            <strong className="font-extrabold text-foreground">Exam period mode is on.</strong>{" "}
-            JabuStudy is focused on Exam Sprint for now. Other study tools will return after the examination period.
-          </p>
+        <aside className="flex items-start gap-3 rounded-xl border border-primary/15 bg-primary/[0.07] px-3.5 py-3 text-foreground" role="status">
+          <span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-primary/10 text-primary">
+            <LockKeyhole className="h-4 w-4" aria-hidden="true" />
+          </span>
+          <div className="min-w-0">
+            <p className="text-xs font-extrabold leading-4 text-foreground">Exam Sprint mode</p>
+            <p className="mt-0.5 text-[11px] leading-4.5 text-muted-foreground">
+              Study Hub tools are paused during exams. Timed mocks, corrections and progress remain available here.
+            </p>
+          </div>
         </aside>
       ) : null}
       <section className="relative isolate overflow-hidden rounded-2xl border border-primary/15 bg-gradient-to-br from-primary/[0.09] via-card to-card px-4 pb-0 pt-4 sm:px-6 sm:pt-5">
@@ -107,7 +113,7 @@ export default async function ExamSprintPage() {
           </div>
           <div className="py-2.5 pl-2.5 sm:py-3 sm:pl-4">
             <p className="text-sm font-extrabold tabular-nums sm:text-base">1</p>
-            <p className="mt-0.5 text-[10px] font-medium leading-4 text-muted-foreground">Free diagnostic total</p>
+            <p className="mt-0.5 text-[10px] font-medium leading-4 text-muted-foreground">Free diagnostic</p>
           </div>
         </div>
       </section>

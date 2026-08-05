@@ -13,6 +13,7 @@ import {
   Play,
   Search,
 } from "lucide-react";
+import { dedupeExamCourses } from "@/lib/examSprint/catalog";
 import { cn, msToClock } from "@/lib/utils";
 
 type CatalogSet = {
@@ -92,10 +93,7 @@ export default function ExamCatalogClient({
   const [filter, setFilter] = useState<Filter>("ready");
   const [showAllComing, setShowAllComing] = useState(false);
   const activeSessionId = activeAttempts[0]?.attemptId ?? activeDiagnostic?.attemptId ?? null;
-  const uniqueCourses = useMemo(
-    () => Array.from(new Map(courses.map((course) => [course.slug, course])).values()),
-    [courses],
-  );
+  const uniqueCourses = useMemo(() => dedupeExamCourses(courses), [courses]);
   const readyCount = uniqueCourses.filter((course) => course.sets.length > 0).length;
   const comingCount = uniqueCourses.length - readyCount;
   const normalizedQuery = query.trim().toLowerCase();
@@ -230,22 +228,24 @@ export default function ExamCatalogClient({
                 )}>{course.code}</span>
                 <span className="min-w-0 flex-1">
                   <span className="flex min-w-0 items-start gap-2">
-                    <span className="line-clamp-2 min-w-0 flex-1 text-[13px] font-bold leading-4">{course.title}</span>
+                    <span className="line-clamp-2 min-w-0 flex-1 text-sm font-bold leading-[1.15rem]">{course.title}</span>
                     {ready ? (
                       <span className={cn(
-                        "inline-flex min-h-6 shrink-0 items-center gap-0.5 text-[10px] font-bold transition group-hover:translate-x-0.5",
-                        course.activeAttempt ? "text-amber-700 dark:text-amber-300" : "text-primary",
+                        "inline-flex min-h-8 shrink-0 items-center gap-0.5 rounded-lg px-2 text-[11px] font-bold transition group-hover:translate-x-0.5",
+                        course.activeAttempt
+                          ? "bg-amber-100 text-amber-800 dark:bg-amber-950/40 dark:text-amber-300"
+                          : "bg-primary/10 text-primary",
                       )}>{actionLabel}<ChevronRight className="h-3 w-3" aria-hidden="true" /></span>
                     ) : (
-                      <span className="inline-flex min-h-6 shrink-0 items-center gap-1 text-[10px] font-semibold text-muted-foreground"><LockKeyhole className="h-2.5 w-2.5" aria-hidden="true" /> Soon</span>
+                      <span className="inline-flex min-h-8 shrink-0 items-center gap-1 rounded-lg bg-secondary px-2 text-[11px] font-semibold text-muted-foreground"><LockKeyhole className="h-2.5 w-2.5" aria-hidden="true" /> Soon</span>
                     )}
                   </span>
-                  <span className="mt-0.5 flex min-w-0 items-center gap-1.5 text-[10px] font-medium text-foreground/65 dark:text-foreground/70">
+                  <span className="mt-0.5 flex min-w-0 items-center gap-1.5 text-[11px] font-medium text-foreground/65 dark:text-foreground/70">
                     <CalendarDays className="h-3 w-3 shrink-0" aria-hidden="true" />
                     <span className="truncate">{course.dateLabel}</span>
                   </span>
                   {ready ? (
-                    <span className="mt-1 grid min-w-0 grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-x-1.5 text-[9px] font-medium tracking-tight text-foreground/65 min-[380px]:gap-x-2 min-[380px]:text-[10px] dark:text-foreground/70">
+                    <span className="mt-1 grid min-w-0 grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-x-1.5 text-[10px] font-medium tracking-tight text-foreground/65 min-[380px]:gap-x-2 min-[380px]:text-[11px] dark:text-foreground/70">
                       <span
                         className="whitespace-nowrap"
                         aria-label={`${set.attemptQuestionCount} questions, ${set.timeLimitMinutes} minutes`}
@@ -274,15 +274,15 @@ export default function ExamCatalogClient({
 
             return ready ? (
               <Link
-                key={course.code}
+                key={course.slug}
                 href={destination}
                 aria-label={`${actionLabel} ${course.code}, ${course.title}`}
-                className={cn("group flex min-h-[4.75rem] items-center gap-3 px-3.5 py-3 no-underline transition hover:bg-secondary/35 focus-visible:bg-secondary/35 focus-visible:outline-none", index > 0 && "border-t border-border")}
+                className={cn("group flex min-h-[5.25rem] items-center gap-3 px-3.5 py-3 no-underline transition hover:bg-secondary/35 focus-visible:bg-secondary/35 focus-visible:outline-none", index > 0 && "border-t border-border")}
               >
                 {content}
               </Link>
             ) : (
-              <article key={course.code} className={cn("flex min-h-[4.75rem] items-center gap-3 px-3.5 py-3", index > 0 && "border-t border-border")}>
+              <article key={course.slug} className={cn("flex min-h-[5.25rem] items-center gap-3 px-3.5 py-3", index > 0 && "border-t border-border")}>
                 {content}
               </article>
             );

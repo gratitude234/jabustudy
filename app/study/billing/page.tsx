@@ -380,13 +380,16 @@ export default function StudyBillingPage() {
   const projectedAccessDate = formatDateOnly(snapshot?.examOffer?.accessUntilIfPurchased);
   const dailyEquivalent = examPlan ? examDailyEquivalent(examPlan.amountNaira, examPlan.plusDays) : null;
   const readyCourseLabel = `${readyCourseCount} ready course${readyCourseCount === 1 ? "" : "s"}`;
-  const examOfferHeadline = examContext.diagnosticScore !== null
-    ? `Build beyond your ${examContext.diagnosticScore}% diagnostic`
-    : examCourse
-      ? `Unlock ${examCourse.code} and every ready mock`
-      : readyCourseCount > 0
-        ? `Unlock ${readyCourseLabel} for 30 days`
-        : "Unlock every ready mock for 30 days";
+  const examOfferHeadline = snapshot?.plus.active
+    ? "Extend every Exam Sprint mock for 30 more days"
+    : "Unlock every Exam Sprint mock for 30 days";
+  const examOfferInsight = examContext.diagnosticScore !== null
+    ? examContext.focusTopic
+      ? `Your ${examContext.diagnosticScore}% diagnostic shows ${examContext.focusTopic} is a useful first focus.`
+      : `Your ${examContext.diagnosticScore}% diagnostic gives you a clear starting point for your next mock.`
+    : examContext.focusTopic
+      ? `Start with ${examContext.focusTopic}, then use each mock to decide what to revise next.`
+      : null;
 
   async function startPayment(planKey: string) {
     if (!snapshot) return;
@@ -597,17 +600,17 @@ export default function StudyBillingPage() {
       {offer === "exam-sprint" ? (
         <header>
           <Link href={returnPath} className={cn("inline-flex min-h-10 items-center gap-1.5 text-sm font-bold text-muted-foreground no-underline transition hover:text-primary", focusRing)}><ArrowLeft className="h-4 w-4" aria-hidden="true" /> Back to {examReturnLabel}</Link>
-          <div className="mt-3 flex items-start gap-3">
-            <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-primary/10 text-primary"><LockKeyhole className="h-[18px] w-[18px]" aria-hidden="true" /></span>
-            <div className="min-w-0">
-              <p className="text-[10px] font-black uppercase tracking-[0.16em] text-primary">{examCourse ? `Continue ${examCourse.code}` : "30-Day Exam Sprint Pass"}</p>
-              <h1 className="mt-1 text-2xl font-black tracking-tight">{examOfferHeadline}</h1>
-              <p className="mt-2 max-w-xl text-sm leading-6 text-muted-foreground">
-                {examContext.focusTopic ? `Start by strengthening ${examContext.focusTopic}. ` : null}
-                One {money(EXAM_SPRINT_PRICE_NAIRA)} payment unlocks {readyCourseCount > 0 ? readyCourseLabel : "every ready course"}
-                {reviewedQuestionCount > 0 ? ` and ${reviewedQuestionCount.toLocaleString("en-NG")} reviewed questions` : ""} through {projectedAccessDate}. Fresh timed mocks, full corrections and JabuStudy Plus are included.
+          <div className="mt-2">
+            <p className="inline-flex items-center gap-1.5 text-[10px] font-black uppercase tracking-[0.16em] text-primary"><LockKeyhole className="h-3.5 w-3.5" aria-hidden="true" /> {snapshot?.plus.active ? "Extend your pass" : "30-Day Exam Sprint Pass"}</p>
+            <h1 className="mt-1.5 max-w-xl text-2xl font-black leading-tight tracking-tight">{examOfferHeadline}</h1>
+            <p className="mt-2 max-w-xl text-sm leading-5.5 text-muted-foreground">
+              One {money(EXAM_SPRINT_PRICE_NAIRA)} payment. No subscription. Access through {projectedAccessDate}.
+            </p>
+            {examOfferInsight ? (
+              <p className="mt-3 max-w-xl rounded-xl border border-primary/15 bg-primary/[0.06] px-3.5 py-3 text-xs font-semibold leading-5 text-foreground/80">
+                {examOfferInsight}
               </p>
-            </div>
+            ) : null}
           </div>
         </header>
       ) : (
@@ -770,17 +773,19 @@ export default function StudyBillingPage() {
       {!blocksPlans && snapshot ? (
         <section className="space-y-6" aria-labelledby="plans-heading">
           <div>
-            <h2 id="plans-heading" className="text-xl font-extrabold">{offer === "exam-sprint" ? snapshot.plus.active ? "Extend your pass" : "Unlock full Exam Sprint" : "JabuStudy Plus"}</h2>
-            <p className="mt-1 text-sm text-muted-foreground">
-              {offer === "exam-sprint"
-                ? snapshot.plus.active
-                  ? "Extend your current access without losing any remaining days."
-                  : `One payment, no recurring charge and access through ${projectedAccessDate}.`
-                : snapshot.plus.active
-                  ? "Buying Plus again extends your current expiry; you do not lose remaining time."
-                  : "Recommended for regular study: unlimited practice plus included AI credits."}
-            </p>
-            <div className={cn("mt-4 grid gap-3", offer === "exam-sprint" ? "max-w-2xl" : "sm:grid-cols-2")}>
+            {offer === "exam-sprint" ? (
+              <h2 id="plans-heading" className="sr-only">Exam Sprint pass</h2>
+            ) : (
+              <>
+                <h2 id="plans-heading" className="text-xl font-extrabold">JabuStudy Plus</h2>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  {snapshot.plus.active
+                    ? "Buying Plus again extends your current expiry; you do not lose remaining time."
+                    : "Recommended for regular study: unlimited practice plus included AI credits."}
+                </p>
+              </>
+            )}
+            <div className={cn("grid gap-3", offer === "exam-sprint" ? "max-w-2xl" : "mt-4 sm:grid-cols-2")}>
               {visiblePlusPlans.map((plan) => {
                 const recommended = plan.key === "plus_monthly";
                 return (
@@ -790,8 +795,8 @@ export default function StudyBillingPage() {
                       <>
                         <div className="flex items-start justify-between gap-3">
                           <div className="min-w-0">
-                            <p className="text-[10px] font-black uppercase tracking-[0.16em] text-primary">30-Day Exam Sprint Pass</p>
-                            <h3 className="mt-1 font-extrabold">{examCourse ? `${examCourse.code} + every ready course` : readyCourseCount > 0 ? readyCourseLabel : "Every ready course"}</h3>
+                            <p className="text-[10px] font-black uppercase tracking-[0.16em] text-primary">Your Exam Sprint pass</p>
+                            <h3 className="mt-1 font-extrabold">{examCourse ? `${examCourse.code} + all ready courses` : readyCourseCount > 0 ? readyCourseLabel : "Every ready course"}</h3>
                           </div>
                           <div className="shrink-0 text-right">
                             <p className="text-3xl font-black tracking-tight">{money(plan.amountNaira)}</p>
@@ -803,18 +808,20 @@ export default function StudyBillingPage() {
                           <span className="inline-flex items-center gap-1"><CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" aria-hidden="true" /> No subscription</span>
                           <span className="inline-flex items-center gap-1"><CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" aria-hidden="true" /> Until {projectedAccessDate}</span>
                         </div>
-                        <ul className="mt-5 space-y-3 text-sm text-muted-foreground">
-                          <li className="flex gap-2"><CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-emerald-600" aria-hidden="true" /><span><strong className="text-foreground">{readyCourseCount > 0 ? `${readyCourseLabel} today` : "Every ready Exam Sprint course"}</strong><span className="mt-0.5 block text-xs">{reviewedQuestionCount > 0 ? `${reviewedQuestionCount.toLocaleString("en-NG")} reviewed questions across current banks. ` : ""}New campaign courses published during your pass are included.</span></span></li>
-                          <li className="flex gap-2"><CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-emerald-600" aria-hidden="true" /><span><strong className="text-foreground">Fresh {EXAM_MOCK_QUESTION_COUNT}-question timed mocks</strong><span className="mt-0.5 block text-xs">Each mix prioritises unseen, missed and older questions.</span></span></li>
-                          <li className="flex gap-2"><CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-emerald-600" aria-hidden="true" /><span><strong className="text-foreground">Scores, corrections and weak topics</strong><span className="mt-0.5 block text-xs">Review every answer immediately after submitting.</span></span></li>
-                          <li className="flex gap-2"><CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-emerald-600" aria-hidden="true" /><span><strong className="text-foreground">JabuStudy Plus included</strong><span className="mt-0.5 block text-xs">Unlimited Study practice and {plan.credits} AI credits at no extra cost.</span></span></li>
-                        </ul>
-                        <button type="button" onClick={() => void startPayment(plan.key)} disabled={busyPlan !== null} className={cn("mt-5 inline-flex min-h-13 items-center justify-center gap-2 rounded-xl bg-primary px-4 text-sm font-extrabold text-primary-foreground disabled:opacity-60", focusRing)}>
+                        <button type="button" onClick={() => void startPayment(plan.key)} disabled={busyPlan !== null} className={cn("mt-4 inline-flex min-h-13 items-center justify-center gap-2 rounded-xl bg-primary px-4 text-sm font-extrabold text-primary-foreground disabled:opacity-60", focusRing)}>
                           {busyPlan === plan.key ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : <ShieldCheck className="h-4 w-4" aria-hidden="true" />}
-                          {snapshot.plus.active ? `Extend pass · ${money(plan.amountNaira)}` : examCourse ? `Unlock ${examCourse.code} + all mocks · ${money(plan.amountNaira)}` : `Unlock all mocks · ${money(plan.amountNaira)}`}
+                          {snapshot.plus.active ? `Extend pass · ${money(plan.amountNaira)}` : `Unlock all mocks · ${money(plan.amountNaira)}`}
                         </button>
-                        <p className="mt-3 text-center text-[11px] font-semibold leading-4 text-muted-foreground">{snapshot.paystackEnabled ? "Secure Paystack checkout. Access starts automatically after verification." : "Bank transfer is available while Paystack is offline."}</p>
+                        <p className="mt-2.5 text-center text-[11px] font-semibold leading-4 text-muted-foreground">{snapshot.paystackEnabled ? "Secure Paystack checkout. Access starts automatically after verification." : "Bank transfer is available while Paystack is offline."}</p>
                         <p className="mt-1.5 text-center text-[10px] leading-4 text-muted-foreground">No auto-renewal. If confirmation is delayed, do not pay twice—keep your payment reference. <Link href="/support" className="font-bold text-primary underline">Payment help</Link></p>
+                        <div className="mt-5 border-t border-border pt-4">
+                          <p className="text-[10px] font-black uppercase tracking-[0.14em] text-muted-foreground">What your pass includes</p>
+                          <ul className="mt-3 space-y-3 text-sm text-muted-foreground">
+                            <li className="flex gap-2"><CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-emerald-600" aria-hidden="true" /><span><strong className="text-foreground">{readyCourseCount > 0 ? readyCourseLabel : "Every ready Exam Sprint course"}{reviewedQuestionCount > 0 ? ` · ${reviewedQuestionCount.toLocaleString("en-NG")} reviewed questions` : ""}</strong><span className="mt-0.5 block text-xs">New campaign courses published during your pass are included.</span></span></li>
+                            <li className="flex gap-2"><CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-emerald-600" aria-hidden="true" /><span><strong className="text-foreground">Fresh {EXAM_MOCK_QUESTION_COUNT}-question timed mocks</strong><span className="mt-0.5 block text-xs">Each mix prioritises unseen, missed and older questions.</span></span></li>
+                            <li className="flex gap-2"><CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-emerald-600" aria-hidden="true" /><span><strong className="text-foreground">Scores, corrections and weak-topic guidance</strong><span className="mt-0.5 block text-xs">Review every answer immediately after submitting.</span></span></li>
+                          </ul>
+                        </div>
                       </>
                     ) : (
                       <>
