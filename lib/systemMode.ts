@@ -8,6 +8,10 @@ function matchesPath(pathname: string, root: string) {
   return pathname === root || pathname.startsWith(`${root}/`);
 }
 
+function isGoogleSiteVerificationPath(pathname: string) {
+  return /^\/google[a-z0-9_-]+\.html$/i.test(pathname);
+}
+
 /**
  * Server-owned campaign switch. It intentionally defaults to off so a missing
  * deployment variable can never hide the main Study product by accident.
@@ -20,6 +24,7 @@ export function isExamSprintOnlyMode(environment: Environment = process.env) {
 /** Routes that still make sense while the public product is focused on exams. */
 export function isExamOnlyPageAllowed(pathname: string) {
   if (pathname === "/") return true;
+  if (isGoogleSiteVerificationPath(pathname)) return true;
   if (matchesPath(pathname, "/exam")) return true;
   if (pathname === "/login" || pathname === "/signup") return true;
   if (matchesPath(pathname, "/auth")) return true;

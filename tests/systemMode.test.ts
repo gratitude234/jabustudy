@@ -32,6 +32,7 @@ describe("Exam Sprint-only system mode", () => {
     "/support",
     "/offline",
     "/manifest.webmanifest",
+    "/google3ea27c3fabbbd9d5.html",
   ])("allows the required page %s", (pathname) => {
     expect(isExamOnlyPageAllowed(pathname)).toBe(true);
   });
@@ -42,6 +43,8 @@ describe("Exam Sprint-only system mode", () => {
     "/study/practice/set-1",
     "/notifications",
     "/exam-results",
+    "/google3ea27c3fabbbd9d5.html/extra",
+    "/not-google3ea27c3fabbbd9d5.html",
   ])("pauses the public Study page %s", (pathname) => {
     expect(isExamOnlyPageAllowed(pathname)).toBe(false);
   });
