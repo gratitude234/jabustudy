@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { supabase } from "@/lib/supabase";
+import { sanitizeSystemDestination } from "@/lib/systemMode";
 import {
   ShieldCheck,
   Loader2,
@@ -15,31 +16,6 @@ import {
 } from "lucide-react";
 
 type Phase = "loading" | "success" | "error";
-const DEFAULT_AUTH_DESTINATION = "/study";
-
-function cx(...classes: Array<string | false | null | undefined>) {
-  return classes.filter(Boolean).join(" ");
-}
-
-function normalizeNext(next: string | null) {
-  const n = (next ?? "").trim();
-  if (!n) return DEFAULT_AUTH_DESTINATION;
-
-  if (!n.startsWith("/")) return DEFAULT_AUTH_DESTINATION;
-  if (n.startsWith("//")) return DEFAULT_AUTH_DESTINATION;
-
-  let decoded = n;
-  try {
-    decoded = decodeURIComponent(n);
-  } catch {
-    decoded = n;
-  }
-
-  const lowered = decoded.toLowerCase();
-  if (lowered.includes("http://") || lowered.includes("https://")) return DEFAULT_AUTH_DESTINATION;
-
-  return n;
-}
 
 function mapAuthError(msg: string) {
   const m = (msg || "").toLowerCase();
@@ -53,11 +29,20 @@ function mapAuthError(msg: string) {
   return msg || "Sign-in failed. Please try again.";
 }
 
-export default function CallbackClient() {
+export default function CallbackClient({
+  examOnlyMode,
+  defaultDestination,
+}: {
+  examOnlyMode: boolean;
+  defaultDestination: string;
+}) {
   const router = useRouter();
   const sp = useSearchParams();
 
-  const next = useMemo(() => normalizeNext(sp.get("next")), [sp]);
+  const next = useMemo(
+    () => sanitizeSystemDestination(sp.get("next"), { examOnlyMode, fallback: defaultDestination }),
+    [defaultDestination, examOnlyMode, sp]
+  );
   const code = useMemo(() => sp.get("code"), [sp]);
 
   const didRunRef = useRef(false);
@@ -100,11 +85,11 @@ export default function CallbackClient() {
       // Tiny delay for smoother UX
       await new Promise((r) => setTimeout(r, 200));
 
-      router.replace(next || DEFAULT_AUTH_DESTINATION);
+      router.replace(next || defaultDestination);
       router.refresh();
-    } catch (e: any) {
+    } catch (e: unknown) {
       console.error(e);
-      const friendly = mapAuthError(e?.message ?? "");
+      const friendly = mapAuthError(e instanceof Error ? e.message : "");
       if (!aliveRef.current) return;
 
       setPhase("error");
@@ -121,9 +106,12 @@ export default function CallbackClient() {
 
   useEffect(() => {
     aliveRef.current = true;
-    run().catch(() => {});
+    const frame = window.requestAnimationFrame(() => {
+      run().catch(() => {});
+    });
 
     return () => {
+      window.cancelAnimationFrame(frame);
       aliveRef.current = false;
     };
     // Only re-run if these change (stable values)
@@ -167,7 +155,7 @@ export default function CallbackClient() {
               </button>
 
               <Link
-                href={`/login?next=${encodeURIComponent(next || DEFAULT_AUTH_DESTINATION)}`}
+                href={`/login?next=${encodeURIComponent(next || defaultDestination)}`}
                 className="inline-flex w-full items-center justify-center gap-2 rounded-2xl border bg-white px-4 py-2.5 text-sm font-medium text-zinc-900 hover:bg-zinc-50 no-underline"
               >
                 Go to login
@@ -201,7 +189,7 @@ export default function CallbackClient() {
           {phase === "success" ? (
             <div className="mt-5">
               <Link
-                href={next || DEFAULT_AUTH_DESTINATION}
+                href={next || defaultDestination}
                 className="inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-black px-4 py-2.5 text-sm font-medium text-white hover:opacity-90 no-underline"
               >
                 Continue

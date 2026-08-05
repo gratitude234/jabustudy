@@ -2,9 +2,11 @@
 "use client";
 
 import Link from "next/link";
+import Image from "next/image";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { supabase } from "@/lib/supabase";
+import { sanitizeSystemDestination } from "@/lib/systemMode";
 import {
   Mail,
   KeyRound,
@@ -16,24 +18,9 @@ import {
 } from "lucide-react";
 
 type Banner = { type: "success" | "error" | "info"; text: string } | null;
-const DEFAULT_LOGIN_DESTINATION = "/study";
 
 function cx(...classes: Array<string | false | null | undefined>) {
   return classes.filter(Boolean).join(" ");
-}
-
-function normalizeNext(next: string | null) {
-  const n = (next ?? "").trim();
-  if (!n) return DEFAULT_LOGIN_DESTINATION;
-
-  // Only allow internal, absolute-path routes
-  if (!n.startsWith("/")) return DEFAULT_LOGIN_DESTINATION;
-  if (n.startsWith("//")) return DEFAULT_LOGIN_DESTINATION;
-  // Block attempts to smuggle protocol via encoding
-  const lowered = decodeURIComponent(n).toLowerCase();
-  if (lowered.includes("http://") || lowered.includes("https://")) return DEFAULT_LOGIN_DESTINATION;
-
-  return n;
 }
 
 function mapAuthError(msg: string) {
@@ -74,10 +61,19 @@ function BannerView({ banner, onClose }: { banner: Banner; onClose: () => void }
   );
 }
 
-export default function LoginClient() {
+export default function LoginClient({
+  examOnlyMode,
+  defaultDestination,
+}: {
+  examOnlyMode: boolean;
+  defaultDestination: string;
+}) {
   const router = useRouter();
   const sp = useSearchParams();
-  const next = useMemo(() => normalizeNext(sp.get("next")), [sp]);
+  const next = useMemo(
+    () => sanitizeSystemDestination(sp.get("next"), { examOnlyMode, fallback: defaultDestination }),
+    [defaultDestination, examOnlyMode, sp]
+  );
 
   const alive = useRef(true);
 
@@ -147,7 +143,7 @@ export default function LoginClient() {
       }
 
       setToast({ type: "success", text: "Welcome back ✅" });
-      router.replace(next || DEFAULT_LOGIN_DESTINATION);
+      router.replace(next || defaultDestination);
       router.refresh();
     } finally {
       if (alive.current) setLoading(false);
@@ -167,7 +163,7 @@ export default function LoginClient() {
     try {
       const redirectTo =
         typeof window !== "undefined"
-          ? `${window.location.origin}/auth/callback?next=${encodeURIComponent(DEFAULT_LOGIN_DESTINATION)}`
+          ? `${window.location.origin}/auth/callback?next=${encodeURIComponent(defaultDestination)}`
           : undefined;
 
       const { error } = await supabase.auth.resetPasswordForEmail(em, { redirectTo });
@@ -187,7 +183,7 @@ export default function LoginClient() {
     <div className="space-y-4">
       {/* Brand header */}
       <div className="text-center">
-        <img src="/logo-full.png" alt="JabuStudy" className="mx-auto mb-3 h-16 w-auto object-contain" />
+        <Image src="/logo-full.png" alt="JabuStudy" width={110} height={80} className="mx-auto mb-3 h-16 w-auto object-contain" priority />
         <h1 className="font-[family-name:var(--font-bricolage)] text-2xl font-extrabold text-foreground">
           Sign in
         </h1>
@@ -239,7 +235,7 @@ export default function LoginClient() {
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 disabled={loading || resetLoading}
-                onKeyUp={(e) => setCapsLock((e as any).getModifierState?.("CapsLock") ?? false)}
+                onKeyUp={(e) => setCapsLock(e.getModifierState("CapsLock"))}
                 className="w-full bg-transparent text-sm text-foreground outline-none placeholder:text-muted-brand/50 disabled:opacity-70"
                 placeholder="Enter your password"
               />

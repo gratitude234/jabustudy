@@ -8,6 +8,7 @@ import {
   recordBlockedAiUsage,
   withAiUsageContext,
 } from "@/lib/aiUsage";
+import { requireStudyModeratorFromRequest } from "@/lib/studyAdmin/requireStudyModeratorFromRequest";
 
 type ParsedOption = { text: string; is_correct: boolean };
 type ParsedQuestion = {
@@ -17,7 +18,17 @@ type ParsedQuestion = {
 };
 
 export async function POST(req: NextRequest) {
-  const { text: rawText } = await req.json();
+  try {
+    await requireStudyModeratorFromRequest(req);
+  } catch (error) {
+    const authError = error as { status?: number; code?: string; message?: string };
+    return NextResponse.json(
+      { ok: false, code: authError.code || "UNAUTHORIZED", message: authError.message || "Unauthorized" },
+      { status: authError.status || 401 }
+    );
+  }
+
+  const { text: rawText } = await req.json().catch(() => ({ text: null }));
   const text = typeof rawText === "string" ? rawText.slice(0, 25_000) : rawText;
 
   if (!text || text.trim().length < 20) {

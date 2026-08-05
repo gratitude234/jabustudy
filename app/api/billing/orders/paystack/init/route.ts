@@ -54,7 +54,12 @@ export async function POST(req: NextRequest) {
     });
   }
 
-  const callbackUrl = `${baseUrl}/study/billing?ref=${encodeURIComponent(checkout.order.reference)}`;
+  const callbackParams = new URLSearchParams({ ref: checkout.order.reference });
+  if (checkout.order.returnPath === "/exam" || checkout.order.returnPath.startsWith("/exam/")) {
+    callbackParams.set("offer", "exam-sprint");
+    callbackParams.set("returnTo", checkout.order.returnPath);
+  }
+  const callbackUrl = `${baseUrl}/study/billing?${callbackParams.toString()}`;
   let initialized: Awaited<ReturnType<typeof initializePaystackTransaction>>;
   try {
     initialized = await initializePaystackTransaction({

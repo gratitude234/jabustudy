@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { ArrowDown, CheckCircle2, ChevronDown, Clock3, ShieldCheck, Target } from "lucide-react";
+import { ArrowDown, CheckCircle2, ChevronDown, Clock3, LockKeyhole, ShieldCheck, Target } from "lucide-react";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import {
   EXAM_BANK_MINIMUM,
@@ -10,11 +10,13 @@ import {
 } from "@/lib/examSprint/config";
 import { getExamCatalog } from "@/lib/examSprint/server";
 import { formatNaira } from "@/lib/utils";
+import { isExamSprintOnlyMode } from "@/lib/systemMode";
 import ExamCatalogClient from "./_components/ExamCatalogClient";
 
 export const dynamic = "force-dynamic";
 
 export default async function ExamSprintPage() {
+  const examOnlyMode = isExamSprintOnlyMode();
   const supabase = await createSupabaseServerClient();
   const { data: { user } } = await supabase.auth.getUser();
   const catalog = await getExamCatalog(user?.id);
@@ -40,6 +42,15 @@ export default async function ExamSprintPage() {
 
   return (
     <div className="mx-auto max-w-3xl space-y-5 pb-10">
+      {examOnlyMode ? (
+        <aside className="flex items-start gap-2.5 rounded-xl border border-primary/15 bg-primary/[0.06] px-3.5 py-3 text-foreground" role="status">
+          <LockKeyhole className="mt-0.5 h-4 w-4 shrink-0 text-primary" aria-hidden="true" />
+          <p className="text-[11px] leading-4.5 text-muted-foreground">
+            <strong className="font-extrabold text-foreground">Exam period mode is on.</strong>{" "}
+            JabuStudy is focused on Exam Sprint for now. Other study tools will return after the examination period.
+          </p>
+        </aside>
+      ) : null}
       <section className="relative isolate overflow-hidden rounded-2xl border border-primary/15 bg-gradient-to-br from-primary/[0.09] via-card to-card px-4 pb-0 pt-4 sm:px-6 sm:pt-5">
         <div className="pointer-events-none absolute -right-16 -top-20 -z-10 h-52 w-52 rounded-full bg-primary/10 blur-2xl" />
         <div className="flex flex-wrap items-center justify-between gap-2">

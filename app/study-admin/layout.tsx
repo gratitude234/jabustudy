@@ -43,11 +43,11 @@ export default function StudyAdminLayout({ children }: { children: React.ReactNo
           return;
         }
         if (res.status === 403) {
-          router.replace("/study");
+          router.replace("/");
           return;
         }
         if (!res.ok) {
-          router.replace("/study");
+          router.replace("/");
           return;
         }
 

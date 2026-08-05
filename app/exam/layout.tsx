@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { isExamSprintOnlyMode } from "@/lib/systemMode";
 import ExamChrome from "./_components/ExamChrome";
 
 export const metadata: Metadata = {
@@ -7,5 +8,5 @@ export const metadata: Metadata = {
 };
 
 export default function ExamLayout({ children }: { children: React.ReactNode }) {
-  return <ExamChrome>{children}</ExamChrome>;
+  return <ExamChrome examOnlyMode={isExamSprintOnlyMode()}>{children}</ExamChrome>;
 }

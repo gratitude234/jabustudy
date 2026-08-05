@@ -1,5 +1,6 @@
 // app/signup/page.tsx
 import { Suspense } from "react";
+import { isExamSprintOnlyMode } from "@/lib/systemMode";
 import SignupClient from "./SignupClient";
 
 function Skeleton() {
@@ -28,11 +29,19 @@ function Skeleton() {
 }
 
 export default function SignupPage() {
+  const examOnlyMode = isExamSprintOnlyMode();
+  const defaultSignupDestination = examOnlyMode ? "/exam" : "/study/onboarding?next=/study";
+  const defaultLoginDestination = examOnlyMode ? "/exam" : "/study";
+
   return (
     <div className="mx-auto max-w-5xl px-4 py-6 sm:py-10">
       <div className="mx-auto max-w-md">
         <Suspense fallback={<Skeleton />}>
-          <SignupClient />
+          <SignupClient
+            examOnlyMode={examOnlyMode}
+            defaultSignupDestination={defaultSignupDestination}
+            defaultLoginDestination={defaultLoginDestination}
+          />
         </Suspense>
       </div>
     </div>

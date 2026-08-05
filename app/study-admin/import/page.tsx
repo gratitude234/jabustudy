@@ -2,6 +2,7 @@
 
 import React, { useState, useCallback } from "react";
 import { Card, PageHeader } from "@/app/study/_components/StudyUI";
+import { supabase } from "@/lib/supabase";
 
 const STEPS = ["paste", "meta", "preview", "sql"] as const;
 type Step = typeof STEPS[number];
@@ -488,9 +489,15 @@ export default function MCQImporter() {
     setParseError("");
     setStep("preview");
     try {
+      const { data: authData } = await supabase.auth.getSession();
+      const token = authData.session?.access_token;
+      if (!token) throw new Error("Your admin session has expired. Sign in again.");
       const response = await fetch("/api/ai/parse-mcq", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
         body: JSON.stringify({ text }),
       });
       const data = await response.json();

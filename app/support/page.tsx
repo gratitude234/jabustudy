@@ -6,6 +6,7 @@
 
 import type { Metadata } from "next";
 import { getBankDetails } from "@/lib/studyBilling";
+import { isExamSprintOnlyMode } from "@/lib/systemMode";
 import SupportClient from "./SupportClient";
 
 export const metadata: Metadata = {
@@ -16,12 +17,15 @@ export const metadata: Metadata = {
 
 export default function SupportPage() {
   const bank = getBankDetails();
+  const examOnlyMode = isExamSprintOnlyMode();
 
   return (
     <SupportClient
       bankName={bank.bankName}
       accountNumber={bank.accountNumber}
       accountName={bank.accountName}
+      backHref={examOnlyMode ? "/exam" : "/study"}
+      backLabel={examOnlyMode ? "Back to Exam Sprint" : "Back to Study Hub"}
     />
   );
 }

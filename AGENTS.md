@@ -57,6 +57,7 @@ NEXT_PUBLIC_WHATSAPP_COMMUNITY_URL= # Legacy alias for the same Study Hub WhatsA
 PAYSTACK_SECRET_KEY=         # Paystack secret used for initialization, verification, and webhook HMAC
 NEXT_PUBLIC_PAYSTACK_ENABLED=false # Server-derived feature switch for Paystack checkout
 PAYSTACK_REQUEST_TIMEOUT_MS=10000  # Initialization and verification timeout
+EXAM_SPRINT_ONLY_MODE=false # Set true to route public users exclusively through Exam Sprint
 JABUSTUDY_BANK_NAME=         # Legacy manual-transfer orders only
 JABUSTUDY_BANK_ACCOUNT_NUMBER=
 JABUSTUDY_BANK_ACCOUNT_NAME=
@@ -137,7 +138,7 @@ Two parallel notification systems:
 
 ### PWA
 
-The app is a full PWA. `public/sw.js` is the service worker (registered by `components/ServiceWorkerRegister.tsx`). `public/manifest.json` defines the install metadata. `components/PWAInstallProvider.tsx` captures the `beforeinstallprompt` event (also captured early in `app/layout.tsx` via an inline script before React hydrates) and exposes it via context. `components/PWAInstallBanner.tsx` renders the install prompt. SW update detection fires a custom `sw-update-available` event handled in `AppChrome`.
+The app is a full PWA. `public/sw.js` is the service worker (registered by `components/ServiceWorkerRegister.tsx`). `app/manifest.ts` defines environment-aware install metadata. `components/PWAInstallProvider.tsx` captures the `beforeinstallprompt` event (also captured early in `app/layout.tsx` via an inline script before React hydrates) and exposes it via context. `components/PWAInstallBanner.tsx` renders the install prompt. SW update detection fires a custom `sw-update-available` event handled in `AppChrome`.
 
 ### Cron Jobs
 

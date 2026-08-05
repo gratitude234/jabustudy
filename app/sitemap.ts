@@ -1,8 +1,13 @@
 import type { MetadataRoute } from "next";
+import { isExamSprintOnlyMode } from "@/lib/systemMode";
 
 export default function sitemap(): MetadataRoute.Sitemap {
   const base =
     (process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000").replace(/\/$/, "");
+
+  if (isExamSprintOnlyMode()) {
+    return [{ url: `${base}/exam`, changeFrequency: "daily", priority: 1.0 }];
+  }
 
   return [
     { url: `${base}/study`, changeFrequency: "weekly", priority: 1.0 },

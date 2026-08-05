@@ -20,6 +20,7 @@ import PWAInstallProvider from "@/components/PWAInstallProvider";
 import { ThemeProvider } from "@/components/ThemeProvider";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { metadataBaseUrl } from "@/lib/publicUrl";
+import { isExamSprintOnlyMode } from "@/lib/systemMode";
 import SplashScreen from "@/components/SplashScreen";
 
 export const viewport: Viewport = {
@@ -31,41 +32,51 @@ export const viewport: Viewport = {
   initialScale: 1,
 };
 
-export const metadata: Metadata = {
-  metadataBase: metadataBaseUrl(),
-  title: {
-    default: "JabuStudy",
-    template: "%s - JabuStudy",
-  },
-  description: "Course materials, MCQs, Q&A, tutors, and study tools for JABU students.",
-  manifest: "/manifest.json",
-  icons: {
-    icon: [
-      { url: "/favicon.ico", sizes: "any" },
-      { url: "/icon-192.png", type: "image/png", sizes: "192x192" },
-      { url: "/icon-512-maskable.png", type: "image/png", sizes: "512x512" },
-    ],
-    apple: [{ url: "/icon-192.png", sizes: "192x192", type: "image/png" }],
-    shortcut: "/favicon.ico",
-  },
-  appleWebApp: {
-    capable: true,
-    statusBarStyle: "default",
-    title: "JabuStudy",
-  },
-  formatDetection: { telephone: false },
-  openGraph: {
-    type: "website",
-    siteName: "JabuStudy",
-    title: "JabuStudy",
-    description: "Course materials, MCQs, Q&A, tutors, and study tools for JABU students.",
-  },
-  twitter: {
-    card: "summary_large_image",
-  },
-};
+export function generateMetadata(): Metadata {
+  const examOnlyMode = isExamSprintOnlyMode();
+  const title = examOnlyMode ? "Exam Sprint by JabuStudy" : "JabuStudy";
+  const description = examOnlyMode
+    ? "Timed supplementary CBT practice, focused review and corrections for JABU students."
+    : "Course materials, MCQs, Q&A, tutors, and study tools for JABU students.";
+
+  return {
+    metadataBase: metadataBaseUrl(),
+    title: {
+      default: title,
+      template: "%s - JabuStudy",
+    },
+    description,
+    manifest: "/manifest.webmanifest",
+    icons: {
+      icon: [
+        { url: "/favicon.ico", sizes: "any" },
+        { url: "/icon-192.png", type: "image/png", sizes: "192x192" },
+        { url: "/icon-512-maskable.png", type: "image/png", sizes: "512x512" },
+      ],
+      apple: [{ url: "/icon-192.png", sizes: "192x192", type: "image/png" }],
+      shortcut: "/favicon.ico",
+    },
+    appleWebApp: {
+      capable: true,
+      statusBarStyle: "default",
+      title,
+    },
+    formatDetection: { telephone: false },
+    openGraph: {
+      type: "website",
+      siteName: "JabuStudy",
+      title,
+      description,
+    },
+    twitter: {
+      card: "summary_large_image",
+    },
+  };
+}
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
+  const examOnlyMode = isExamSprintOnlyMode();
+
   return (
     <html lang="en" className={`${inter.variable} ${bricolage.variable}`}>
       <head>
@@ -109,7 +120,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           <SplashScreen />
           <PWAInstallProvider>
             <AuthProvider>
-              <AppChrome>{children}</AppChrome>
+              <AppChrome examOnlyMode={examOnlyMode}>{children}</AppChrome>
             </AuthProvider>
           </PWAInstallProvider>
         </ThemeProvider>

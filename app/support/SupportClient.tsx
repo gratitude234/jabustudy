@@ -10,6 +10,8 @@ type Props = {
   bankName: string;
   accountNumber: string;
   accountName: string;
+  backHref: string;
+  backLabel: string;
 };
 
 const COSTS = [
@@ -18,7 +20,7 @@ const COSTS = [
   { icon: Wrench, label: "Fixes & upgrades", desc: "Ongoing work so things keep improving" },
 ];
 
-export default function SupportClient({ bankName, accountNumber, accountName }: Props) {
+export default function SupportClient({ bankName, accountNumber, accountName, backHref, backLabel }: Props) {
   const [copied, setCopied] = useState<string | null>(null);
 
   function copy(text: string, key: string) {
@@ -152,10 +154,10 @@ export default function SupportClient({ bankName, accountNumber, accountName }: 
 
       <div className="flex justify-center">
         <Link
-          href="/study"
+          href={backHref}
           className="inline-flex items-center gap-1.5 text-sm font-semibold text-primary hover:underline"
         >
-          Back to Study Hub
+          {backLabel}
           <ArrowRight className="h-4 w-4" />
         </Link>
       </div>

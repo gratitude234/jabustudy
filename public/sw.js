@@ -1,10 +1,10 @@
-const CACHE_VERSION = "jabu-study-pwa-v1";
+const CACHE_VERSION = "jabu-study-pwa-v2";
 const PRECACHE = `${CACHE_VERSION}-precache`;
 const STATIC_CACHE = `${CACHE_VERSION}-static`;
 
 const PRECACHE_URLS = [
   "/offline",
-  "/manifest.json",
+  "/manifest.webmanifest",
   "/favicon.ico",
   "/icon-192.png",
   "/icon-512-maskable.png",
@@ -45,7 +45,7 @@ function isStaticAsset(request, url) {
   if (!isSameOrigin(url)) return false;
   return (
     url.pathname.startsWith("/_next/static/") ||
-    url.pathname === "/manifest.json" ||
+    url.pathname === "/manifest.webmanifest" ||
     url.pathname === "/favicon.ico" ||
     /^\/icon-\d+.*\.png$/.test(url.pathname)
   );

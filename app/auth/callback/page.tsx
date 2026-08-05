@@ -1,5 +1,6 @@
 // app/auth/callback/page.tsx
 import { Suspense } from "react";
+import { isExamSprintOnlyMode } from "@/lib/systemMode";
 import CallbackClient from "./CallbackClient";
 
 function Skeleton() {
@@ -28,9 +29,12 @@ function Skeleton() {
 }
 
 export default function AuthCallbackPage() {
+  const examOnlyMode = isExamSprintOnlyMode();
+  const defaultDestination = examOnlyMode ? "/exam" : "/study";
+
   return (
     <Suspense fallback={<Skeleton />}>
-      <CallbackClient />
+      <CallbackClient examOnlyMode={examOnlyMode} defaultDestination={defaultDestination} />
     </Suspense>
   );
 }

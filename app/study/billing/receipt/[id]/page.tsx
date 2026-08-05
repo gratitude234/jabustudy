@@ -5,6 +5,7 @@ import { ArrowLeft, ArrowRight, BadgeCheck } from "lucide-react";
 import { findExamCourse } from "@/lib/examSprint/config";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { getBillingOrderDetails } from "@/lib/studyBilling";
+import { isExamSprintOnlyMode } from "@/lib/systemMode";
 import PrintReceiptButton from "./PrintReceiptButton";
 
 function money(amount: number) {
@@ -28,6 +29,7 @@ export default async function BillingReceiptPage({ params }: { params: Promise<{
   const order = await getBillingOrderDetails(user.id, id);
   if (!order) notFound();
   const isExamPurchase = order.returnPath === "/exam" || order.returnPath.startsWith("/exam/");
+  if (isExamSprintOnlyMode() && !isExamPurchase) redirect("/exam");
   const examCourseSlug = order.returnPath.match(/^\/exam\/([^/?#]+)/)?.[1] ?? null;
   const examCourse = isExamPurchase ? findExamCourse(examCourseSlug) : null;
   const destinationLabel = examCourse?.code ?? (isExamPurchase ? "Exam Sprint" : "Study Hub");

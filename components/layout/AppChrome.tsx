@@ -13,7 +13,13 @@ import { NotificationsProvider } from "@/contexts/NotificationsContext";
 const APP_CONTAINER =
   "mx-auto w-full max-w-6xl px-4 md:px-6 lg:max-w-7xl lg:px-8";
 
-export default function AppChrome({ children }: { children: React.ReactNode }) {
+export default function AppChrome({
+  children,
+  examOnlyMode = false,
+}: {
+  children: React.ReactNode;
+  examOnlyMode?: boolean;
+}) {
   const pathname = usePathname();
   const [updateWorker, setUpdateWorker] = useState<ServiceWorker | null>(null);
   const hasDesktopSidebar = pathname?.startsWith("/study") && !pathname.startsWith("/study-admin");
@@ -30,6 +36,12 @@ export default function AppChrome({ children }: { children: React.ReactNode }) {
 
   if (pathname?.startsWith("/study-admin")) return <>{children}</>;
   if (pathname?.startsWith("/exam")) return <>{children}</>;
+  if (examOnlyMode) {
+    if (pathname?.startsWith("/study/billing")) {
+      return <main className={[APP_CONTAINER, "py-6 md:py-8"].join(" ")}>{children}</main>;
+    }
+    return <>{children}</>;
+  }
 
   return (
     <NotificationsProvider>

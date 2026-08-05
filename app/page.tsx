@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
+import { isExamSprintOnlyMode } from "@/lib/systemMode";
 
 export default function HomePage() {
-  redirect("/study");
+  redirect(isExamSprintOnlyMode() ? "/exam" : "/study");
 }

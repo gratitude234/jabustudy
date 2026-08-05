@@ -7,6 +7,12 @@ import { canReusePaystackCheckout } from "@/lib/billingWorkflow";
 import { projectedExamAccessUntil } from "@/lib/examSprint/offer";
 import { getExamOfferSummary } from "@/lib/examSprint/server";
 import { verifyPaystackTransaction } from "@/lib/paystack";
+import {
+  EXAM_SPRINT_HOME,
+  EXAM_SPRINT_PLAN_KEY,
+  isBillingPlanAllowedInSystemMode,
+  isExamSprintOnlyMode,
+} from "@/lib/systemMode";
 
 export const FREE_DAILY_PRACTICE_LIMIT = 40;
 
@@ -130,6 +136,24 @@ export const ACTIVE_PAYSTACK_STATUSES: BillingOrderStatus[] = ["initializing", "
 
 function httpError(message: string, status: number, code: string) {
   return Object.assign(new Error(message), { status, code });
+}
+
+function assertPlanAvailable(plan: BillingPlan) {
+  if (!isBillingPlanAllowedInSystemMode(plan.key, isExamSprintOnlyMode())) {
+    throw httpError(
+      "Only the 30-day Exam Sprint pass is available during the examination period.",
+      423,
+      "SYSTEM_MODE_RESTRICTED"
+    );
+  }
+}
+
+function billingReturnPathForCurrentMode(value: unknown) {
+  const path = sanitizeBillingReturnPath(value);
+  if (!isExamSprintOnlyMode()) return path;
+  return path === EXAM_SPRINT_HOME || path.startsWith(`${EXAM_SPRINT_HOME}/`)
+    ? path
+    : EXAM_SPRINT_HOME;
 }
 
 export function getBillingPlan(planKey: unknown): BillingPlan {
@@ -345,8 +369,9 @@ export async function recordFreeAiTrialGeneration(userId: string, metadata: Reco
   };
 }
 
-export async function createBillingOrder(userId: string, planKey: unknown) {
+export async function createBillingOrder(userId: string, planKey: unknown, returnPath?: unknown) {
   const plan = getBillingPlan(planKey);
+  assertPlanAvailable(plan);
   const reference = await uniqueReference();
   const now = new Date().toISOString();
 
@@ -361,6 +386,7 @@ export async function createBillingOrder(userId: string, planKey: unknown) {
       plus_days: plan.plusDays,
       reference,
       status: "pending_payment",
+      return_path: billingReturnPathForCurrentMode(returnPath),
       updated_at: now,
     } as never)
     .select("*")
@@ -730,7 +756,8 @@ async function getActivePaystackOrder(userId: string) {
 
 export async function createPaystackBillingOrder(userId: string, planKey: unknown, returnPath?: unknown) {
   const plan = getBillingPlan(planKey);
-  const safeReturnPath = sanitizeBillingReturnPath(returnPath);
+  assertPlanAvailable(plan);
+  const safeReturnPath = billingReturnPathForCurrentMode(returnPath);
   const now = Date.now();
   const existing = await getActivePaystackOrder(userId);
 
@@ -856,6 +883,13 @@ export async function resumePaystackBillingOrder(orderId: string, userId: string
   if (error) throw httpError(error.message, 500, "DB_ERROR");
   if (!data?.id) throw httpError("Order not found.", 404, "ORDER_NOT_FOUND");
   const row = data as BillingOrderRow;
+  if (isExamSprintOnlyMode() && row.plan_key !== EXAM_SPRINT_PLAN_KEY) {
+    throw httpError(
+      "This checkout belongs to a study plan that is paused during Exam Sprint mode.",
+      423,
+      "SYSTEM_MODE_RESTRICTED"
+    );
+  }
   if (row.status === "approved") throw httpError("This payment is already confirmed.", 409, "ORDER_ALREADY_PAID");
   if (row.payment_method !== "paystack" || row.status !== "pending_payment" || !row.paystack_authorization_url) {
     throw httpError("This checkout can no longer be resumed. Start a new one.", 409, "CHECKOUT_NOT_RESUMABLE");
