@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import Link from "next/link";
 import { ArrowDown, CheckCircle2, ChevronDown, Clock3, LockKeyhole, ShieldCheck, Target } from "lucide-react";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
@@ -10,11 +11,16 @@ import {
 } from "@/lib/examSprint/config";
 import { dedupeExamCourses } from "@/lib/examSprint/catalog";
 import { getExamCatalog } from "@/lib/examSprint/server";
+import { examLandingMetadata, examSprintStructuredData } from "@/lib/examSprint/seo";
 import { formatNaira } from "@/lib/utils";
 import { isExamSprintOnlyMode } from "@/lib/systemMode";
 import ExamCatalogClient from "./_components/ExamCatalogClient";
 
 export const dynamic = "force-dynamic";
+
+export function generateMetadata(): Metadata {
+  return examLandingMetadata();
+}
 
 export default async function ExamSprintPage() {
   const examOnlyMode = isExamSprintOnlyMode();
@@ -41,9 +47,16 @@ export default async function ExamSprintPage() {
   const activeAttempt = catalog.activeAttempts[0] ?? null;
   const activeDiagnostic = catalog.diagnostic?.resumable ? catalog.diagnostic : null;
   const activeSession = activeAttempt ?? activeDiagnostic;
+  const structuredData = examSprintStructuredData(
+    uniqueCourses.filter((course) => course.sets.length > 0),
+  );
 
   return (
     <div className="mx-auto max-w-3xl space-y-5 pb-10">
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(structuredData).replace(/</g, "\\u003c") }}
+      />
       {examOnlyMode ? (
         <aside className="flex items-start gap-3 rounded-xl border border-primary/15 bg-primary/[0.07] px-3.5 py-3 text-foreground" role="status">
           <span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-primary/10 text-primary">

@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { sanitizeBillingReturnPath } from "../lib/billingReturnPath";
+import { readFileSync } from "node:fs";
+import {
+  legacyCompatibleExamReturnPath,
+  restoreBillingReturnPath,
+  sanitizeBillingReturnPath,
+} from "../lib/billingReturnPath";
 
 describe("sanitizeBillingReturnPath", () => {
   it("preserves a same-origin Study path with query and hash", () => {
@@ -11,6 +16,15 @@ describe("sanitizeBillingReturnPath", () => {
     expect(sanitizeBillingReturnPath("/exam")).toBe("/exam");
     expect(sanitizeBillingReturnPath("/exam/cos-101?from=checkout#mock"))
       .toBe("/exam/cos-101?from=checkout#mock");
+  });
+
+  it("round-trips Exam Sprint paths through the legacy Study-only database constraint", () => {
+    const canonical = "/exam/bio-101?from=checkout#mock";
+    const stored = legacyCompatibleExamReturnPath(canonical);
+
+    expect(stored).toBe("/study/exam-return/bio-101?from=checkout#mock");
+    expect(restoreBillingReturnPath(stored)).toBe(canonical);
+    expect(restoreBillingReturnPath("/study/practice/set-1")).toBe("/study/practice/set-1");
   });
 
   it.each([
@@ -30,5 +44,15 @@ describe("sanitizeBillingReturnPath", () => {
 
   it("caps overly long values", () => {
     expect(sanitizeBillingReturnPath(`/study/${"a".repeat(700)}`).length).toBeLessThanOrEqual(500);
+  });
+
+  it("ships a database constraint that accepts Study and Exam Sprint paths", () => {
+    const migration = readFileSync(
+      new URL("../supabase/migrations/20260805_exam_sprint_billing_return_paths.sql", import.meta.url),
+      "utf8",
+    );
+
+    expect(migration).toContain("return_path ~ '^/(study|exam)(/|[?#]|$)'");
+    expect(migration).toContain("return_path !~ '^/study/billing(/|[?#]|$)'");
   });
 });

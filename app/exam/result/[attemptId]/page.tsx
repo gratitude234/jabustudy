@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import {
@@ -23,6 +24,10 @@ import ExamCorrections from "../../_components/ExamCorrections";
 import CoverageMeter from "../../_components/CoverageMeter";
 
 export const dynamic = "force-dynamic";
+export const metadata: Metadata = {
+  title: "Private mock result",
+  robots: { index: false, follow: false, noarchive: true },
+};
 
 function readiness(percentage: number) {
   if (percentage >= 85) {

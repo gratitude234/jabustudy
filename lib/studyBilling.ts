@@ -2,7 +2,12 @@ import "server-only";
 
 import { randomBytes } from "node:crypto";
 import { adminSupabase } from "@/lib/supabase/admin";
-import { sanitizeBillingReturnPath } from "@/lib/billingReturnPath";
+import { billingOrderInsertError, isBillingReturnPathConstraintError } from "@/lib/billingOrderError";
+import {
+  legacyCompatibleExamReturnPath,
+  restoreBillingReturnPath,
+  sanitizeBillingReturnPath,
+} from "@/lib/billingReturnPath";
 import { canReusePaystackCheckout } from "@/lib/billingWorkflow";
 import { projectedExamAccessUntil } from "@/lib/examSprint/offer";
 import { getExamOfferSummary } from "@/lib/examSprint/server";
@@ -374,25 +379,38 @@ export async function createBillingOrder(userId: string, planKey: unknown, retur
   assertPlanAvailable(plan);
   const reference = await uniqueReference();
   const now = new Date().toISOString();
+  const safeReturnPath = billingReturnPathForCurrentMode(returnPath);
+  const insert = {
+    user_id: userId,
+    product_type: plan.productType,
+    plan_key: plan.key,
+    amount_naira: plan.amountNaira,
+    credits: plan.credits,
+    plus_days: plan.plusDays,
+    reference,
+    status: "pending_payment",
+    return_path: safeReturnPath,
+    updated_at: now,
+  };
 
-  const { data, error } = await adminSupabase
+  let { data, error } = await adminSupabase
     .from("study_billing_orders")
-    .insert({
-      user_id: userId,
-      product_type: plan.productType,
-      plan_key: plan.key,
-      amount_naira: plan.amountNaira,
-      credits: plan.credits,
-      plus_days: plan.plusDays,
-      reference,
-      status: "pending_payment",
-      return_path: billingReturnPathForCurrentMode(returnPath),
-      updated_at: now,
-    } as never)
+    .insert(insert as never)
     .select("*")
     .single();
 
-  if (error || !data) throw httpError(error?.message || "Could not create order.", 500, "ORDER_CREATE_FAILED");
+  if (isBillingReturnPathConstraintError(error) && safeReturnPath.startsWith("/exam")) {
+    ({ data, error } = await adminSupabase
+      .from("study_billing_orders")
+      .insert({ ...insert, return_path: legacyCompatibleExamReturnPath(safeReturnPath) } as never)
+      .select("*")
+      .single());
+  }
+
+  if (error || !data) {
+    const failure = billingOrderInsertError(error);
+    throw httpError(failure.message, failure.status, failure.code);
+  }
   return normalizeOrder(data as BillingOrderRow);
 }
 
@@ -685,7 +703,7 @@ export function normalizeOrder(row: BillingOrderRow) {
     lastVerifiedAt: row.last_verified_at ?? null,
     paidAt: row.paid_at ?? null,
     failureDetail: row.failure_detail ?? null,
-    returnPath: sanitizeBillingReturnPath(row.return_path),
+    returnPath: restoreBillingReturnPath(row.return_path),
     refundStatus: (row.refund_status ?? "none") as BillingRefundStatus,
     refundedAt: row.refunded_at ?? null,
     refundAmountNaira: row.refund_amount_naira ?? null,
@@ -806,11 +824,19 @@ export async function createPaystackBillingOrder(userId: string, planKey: unknow
     updated_at: nowIso,
   };
 
-  const { data, error } = await adminSupabase
+  let { data, error } = await adminSupabase
     .from("study_billing_orders")
     .insert(insert as never)
     .select("*")
     .single();
+
+  if (isBillingReturnPathConstraintError(error) && safeReturnPath.startsWith("/exam")) {
+    ({ data, error } = await adminSupabase
+      .from("study_billing_orders")
+      .insert({ ...insert, return_path: legacyCompatibleExamReturnPath(safeReturnPath) } as never)
+      .select("*")
+      .single());
+  }
 
   if (error || !data) {
     if ((error as { code?: string } | null)?.code === "23505") {
@@ -824,7 +850,8 @@ export async function createPaystackBillingOrder(userId: string, planKey: unknow
       }
       throw httpError("Another checkout is already opening. Try again in a moment.", 409, "ACTIVE_CHECKOUT_EXISTS");
     }
-    throw httpError(error?.message || "Could not create order.", 500, "ORDER_CREATE_FAILED");
+    const failure = billingOrderInsertError(error);
+    throw httpError(failure.message, failure.status, failure.code);
   }
 
   return { order: normalizeOrder(data as BillingOrderRow), reused: false, authorizationUrl: null as string | null };

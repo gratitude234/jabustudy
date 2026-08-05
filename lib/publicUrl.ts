@@ -1,9 +1,25 @@
-export function publicUrl(path: string) {
-  const normalizedPath = path.startsWith("/") ? path : `/${path}`;
-  const base = process.env.NEXT_PUBLIC_SITE_URL?.replace(/\/$/, "");
-  return base ? `${base}${normalizedPath}` : normalizedPath;
+export const DEFAULT_PUBLIC_SITE_URL = "https://www.jabustudy.com";
+
+type PublicUrlEnvironment = Record<string, string | undefined>;
+
+export function publicSiteOrigin(environment: PublicUrlEnvironment = process.env) {
+  const configured = environment.NEXT_PUBLIC_SITE_URL?.trim();
+  if (!configured) return DEFAULT_PUBLIC_SITE_URL;
+
+  try {
+    const url = new URL(configured);
+    if (url.protocol !== "http:" && url.protocol !== "https:") return DEFAULT_PUBLIC_SITE_URL;
+    return url.origin;
+  } catch {
+    return DEFAULT_PUBLIC_SITE_URL;
+  }
 }
 
-export function metadataBaseUrl() {
-  return new URL(process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000");
+export function publicUrl(path: string, environment: PublicUrlEnvironment = process.env) {
+  const normalizedPath = path.startsWith("/") ? path : `/${path}`;
+  return `${publicSiteOrigin(environment)}${normalizedPath}`;
+}
+
+export function metadataBaseUrl(environment: PublicUrlEnvironment = process.env) {
+  return new URL(publicSiteOrigin(environment));
 }

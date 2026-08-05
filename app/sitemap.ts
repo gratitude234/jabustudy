@@ -1,20 +1,20 @@
 import type { MetadataRoute } from "next";
+import { buildExamSitemap } from "@/lib/examSprint/seo";
+import { getPublishedExamSets } from "@/lib/examSprint/server";
 import { isExamSprintOnlyMode } from "@/lib/systemMode";
 
-export default function sitemap(): MetadataRoute.Sitemap {
-  const base =
-    (process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000").replace(/\/$/, "");
+export const dynamic = "force-dynamic";
 
-  if (isExamSprintOnlyMode()) {
-    return [{ url: `${base}/exam`, changeFrequency: "daily", priority: 1.0 }];
+export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
+  try {
+    const sets = await getPublishedExamSets();
+    return buildExamSitemap(
+      sets.map((set) => set.courseCode),
+      { includeStudyPages: !isExamSprintOnlyMode() },
+    );
+  } catch {
+    // Keep the public landing page discoverable even if the catalog database is
+    // briefly unavailable when a crawler requests the sitemap.
+    return buildExamSitemap([], { includeStudyPages: !isExamSprintOnlyMode() });
   }
-
-  return [
-    { url: `${base}/study`, changeFrequency: "weekly", priority: 1.0 },
-    { url: `${base}/study/library`, changeFrequency: "weekly", priority: 0.8 },
-    { url: `${base}/study/practice`, changeFrequency: "weekly", priority: 0.8 },
-    { url: `${base}/study/questions`, changeFrequency: "weekly", priority: 0.7 },
-    { url: `${base}/study/leaderboard`, changeFrequency: "weekly", priority: 0.5 },
-    { url: `${base}/study/gpa`, changeFrequency: "weekly", priority: 0.5 },
-  ];
 }

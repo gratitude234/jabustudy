@@ -41,11 +41,20 @@ export function generateMetadata(): Metadata {
 
   return {
     metadataBase: metadataBaseUrl(),
+    applicationName: "JabuStudy",
     title: {
       default: title,
       template: "%s - JabuStudy",
     },
     description,
+    authors: [{ name: "JabuStudy", url: "/exam" }],
+    creator: "JabuStudy",
+    publisher: "JabuStudy",
+    category: "education",
+    robots: { index: true, follow: true },
+    verification: process.env.NEXT_PUBLIC_GOOGLE_SITE_VERIFICATION
+      ? { google: process.env.NEXT_PUBLIC_GOOGLE_SITE_VERIFICATION }
+      : undefined,
     manifest: "/manifest.webmanifest",
     icons: {
       icon: [
@@ -67,6 +76,7 @@ export function generateMetadata(): Metadata {
       siteName: "JabuStudy",
       title,
       description,
+      locale: "en_NG",
     },
     twitter: {
       card: "summary_large_image",

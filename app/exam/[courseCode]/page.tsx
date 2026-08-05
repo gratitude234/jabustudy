@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import {
@@ -23,6 +24,7 @@ import {
   findExamCourse,
   normalizeExamCourseCode,
 } from "@/lib/examSprint/config";
+import { examCourseMetadata, examCourseStructuredData } from "@/lib/examSprint/seo";
 import { getExamCatalog, type ExamRecentAttempt } from "@/lib/examSprint/server";
 import { cn, formatNaira } from "@/lib/utils";
 import StartExamButton from "../_components/StartExamButton";
@@ -31,6 +33,15 @@ import ExamRemainingTime from "../_components/ExamRemainingTime";
 
 export const dynamic = "force-dynamic";
 const ATTEMPT_PREVIEW_COUNT = 3;
+
+type ExamCoursePageProps = { params: Promise<{ courseCode: string }> };
+
+export async function generateMetadata({ params }: ExamCoursePageProps): Promise<Metadata> {
+  const { courseCode } = await params;
+  const course = findExamCourse(courseCode);
+  if (!course) return { title: "Course not found", robots: { index: false, follow: false } };
+  return examCourseMetadata(course);
+}
 
 function attemptDate(value: string | null) {
   if (!value) return "Completed recently";
@@ -70,7 +81,7 @@ function AttemptLink({ attempt, bordered = false }: { attempt: ExamRecentAttempt
   );
 }
 
-export default async function ExamCoursePage({ params }: { params: Promise<{ courseCode: string }> }) {
+export default async function ExamCoursePage({ params }: ExamCoursePageProps) {
   const { courseCode } = await params;
   const course = findExamCourse(courseCode);
   if (!course) notFound();
@@ -106,6 +117,7 @@ export default async function ExamCoursePage({ params }: { params: Promise<{ cou
   const mockAttempts = progress?.basedOn === "mock" ? progress.attempts : 0;
   const latestAttempts = recentAttempts.slice(0, ATTEMPT_PREVIEW_COUNT);
   const olderAttempts = recentAttempts.slice(ATTEMPT_PREVIEW_COUNT);
+  const structuredData = examCourseStructuredData(course);
 
   const primaryAction = () => {
     if (campaignActiveAttempt) {
@@ -179,6 +191,10 @@ export default async function ExamCoursePage({ params }: { params: Promise<{ cou
 
   return (
     <div className="mx-auto max-w-3xl space-y-5 pb-10">
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(structuredData).replace(/</g, "\\u003c") }}
+      />
       <nav aria-label="Course navigation">
         <Link href="/exam#courses" className="inline-flex min-h-10 items-center gap-1.5 text-sm font-bold text-primary no-underline hover:underline">
           <ArrowLeft className="h-4 w-4" aria-hidden="true" /> Back to courses

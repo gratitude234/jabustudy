@@ -1,18 +1,20 @@
 import type { MetadataRoute } from "next";
+import { metadataBaseUrl } from "@/lib/publicUrl";
 import { isExamSprintOnlyMode } from "@/lib/systemMode";
 
 export default function robots(): MetadataRoute.Robots {
   const examOnlyMode = isExamSprintOnlyMode();
-  const base =
-    process.env.NEXT_PUBLIC_SITE_URL?.replace(/\/$/, "") ?? "http://localhost:3000";
+  const base = metadataBaseUrl().origin;
 
   return {
     rules: [
       {
         userAgent: "*",
-        allow: examOnlyMode ? ["/exam", "/exam/"] : "/",
+        allow: "/",
         disallow: [
           ...(examOnlyMode ? ["/study", "/study/", "/notifications"] : []),
+          "/exam/attempt/",
+          "/exam/result/",
           "/study-admin/",
           "/api/",
           "/auth/",

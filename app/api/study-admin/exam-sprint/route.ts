@@ -80,7 +80,7 @@ export async function GET(req: NextRequest) {
         .select("id,user_id,amount_naira,status,return_path")
         .eq("plan_key", "plus_monthly")
         .eq("status", "approved")
-        .like("return_path", "/exam%"),
+        .or("return_path.like./exam%,return_path.like./study/exam-return%"),
     ]);
     if (attemptError) throw attemptError;
     if (orderError) throw orderError;
