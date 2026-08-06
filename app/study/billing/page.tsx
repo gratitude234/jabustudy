@@ -344,7 +344,18 @@ export default function StudyBillingPage() {
       }
       const target = selectBillingVisitOrder(data.orders, callbackReference);
       const contextualReturnPath = callbackOrder?.returnPath || target?.returnPath || query.get("returnTo") || "";
+      const isExamOffer = requestedOffer === "exam-sprint" || contextualReturnPath.startsWith("/exam");
       if (!requestedOffer && contextualReturnPath.startsWith("/exam")) setOffer("exam-sprint");
+      if (
+        isExamOffer
+        && target
+        && target.status !== "approved"
+        && target.planKey === "plus_monthly"
+        && target.amountNaira !== EXAM_SPRINT_PRICE_NAIRA
+      ) {
+        setCheckoutOrderId(null);
+        return;
+      }
       if (target && target.status !== "approved") {
         setCheckoutOrderId(target.id);
         void pollPayment(target.reference);

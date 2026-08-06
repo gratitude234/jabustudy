@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   EXAM_COURSES,
+  EXAM_SPRINT_PRICE_NAIRA,
   examCourseDateLabel,
   findExamCourse,
   normalizeExamCourseCode,
@@ -41,5 +42,11 @@ describe("Exam Sprint course catalog", () => {
     expect(course).not.toBeNull();
     expect(examCourseDateLabel(course!)).toBe("Exam date to be announced");
     expect(examCourseDateLabel(findExamCourse("GNS 121")!)).toMatch(/WAT$/);
+  });
+
+  it("uses the confirmed summer timetable dates and current pass price", () => {
+    expect(findExamCourse("COS 101")?.examAt).toBe("2026-08-10T11:30:00+01:00");
+    expect(findExamCourse("CHM 101")?.examAt).toBe("2026-08-13T08:00:00+01:00");
+    expect(EXAM_SPRINT_PRICE_NAIRA).toBe(1_000);
   });
 });

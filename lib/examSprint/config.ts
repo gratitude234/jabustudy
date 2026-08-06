@@ -1,6 +1,6 @@
 export const EXAM_CAMPAIGN_KEY = "supplementary-2026";
 export const EXAM_SPRINT_NAME = "Exam Sprint";
-export const EXAM_SPRINT_PRICE_NAIRA = 1_300;
+export const EXAM_SPRINT_PRICE_NAIRA = 1_000;
 export const EXAM_BANK_MINIMUM = 60;
 export const EXAM_MOCK_QUESTION_COUNT = 40;
 export const EXAM_MOCK_DURATION_MINUTES = 40;
@@ -29,12 +29,12 @@ export const EXAM_COURSES: readonly ExamCourse[] = [
   { code: "GNS 321", slug: "gns-321", title: "CAC and Apostle Joseph Ayo Babalola", examAt: "2026-08-19T12:00:00+01:00", priority: false },
   { code: "BIO 101", slug: "bio-101", title: "Biology 101", examAt: null, priority: false },
   { code: "BIO 107", slug: "bio-107", title: "Biology 107", examAt: null, priority: false },
-  { code: "CHM 101", slug: "chm-101", title: "Chemistry 101", examAt: null, priority: false },
+  { code: "CHM 101", slug: "chm-101", title: "Chemistry 101", examAt: "2026-08-13T08:00:00+01:00", priority: false },
   { code: "CHM 107", slug: "chm-107", title: "Chemistry 107", examAt: null, priority: false },
   { code: "PHY 101", slug: "phy-101", title: "Physics 101", examAt: null, priority: false },
   { code: "PHY 107", slug: "phy-107", title: "Physics 107", examAt: null, priority: false },
   { code: "MTH 101", slug: "mth-101", title: "Mathematics 101", examAt: null, priority: false },
-  { code: "COS 101", slug: "cos-101", title: "Computer Science 101", examAt: null, priority: false },
+  { code: "COS 101", slug: "cos-101", title: "Computer Science 101", examAt: "2026-08-10T11:30:00+01:00", priority: false },
   { code: "GNS 111", slug: "gns-111", title: "Communication in English", examAt: null, priority: false },
   { code: "GNS 112", slug: "gns-112", title: "Fundamentals of Computing I", examAt: null, priority: false },
   { code: "GNS 113", slug: "gns-113", title: "Use of Library", examAt: null, priority: false },

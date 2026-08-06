@@ -51,6 +51,6 @@ describe("Exam Sprint price framing", () => {
   });
 
   it("uses a rounded, honest daily equivalent", () => {
-    expect(examDailyEquivalent(1_300, 30)).toBe(43);
+    expect(examDailyEquivalent(1_000, 30)).toBe(33);
   });
 });

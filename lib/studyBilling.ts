@@ -72,7 +72,7 @@ export const BILLING_PLANS: Record<BillingPlanKey, BillingPlan> = {
     key: "plus_monthly",
     productType: "plus",
     label: "JabuStudy Plus Monthly",
-    amountNaira: 1300,
+    amountNaira: 1000,
     credits: 100,
     plusDays: 30,
   },
@@ -781,7 +781,8 @@ export async function createPaystackBillingOrder(userId: string, planKey: unknow
 
   if (existing) {
     const ageMs = now - new Date(existing.created_at).getTime();
-    if (canReusePaystackCheckout({
+    const amountMatchesCurrentPlan = Number(existing.amount_naira) === plan.amountNaira;
+    if (amountMatchesCurrentPlan && canReusePaystackCheckout({
       paymentMethod: existing.payment_method,
       status: existing.status,
       planKey: existing.plan_key,
@@ -791,7 +792,7 @@ export async function createPaystackBillingOrder(userId: string, planKey: unknow
       return { order: normalizeOrder(existing), reused: true, authorizationUrl: existing.paystack_authorization_url };
     }
 
-    if (existing.plan_key === plan.key && existing.status === "initializing" && ageMs < 120_000) {
+    if (amountMatchesCurrentPlan && existing.plan_key === plan.key && existing.status === "initializing" && ageMs < 120_000) {
       throw httpError("Your secure checkout is still opening. Try again in a moment.", 409, "PAYMENT_INITIALIZING");
     }
 
@@ -841,7 +842,11 @@ export async function createPaystackBillingOrder(userId: string, planKey: unknow
   if (error || !data) {
     if ((error as { code?: string } | null)?.code === "23505") {
       const concurrent = await getActivePaystackOrder(userId);
-      if (concurrent?.plan_key === plan.key && concurrent.paystack_authorization_url) {
+      if (
+        concurrent?.plan_key === plan.key
+        && Number(concurrent.amount_naira) === plan.amountNaira
+        && concurrent.paystack_authorization_url
+      ) {
         return {
           order: normalizeOrder(concurrent),
           reused: true,
@@ -915,6 +920,14 @@ export async function resumePaystackBillingOrder(orderId: string, userId: string
       "This checkout belongs to a study plan that is paused during Exam Sprint mode.",
       423,
       "SYSTEM_MODE_RESTRICTED"
+    );
+  }
+  const currentPlan = getBillingPlan(row.plan_key);
+  if (Number(row.amount_naira) !== currentPlan.amountNaira) {
+    throw httpError(
+      "The price of this pass has changed. Start a new checkout to use the current price.",
+      409,
+      "CHECKOUT_PRICE_CHANGED"
     );
   }
   if (row.status === "approved") throw httpError("This payment is already confirmed.", 409, "ORDER_ALREADY_PAID");
