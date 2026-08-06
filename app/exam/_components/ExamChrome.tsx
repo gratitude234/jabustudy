@@ -3,7 +3,7 @@
 import Link from "next/link";
 import Image from "next/image";
 import { usePathname } from "next/navigation";
-import { ArrowLeft, Moon, Sun } from "lucide-react";
+import { ArrowLeft, Moon, Sun, UserRound } from "lucide-react";
 import { useTheme } from "@/components/ThemeProvider";
 
 export default function ExamChrome({
@@ -32,6 +32,13 @@ export default function ExamChrome({
             </span>
           </Link>
           <div className="flex items-center gap-2">
+            <Link
+              href="/exam/me"
+              aria-label="Exam Sprint account"
+              className="grid h-10 w-10 place-items-center rounded-xl border border-border bg-card text-foreground no-underline transition hover:bg-secondary focus-visible:ring-2 focus-visible:ring-primary"
+            >
+              <UserRound className="h-4 w-4" aria-hidden="true" />
+            </Link>
             <button
               type="button"
               onClick={() => setTheme(resolvedTheme === "dark" ? "light" : "dark")}

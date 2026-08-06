@@ -1,5 +1,11 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { createServerClient } from "@supabase/ssr";
+import { createClient } from "@supabase/supabase-js";
+import {
+  hasStudyModeratorMembership,
+  type StudyAdminMembershipRow,
+  type StudyRepMembershipRow,
+} from "@/lib/studyAdmin/moderatorMembership";
 import {
   EXAM_SPRINT_HOME,
   isExamOnlyApiAllowed,
@@ -30,6 +36,39 @@ function shouldRefreshSession(pathname: string) {
     "/study/billing",
     "/api/billing",
   ].some((root) => matchesPath(pathname, root));
+}
+
+function bearerToken(request: NextRequest) {
+  const value = request.headers.get("authorization");
+  const match = value?.match(/^Bearer\s+(.+)$/i);
+  return match?.[1]?.trim() || null;
+}
+
+async function hasVerifiedStudyModeratorAccess(userId: string) {
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const serviceRoleKey =
+    process.env.SUPABASE_SERVICE_ROLE_KEY
+    || process.env.SUPABASE_SERVICE_KEY
+    || process.env.SUPABASE_SERVICE_ROLE;
+  if (!supabaseUrl || !serviceRoleKey) return false;
+
+  const admin = createClient(supabaseUrl, serviceRoleKey, {
+    auth: { persistSession: false, autoRefreshToken: false },
+  });
+  const [studyAdminResult, studyRepResult] = await Promise.all([
+    admin.from("study_admins").select("user_id").eq("user_id", userId).maybeSingle(),
+    admin
+      .from("study_reps")
+      .select("user_id,role,department_id,levels,active")
+      .eq("user_id", userId)
+      .maybeSingle(),
+  ]);
+
+  if (studyAdminResult.error || studyRepResult.error) return false;
+  return hasStudyModeratorMembership(
+    studyAdminResult.data as StudyAdminMembershipRow,
+    studyRepResult.data as StudyRepMembershipRow,
+  );
 }
 
 function examHomeRedirect(request: NextRequest) {
@@ -75,13 +114,12 @@ function enforceExamOnlyMode(request: NextRequest) {
  */
 export async function proxy(request: NextRequest) {
   const modeResponse = enforceExamOnlyMode(request);
-  if (modeResponse) return modeResponse;
-
   const response = NextResponse.next({
     request: { headers: request.headers },
   });
 
-  if (!shouldRefreshSession(request.nextUrl.pathname)) return response;
+  const needsSession = Boolean(modeResponse) || shouldRefreshSession(request.nextUrl.pathname);
+  if (!needsSession) return response;
 
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
   const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
@@ -98,6 +136,22 @@ export async function proxy(request: NextRequest) {
       },
     },
   });
+
+  if (modeResponse) {
+    const token = bearerToken(request);
+    const { data: userData, error: userError } = token
+      ? await supabase.auth.getUser(token)
+      : await supabase.auth.getUser();
+    const verifiedUserId = userData.user?.id ?? null;
+    const moderatorBypass = !userError && verifiedUserId
+      ? await hasVerifiedStudyModeratorAccess(verifiedUserId)
+      : false;
+
+    // Fail closed: a missing/expired session, membership lookup error or normal
+    // student account receives the original Exam Sprint restriction.
+    if (!moderatorBypass) return modeResponse;
+    return response;
+  }
 
   await supabase.auth.getSession();
 

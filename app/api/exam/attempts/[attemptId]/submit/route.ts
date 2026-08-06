@@ -5,6 +5,7 @@ import {
   finalizeExamAttempt,
   getOwnedExamAttempt,
 } from "@/lib/examSprint/server";
+import { requireExamDeviceSession } from "@/lib/examSprint/deviceSession";
 
 function jsonError(error: unknown) {
   const value = error as { message?: string; status?: number; code?: string };
@@ -22,6 +23,7 @@ export async function POST(
     const supabase = await createSupabaseServerClient();
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) throw examHttpError("Sign in to continue.", 401, "UNAUTHORIZED");
+    await requireExamDeviceSession(req, user.id);
     const { attemptId } = await params;
     const body = await req.json().catch(() => ({})) as { reason?: unknown };
     const reason = body.reason === "timeup" ? "timeup" : "manual";

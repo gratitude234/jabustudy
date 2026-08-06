@@ -18,6 +18,7 @@ import {
 } from "lucide-react";
 import { cn, msToClock } from "@/lib/utils";
 import { examTabLeaseBelongsToAnotherTab, parseExamTabLease } from "@/lib/examSprint/workflow";
+import { isExamDeviceGuardErrorCode } from "@/lib/examSprint/device";
 
 type ExamOption = { id: string; text: string };
 type ExamQuestion = { id: string; position: number; prompt: string; options: ExamOption[] };
@@ -218,6 +219,12 @@ export default function ExamAttemptClient() {
             message?: string;
           } | null;
 
+          if (isExamDeviceGuardErrorCode(data?.code)) {
+            persistPendingDraft();
+            router.push(`/exam/me?returnTo=${encodeURIComponent(`/exam/attempt/${attemptId}`)}`);
+            return false;
+          }
+
           if (response.status === 409 && (data?.code === "ATTEMPT_EXPIRED" || data?.code === "ATTEMPT_SUBMITTED")) {
             pendingRef.current = {};
             updatePendingCount();
@@ -274,6 +281,7 @@ export default function ExamAttemptClient() {
           ok?: boolean;
           attempt?: AttemptPayload;
           resultUrl?: string;
+          code?: string;
           message?: string;
         } | null;
         if (response.status === 401) {
@@ -282,6 +290,10 @@ export default function ExamAttemptClient() {
         }
         if (response.status === 409 && data?.resultUrl) {
           router.replace(data.resultUrl);
+          return;
+        }
+        if (isExamDeviceGuardErrorCode(data?.code)) {
+          router.replace(`/exam/me?returnTo=${encodeURIComponent(`/exam/attempt/${attemptId}`)}`);
           return;
         }
         if (!response.ok || !data?.ok || !data.attempt) throw new Error(data?.message || "Could not load this exam.");
@@ -368,7 +380,14 @@ export default function ExamAttemptClient() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ reason }),
       });
-      const data = await response.json().catch(() => null) as { ok?: boolean; resultUrl?: string; message?: string } | null;
+      const data = await response.json().catch(() => null) as { ok?: boolean; resultUrl?: string; code?: string; message?: string } | null;
+      if (isExamDeviceGuardErrorCode(data?.code)) {
+        persistPendingDraft();
+        router.push(`/exam/me?returnTo=${encodeURIComponent(`/exam/attempt/${currentAttempt.id}`)}`);
+        submittingRef.current = false;
+        setSubmitting(false);
+        return;
+      }
       if (!response.ok || !data?.ok || !data.resultUrl) throw new Error(data?.message || "Could not submit this attempt.");
       window.localStorage.removeItem(storageKey);
       router.replace(data.resultUrl);
@@ -378,7 +397,7 @@ export default function ExamAttemptClient() {
       setSubmitDialogOpen(true);
       setSaveError(cause instanceof Error ? cause.message : "Could not submit this attempt. Retry safely.");
     }
-  }, [flushPending, router, storageKey]);
+  }, [flushPending, persistPendingDraft, router, storageKey]);
 
   const leaveAttempt = useCallback(async () => {
     const currentAttempt = attemptRef.current;

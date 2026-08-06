@@ -15,6 +15,7 @@ import {
   type ExamAttemptRow,
 } from "@/lib/examSprint/server";
 import { partitionTimedExamAttempts } from "@/lib/examSprint/workflow";
+import { requireExamDeviceSession } from "@/lib/examSprint/deviceSession";
 
 function jsonError(error: unknown) {
   const value = error as { message?: string; status?: number; code?: string };
@@ -55,6 +56,7 @@ export async function POST(req: NextRequest) {
     const supabase = await createSupabaseServerClient();
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) throw examHttpError("Sign in to start Exam Sprint.", 401, "UNAUTHORIZED");
+    await requireExamDeviceSession(req, user.id);
 
     const body = await req.json().catch(() => null) as { setId?: unknown; kind?: unknown } | null;
     const setId = typeof body?.setId === "string" ? body.setId.trim() : "";

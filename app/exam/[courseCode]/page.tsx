@@ -16,6 +16,7 @@ import {
   PlayCircle,
   ShieldCheck,
   Sparkles,
+  Trophy,
 } from "lucide-react";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import {
@@ -25,11 +26,13 @@ import {
   normalizeExamCourseCode,
 } from "@/lib/examSprint/config";
 import { examCourseMetadata, examCourseStructuredData } from "@/lib/examSprint/seo";
+import { getExamWeeklyLeaderboard } from "@/lib/examSprint/leaderboardServer";
 import { getExamCatalog, type ExamRecentAttempt } from "@/lib/examSprint/server";
 import { cn, formatNaira } from "@/lib/utils";
 import StartExamButton from "../_components/StartExamButton";
 import CoverageMeter from "../_components/CoverageMeter";
 import ExamRemainingTime from "../_components/ExamRemainingTime";
+import ExamRouteTop from "../_components/ExamRouteTop";
 
 export const dynamic = "force-dynamic";
 const ATTEMPT_PREVIEW_COUNT = 3;
@@ -117,6 +120,9 @@ export default async function ExamCoursePage({ params }: ExamCoursePageProps) {
   const mockAttempts = progress?.basedOn === "mock" ? progress.attempts : 0;
   const latestAttempts = recentAttempts.slice(0, ATTEMPT_PREVIEW_COUNT);
   const olderAttempts = recentAttempts.slice(ATTEMPT_PREVIEW_COUNT);
+  const leaderboard = sets.length > 0
+    ? await getExamWeeklyLeaderboard({ setIds: sets.map((set) => set.id), userId: user?.id })
+    : null;
   const structuredData = examCourseStructuredData(course);
 
   const primaryAction = () => {
@@ -154,7 +160,7 @@ export default async function ExamCoursePage({ params }: ExamCoursePageProps) {
     if (!diagnostic && !user) {
       return <Link href={`/login?next=${encodeURIComponent(returnPath)}`} className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-xl bg-primary px-4 text-sm font-bold text-primary-foreground no-underline">Sign in to save your free check <ArrowRight className="h-4 w-4" aria-hidden="true" /></Link>;
     }
-    return <Link href={billingHref} className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-xl bg-primary px-4 text-sm font-bold text-primary-foreground no-underline"><LockKeyhole className="h-4 w-4" aria-hidden="true" /> Unlock all mocks · {formatNaira(EXAM_SPRINT_PRICE_NAIRA)}</Link>;
+    return <Link href={billingHref} className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-xl bg-primary px-4 text-sm font-bold text-primary-foreground no-underline"><LockKeyhole className="h-4 w-4" aria-hidden="true" /> Unlock Exam Sprint · {formatNaira(EXAM_SPRINT_PRICE_NAIRA)}</Link>;
   };
 
   const actionLabel = campaignActiveAttempt
@@ -185,12 +191,13 @@ export default async function ExamCoursePage({ params }: ExamCoursePageProps) {
           : !diagnostic
             ? `You get one free ${diagnosticSet?.diagnosticQuestionCount ?? 10}-question diagnostic across this Exam Sprint campaign. Choose this course to use it here; your score and corrections will be saved.`
             : diagnosticScore !== null
-              ? `Unlock ${reviewedQuestionCount} reviewed questions, fresh timed mocks and full corrections for this course.`
+              ? `Unlock every ready course, including ${reviewedQuestionCount} reviewed questions for ${course.code}, fresh timed mocks and full corrections.`
               : "Your free diagnostic has been used. Unlock every ready course, fresh timed mocks and full corrections.";
   const showMockDetails = Boolean(primarySet && !campaignActiveAttempt && !resumableDiagnostic);
 
   return (
     <div className="mx-auto max-w-3xl space-y-5 pb-10">
+      <ExamRouteTop routeKey={course.slug} />
       <script
         type="application/ld+json"
         dangerouslySetInnerHTML={{ __html: JSON.stringify(structuredData).replace(/</g, "\\u003c") }}
@@ -221,7 +228,7 @@ export default async function ExamCoursePage({ params }: ExamCoursePageProps) {
           </div>
           <div className="px-4 py-2.5 sm:py-3">
             <p className="text-sm font-extrabold tabular-nums sm:text-base">{coverage.delivered}/{coverage.bankTotal || 0}</p>
-            <p className="mt-0.5 text-[9px] font-medium leading-3.5 text-muted-foreground">Questions seen</p>
+            <p className="mt-0.5 text-[9px] font-medium leading-3.5 text-muted-foreground">Mock questions seen</p>
           </div>
           <div className="px-4 py-2.5 sm:py-3">
             <p className="text-sm font-extrabold tabular-nums sm:text-base">{progress?.attempts ?? 0}</p>
@@ -252,7 +259,7 @@ export default async function ExamCoursePage({ params }: ExamCoursePageProps) {
 
         {campaignActiveAttempt ? <p className="mt-1.5 inline-flex items-center gap-1.5 text-xs font-bold text-amber-700 dark:text-amber-300"><Clock3 className="h-3.5 w-3.5" aria-hidden="true" /><ExamRemainingTime deadlineAt={campaignActiveAttempt.deadlineAt} /></p> : null}
         <div className={campaignActiveAttempt ? "mt-2.5" : "mt-3"}>{primaryAction()}</div>
-        {!catalog.access.active && diagnostic ? <p className="mt-2.5 text-center text-[10px] font-semibold text-muted-foreground">One payment · 30 days · no recurring charge</p> : null}
+        {!catalog.access.active && diagnostic ? <p className="mt-2.5 text-center text-[10px] font-semibold text-muted-foreground">All ready courses · 30 days · unlimited fresh mocks</p> : null}
       </section>
 
       {recentAttempts.length > 0 ? (
@@ -279,6 +286,23 @@ export default async function ExamCoursePage({ params }: ExamCoursePageProps) {
       ) : null}
 
       {sets.length > 0 ? (
+        <Link href={`/exam/leaderboard/${course.slug}`} className="group flex min-h-[4.25rem] items-center gap-3 rounded-2xl border border-border bg-card px-3.5 py-3 no-underline transition hover:bg-secondary/35 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary">
+          <span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-primary/10 text-primary"><Trophy className="h-4 w-4" aria-hidden="true" /></span>
+          <span className="min-w-0 flex-1">
+            <span className="block text-[13px] font-bold text-foreground">Weekly leaderboard</span>
+            <span className="mt-0.5 block text-[11px] text-muted-foreground">
+              {leaderboard?.available && leaderboard.currentEntry
+                ? `You're #${leaderboard.currentEntry.rank} this week · ${leaderboard.currentEntry.bestPercentage}%`
+                : leaderboard?.available && leaderboard.participantCount > 0
+                  ? `${leaderboard.participantCount} ${leaderboard.participantCount === 1 ? "student" : "students"} ranked this week`
+                  : "Best of your first 3 full mocks each week"}
+            </span>
+          </span>
+          <span className="inline-flex shrink-0 items-center gap-0.5 text-[11px] font-bold text-primary">View <ChevronRight className="h-3.5 w-3.5 transition-transform group-hover:translate-x-0.5" aria-hidden="true" /></span>
+        </Link>
+      ) : null}
+
+      {sets.length > 0 ? (
         <section aria-labelledby="practice-bank-heading">
           <div className="mb-2.5">
             <p className="text-[9px] font-bold uppercase tracking-[0.15em] text-primary">Practice</p>
@@ -298,7 +322,7 @@ export default async function ExamCoursePage({ params }: ExamCoursePageProps) {
                           <h3 className="text-[13px] font-bold">{set.title}</h3>
                           <p className="mt-0.5 text-[11px] text-muted-foreground">{set.coverage.bankTotal} reviewed questions</p>
                         </div>
-                        {selectedNext ? <span className="rounded-full bg-primary/10 px-2 py-1 text-[9px] font-bold uppercase tracking-wide text-primary">Next bank</span> : null}
+                        {selectedNext ? <span className="rounded-full bg-primary/10 px-2 py-1 text-[9px] font-bold uppercase tracking-wide text-primary">Ready</span> : null}
                       </div>
                       <CoverageMeter compact showDescription={false} className="mt-3" label="Questions practised" delivered={set.coverage.delivered} bankTotal={set.coverage.bankTotal} complete={set.coverage.complete} />
                     </div>

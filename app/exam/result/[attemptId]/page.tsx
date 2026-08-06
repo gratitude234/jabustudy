@@ -19,6 +19,7 @@ import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { EXAM_SPRINT_PRICE_NAIRA, findExamCourse } from "@/lib/examSprint/config";
 import { buildExamSprintBillingHref } from "@/lib/examSprint/offer";
 import { getExamResult, getMonthlyExamAccess } from "@/lib/examSprint/server";
+import { getExamPageDeviceSession } from "@/lib/examSprint/deviceSession";
 import { cn, formatDuration, formatNaira } from "@/lib/utils";
 import ExamCorrections from "../../_components/ExamCorrections";
 import CoverageMeter from "../../_components/CoverageMeter";
@@ -80,6 +81,11 @@ export default async function ExamResultPage({ params }: { params: Promise<{ att
   const supabase = await createSupabaseServerClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) redirect(`/login?next=${encodeURIComponent(`/exam/result/${attemptId}`)}`);
+
+  const deviceSession = await getExamPageDeviceSession(user.id);
+  if (deviceSession.enforced && !deviceSession.allowed) {
+    redirect(`/exam/me?returnTo=${encodeURIComponent(`/exam/result/${attemptId}`)}`);
+  }
 
   const [result, access] = await Promise.all([
     getExamResult(user.id, attemptId),

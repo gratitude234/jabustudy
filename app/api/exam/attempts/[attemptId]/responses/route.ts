@@ -8,6 +8,7 @@ import {
   getOwnedExamAttempt,
   parseExamSnapshot,
 } from "@/lib/examSprint/server";
+import { requireExamDeviceSession } from "@/lib/examSprint/deviceSession";
 
 function jsonError(error: unknown) {
   const value = error as { message?: string; status?: number; code?: string };
@@ -25,6 +26,7 @@ export async function PUT(
     const supabase = await createSupabaseServerClient();
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) throw examHttpError("Sign in to continue.", 401, "UNAUTHORIZED");
+    await requireExamDeviceSession(req, user.id);
     const { attemptId } = await params;
     const attempt = await getOwnedExamAttempt(user.id, attemptId);
     if (attempt.status !== "in_progress") throw examHttpError("This attempt has been submitted.", 409, "ATTEMPT_SUBMITTED");

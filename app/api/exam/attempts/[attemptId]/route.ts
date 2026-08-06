@@ -9,6 +9,7 @@ import {
   getOwnedExamAttempt,
   parseExamSnapshot,
 } from "@/lib/examSprint/server";
+import { requireExamDeviceSession } from "@/lib/examSprint/deviceSession";
 
 function jsonError(error: unknown) {
   const value = error as { message?: string; status?: number; code?: string };
@@ -19,13 +20,14 @@ function jsonError(error: unknown) {
 }
 
 export async function GET(
-  _req: NextRequest,
+  req: NextRequest,
   { params }: { params: Promise<{ attemptId: string }> },
 ) {
   try {
     const supabase = await createSupabaseServerClient();
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) throw examHttpError("Sign in to continue.", 401, "UNAUTHORIZED");
+    await requireExamDeviceSession(req, user.id);
     const { attemptId } = await params;
     let attempt = await getOwnedExamAttempt(user.id, attemptId);
     if (attempt.status === "in_progress" && attemptExpired(attempt)) {

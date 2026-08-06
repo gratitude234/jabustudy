@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { AlertTriangle, CheckCircle2, Clock3, FileQuestion, Loader2, Play, ShieldCheck, X } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { isExamDeviceBlockingState, isExamDeviceGuardErrorCode } from "@/lib/examSprint/device";
 
 export default function StartExamButton({
   setId,
@@ -64,6 +65,26 @@ export default function StartExamButton({
     setBusy(true);
     setError(null);
     try {
+      try {
+        const securityResponse = await fetch("/api/exam/session", { cache: "no-store" });
+        const securityData = await securityResponse.json().catch(() => null) as {
+          ok?: boolean;
+          security?: { available?: boolean; state?: unknown };
+        } | null;
+        if (securityResponse.status === 401) {
+          router.push(`/login?next=${encodeURIComponent(pathname)}`);
+          return;
+        }
+        if (securityData?.ok && securityData.security?.available !== false
+          && isExamDeviceBlockingState(securityData.security?.state)) {
+          router.push(`/exam/me?returnTo=${encodeURIComponent(pathname)}`);
+          return;
+        }
+      } catch {
+        // The attempt endpoint repeats the server-side check. Let it decide if
+        // this preflight was interrupted by a transient network problem.
+      }
+
       const response = await fetch("/api/exam/attempts", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -74,6 +95,7 @@ export default function StartExamButton({
         attempt?: { id?: string };
         resumeReason?: "same_set" | "active_session" | null;
         checkoutUrl?: string;
+        code?: string;
         message?: string;
       } | null;
       if (response.status === 401) {
@@ -84,6 +106,10 @@ export default function StartExamButton({
         const checkout = new URL(data.checkoutUrl, window.location.origin);
         checkout.searchParams.set("returnTo", pathname);
         router.push(`${checkout.pathname}${checkout.search}${checkout.hash}`);
+        return;
+      }
+      if (isExamDeviceGuardErrorCode(data?.code)) {
+        router.push(`/exam/me?returnTo=${encodeURIComponent(pathname)}`);
         return;
       }
       if (!response.ok || !data?.ok || !data.attempt?.id) {

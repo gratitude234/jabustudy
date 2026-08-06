@@ -23,6 +23,13 @@ export default function AppChrome({
   const pathname = usePathname();
   const [updateWorker, setUpdateWorker] = useState<ServiceWorker | null>(null);
   const hasDesktopSidebar = pathname?.startsWith("/study") && !pathname.startsWith("/study-admin");
+  // In Exam Sprint-only mode, reaching a normal Study route means the server
+  // has already verified the signed-in user as a Study moderator. Restore the
+  // full Study navigation for that staff-only view.
+  const isModeratorStudyView = examOnlyMode
+    && pathname?.startsWith("/study")
+    && !pathname.startsWith("/study-admin")
+    && !pathname.startsWith("/study/billing");
 
   useEffect(() => {
     const handleUpdate = (e: Event) => {
@@ -36,7 +43,7 @@ export default function AppChrome({
 
   if (pathname?.startsWith("/study-admin")) return <>{children}</>;
   if (pathname?.startsWith("/exam")) return <>{children}</>;
-  if (examOnlyMode) {
+  if (examOnlyMode && !isModeratorStudyView) {
     if (pathname?.startsWith("/study/billing")) {
       return <main className={[APP_CONTAINER, "py-6 md:py-8"].join(" ")}>{children}</main>;
     }
