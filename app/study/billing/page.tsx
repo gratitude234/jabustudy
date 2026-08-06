@@ -23,7 +23,7 @@ import {
 import StudyTabs from "../_components/StudyTabs";
 import { sanitizeBillingReturnPath } from "@/lib/billingReturnPath";
 import { BILLING_RETRYABLE_STATUSES, PAYSTACK_ACTIVE_STATUSES, selectBillingVisitOrder } from "@/lib/billingWorkflow";
-import { EXAM_MOCK_QUESTION_COUNT, EXAM_SPRINT_PRICE_NAIRA, findExamCourse } from "@/lib/examSprint/config";
+import { EXAM_MOCK_QUESTION_COUNT, findExamCourse } from "@/lib/examSprint/config";
 import {
   examDailyEquivalent,
   readExamCheckoutContext,
@@ -98,6 +98,14 @@ type BillingSnapshot = {
     readyCourseCount: number;
     reviewedQuestionCount: number;
     accessUntilIfPurchased: string;
+    pricing: {
+      currentPriceNaira: number;
+      regularPriceNaira: number;
+      promoPriceNaira: number;
+      promoStartsAt: string;
+      promoEndsAt: string;
+      isPromo: boolean;
+    };
   } | null;
   orders: BillingOrder[];
   historyNextCursor: string | null;
@@ -346,12 +354,14 @@ export default function StudyBillingPage() {
       const contextualReturnPath = callbackOrder?.returnPath || target?.returnPath || query.get("returnTo") || "";
       const isExamOffer = requestedOffer === "exam-sprint" || contextualReturnPath.startsWith("/exam");
       if (!requestedOffer && contextualReturnPath.startsWith("/exam")) setOffer("exam-sprint");
+      const advertisedExamPrice = data.examOffer?.pricing.currentPriceNaira;
       if (
         isExamOffer
         && target
         && target.status !== "approved"
         && target.planKey === "plus_monthly"
-        && target.amountNaira !== EXAM_SPRINT_PRICE_NAIRA
+        && typeof advertisedExamPrice === "number"
+        && target.amountNaira > advertisedExamPrice
       ) {
         setCheckoutOrderId(null);
         return;
@@ -374,9 +384,15 @@ export default function StudyBillingPage() {
   }, []);
 
   const plusPlans = useMemo(() => snapshot?.plans.filter((plan) => plan.productType === "plus") ?? [], [snapshot]);
+  const examOfferPrice = snapshot?.examOffer?.pricing.currentPriceNaira ?? null;
   const visiblePlusPlans = useMemo(
-    () => offer === "exam-sprint" ? plusPlans.filter((plan) => plan.key === "plus_monthly") : plusPlans,
-    [offer, plusPlans],
+    () => {
+      if (offer !== "exam-sprint") return plusPlans;
+      return plusPlans
+        .filter((plan) => plan.key === "plus_monthly")
+        .map((plan) => examOfferPrice === null ? plan : { ...plan, amountNaira: examOfferPrice });
+    },
+    [examOfferPrice, offer, plusPlans],
   );
   const creditPlans = useMemo(() => snapshot?.plans.filter((plan) => plan.productType === "credits") ?? [], [snapshot]);
   const checkoutOrder = snapshot?.orders.find((order) => order.id === checkoutOrderId) ?? null;
@@ -386,6 +402,8 @@ export default function StudyBillingPage() {
   const examCourse = offer === "exam-sprint" ? findExamCourse(examCourseSlug) : null;
   const examReturnLabel = examCourse ? examCourse.code : "Exam Sprint";
   const examPlan = visiblePlusPlans.find((plan) => plan.key === "plus_monthly") ?? null;
+  const examPricing = snapshot?.examOffer?.pricing ?? null;
+  const promoEndDate = examPricing?.isPromo ? formatDateOnly(examPricing.promoEndsAt) : null;
   const readyCourseCount = snapshot?.examOffer?.readyCourseCount ?? 0;
   const reviewedQuestionCount = snapshot?.examOffer?.reviewedQuestionCount ?? 0;
   const projectedAccessDate = formatDateOnly(snapshot?.examOffer?.accessUntilIfPurchased);
@@ -402,7 +420,7 @@ export default function StudyBillingPage() {
       ? `Start with ${examContext.focusTopic}, then use each mock to decide what to revise next.`
       : null;
 
-  async function startPayment(planKey: string) {
+  async function startPayment(planKey: string, expectedAmountNaira: number) {
     if (!snapshot) return;
     setBusyPlan(planKey);
     setPageError(null);
@@ -411,7 +429,7 @@ export default function StudyBillingPage() {
       const response = await fetch(endpoint, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ planKey, returnTo: returnPath }),
+        body: JSON.stringify({ planKey, returnTo: returnPath, expectedAmountNaira }),
       });
       const data = await response.json().catch(() => null) as {
         ok?: boolean;
@@ -615,8 +633,13 @@ export default function StudyBillingPage() {
             <p className="inline-flex items-center gap-1.5 text-[10px] font-black uppercase tracking-[0.16em] text-primary"><LockKeyhole className="h-3.5 w-3.5" aria-hidden="true" /> {snapshot?.plus.active ? "Extend your pass" : "30-Day Exam Sprint Pass"}</p>
             <h1 className="mt-1.5 max-w-xl text-2xl font-black leading-tight tracking-tight">{examOfferHeadline}</h1>
             <p className="mt-2 max-w-xl text-sm leading-5.5 text-muted-foreground">
-              One {money(EXAM_SPRINT_PRICE_NAIRA)} payment. No subscription. Access through {projectedAccessDate}.
+              {examPlan ? `One ${money(examPlan.amountNaira)} payment.` : "One payment."} No subscription. Access through {projectedAccessDate}.
             </p>
+            {examPricing?.isPromo && promoEndDate ? (
+              <p className="mt-1.5 text-[11px] font-bold text-primary">
+                Launch price through {promoEndDate}. Regular price {money(examPricing.regularPriceNaira)} afterwards.
+              </p>
+            ) : null}
             {examOfferInsight ? (
               <p className="mt-3 max-w-xl rounded-xl border border-primary/15 bg-primary/[0.06] px-3.5 py-3 text-xs font-semibold leading-5 text-foreground/80">
                 {examOfferInsight}
@@ -732,7 +755,7 @@ export default function StudyBillingPage() {
                   </button>
                 ) : null}
                 {retryableStatuses.includes(checkoutOrder.status) ? (
-                  <button type="button" onClick={() => void startPayment(checkoutOrder.planKey)} disabled={busyPlan !== null} className={cn("inline-flex items-center gap-2 rounded-xl bg-primary px-4 py-2.5 text-sm font-extrabold text-primary-foreground disabled:opacity-60", focusRing)}>
+                  <button type="button" onClick={() => void startPayment(checkoutOrder.planKey, checkoutOrder.amountNaira)} disabled={busyPlan !== null} className={cn("inline-flex items-center gap-2 rounded-xl bg-primary px-4 py-2.5 text-sm font-extrabold text-primary-foreground disabled:opacity-60", focusRing)}>
                     {busyPlan === checkoutOrder.planKey ? <Loader2 className="h-4 w-4 animate-spin" /> : <RotateCcw className="h-4 w-4" />}
                     Try again
                   </button>
@@ -806,12 +829,13 @@ export default function StudyBillingPage() {
                       <>
                         <div className="flex items-start justify-between gap-3">
                           <div className="min-w-0">
-                            <p className="text-[10px] font-black uppercase tracking-[0.16em] text-primary">Your Exam Sprint pass</p>
+                            <p className="text-[10px] font-black uppercase tracking-[0.16em] text-primary">{examPricing?.isPromo ? "Launch price" : "Your Exam Sprint pass"}</p>
                             <h3 className="mt-1 font-extrabold">{examCourse ? `${examCourse.code} + all ready courses` : readyCourseCount > 0 ? readyCourseLabel : "Every ready course"}</h3>
                           </div>
                           <div className="shrink-0 text-right">
                             <p className="text-3xl font-black tracking-tight">{money(plan.amountNaira)}</p>
                             <p className="text-[10px] font-bold text-muted-foreground">{dailyEquivalent ? `about ${money(dailyEquivalent)}/day` : "one payment"}</p>
+                            {examPricing?.isPromo ? <p className="mt-0.5 text-[9px] font-semibold text-muted-foreground">Regular {money(examPricing.regularPriceNaira)} afterwards</p> : null}
                           </div>
                         </div>
                         <div className="mt-3 flex flex-wrap gap-x-3 gap-y-1.5 text-[10px] font-bold text-foreground/70">
@@ -819,7 +843,7 @@ export default function StudyBillingPage() {
                           <span className="inline-flex items-center gap-1"><CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" aria-hidden="true" /> No subscription</span>
                           <span className="inline-flex items-center gap-1"><CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" aria-hidden="true" /> Until {projectedAccessDate}</span>
                         </div>
-                        <button type="button" onClick={() => void startPayment(plan.key)} disabled={busyPlan !== null} className={cn("mt-4 inline-flex min-h-13 items-center justify-center gap-2 rounded-xl bg-primary px-4 text-sm font-extrabold text-primary-foreground disabled:opacity-60", focusRing)}>
+                        <button type="button" onClick={() => void startPayment(plan.key, plan.amountNaira)} disabled={busyPlan !== null} className={cn("mt-4 inline-flex min-h-13 items-center justify-center gap-2 rounded-xl bg-primary px-4 text-sm font-extrabold text-primary-foreground disabled:opacity-60", focusRing)}>
                           {busyPlan === plan.key ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : <ShieldCheck className="h-4 w-4" aria-hidden="true" />}
                           {snapshot.plus.active ? `Extend pass · ${money(plan.amountNaira)}` : `Unlock all mocks · ${money(plan.amountNaira)}`}
                         </button>
@@ -838,7 +862,7 @@ export default function StudyBillingPage() {
                       <>
                         <div className="flex items-start justify-between gap-3"><div><p className="text-[10px] font-black uppercase tracking-[0.16em] text-primary">Plus plan</p><h3 className="mt-1 font-extrabold">{plan.plusDays}-day Plus</h3></div><div className="text-right"><p className="text-xl font-black">{money(plan.amountNaira)}</p></div></div>
                         <ul className="mt-5 space-y-3 text-sm text-muted-foreground"><li className="flex gap-2"><CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-emerald-600" aria-hidden="true" /><span><strong className="text-foreground">Unlimited daily Study practice</strong></span></li><li className="flex gap-2"><CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-emerald-600" aria-hidden="true" /><span><strong className="text-foreground">{plan.credits} AI credits included</strong></span></li></ul>
-                        <button type="button" onClick={() => void startPayment(plan.key)} disabled={busyPlan !== null} className={cn("mt-5 inline-flex min-h-13 items-center justify-center gap-2 rounded-xl px-4 text-sm font-extrabold disabled:opacity-60", recommended ? "bg-primary text-primary-foreground" : "border border-primary text-primary hover:bg-primary/10", focusRing)}>{busyPlan === plan.key ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : null}{snapshot.plus.active ? "Extend Plus" : "Get Plus"} · {money(plan.amountNaira)}</button>
+                        <button type="button" onClick={() => void startPayment(plan.key, plan.amountNaira)} disabled={busyPlan !== null} className={cn("mt-5 inline-flex min-h-13 items-center justify-center gap-2 rounded-xl px-4 text-sm font-extrabold disabled:opacity-60", recommended ? "bg-primary text-primary-foreground" : "border border-primary text-primary hover:bg-primary/10", focusRing)}>{busyPlan === plan.key ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : null}{snapshot.plus.active ? "Extend Plus" : "Get Plus"} · {money(plan.amountNaira)}</button>
                       </>
                     )}
                   </article>
@@ -856,7 +880,7 @@ export default function StudyBillingPage() {
                   <h3 className="font-extrabold">{plan.credits} AI credits</h3>
                   <p className="mt-1 text-xs text-muted-foreground">Up to {plan.credits * 5} AI questions</p>
                   <p className="mt-3 text-lg font-black">{money(plan.amountNaira)}</p>
-                  <button type="button" onClick={() => void startPayment(plan.key)} disabled={busyPlan !== null} className={cn("mt-3 inline-flex items-center justify-center gap-2 rounded-xl bg-primary px-3 py-2 text-sm font-extrabold text-primary-foreground disabled:opacity-60", focusRing)}>{busyPlan === plan.key ? <Loader2 className="h-4 w-4 animate-spin" /> : null}Buy top-up</button>
+                  <button type="button" onClick={() => void startPayment(plan.key, plan.amountNaira)} disabled={busyPlan !== null} className={cn("mt-3 inline-flex items-center justify-center gap-2 rounded-xl bg-primary px-3 py-2 text-sm font-extrabold text-primary-foreground disabled:opacity-60", focusRing)}>{busyPlan === plan.key ? <Loader2 className="h-4 w-4 animate-spin" /> : null}Buy top-up</button>
                 </article>
               ))}
             </div>
@@ -877,7 +901,7 @@ export default function StudyBillingPage() {
                   <p className="mt-1 break-all text-xs text-muted-foreground">Order {order.reference}{order.paystackReference ? ` · Transaction ${order.paystackReference}` : ""}</p>
                 </div>
                 <div className="flex items-center gap-3">
-                  {retryableStatuses.includes(order.status) ? <button type="button" onClick={() => void startPayment(order.planKey)} disabled={busyPlan !== null} className={cn("inline-flex items-center gap-1 text-xs font-bold text-primary hover:underline disabled:opacity-60", focusRing)}><RotateCcw className="h-3.5 w-3.5" />Retry</button> : null}
+                  {retryableStatuses.includes(order.status) ? <button type="button" onClick={() => void startPayment(order.planKey, order.amountNaira)} disabled={busyPlan !== null} className={cn("inline-flex items-center gap-1 text-xs font-bold text-primary hover:underline disabled:opacity-60", focusRing)}><RotateCcw className="h-3.5 w-3.5" />Retry</button> : null}
                   <Link href={`/study/billing/receipt/${order.id}`} className={cn("text-xs font-bold text-primary no-underline hover:underline", focusRing)}>Details</Link>
                 </div>
               </article>

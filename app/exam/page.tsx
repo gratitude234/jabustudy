@@ -6,8 +6,8 @@ import {
   EXAM_BANK_MINIMUM,
   EXAM_DIAGNOSTIC_QUESTION_COUNT,
   EXAM_MOCK_QUESTION_COUNT,
-  EXAM_SPRINT_PRICE_NAIRA,
   examCourseDateLabel,
+  getExamSprintPricing,
 } from "@/lib/examSprint/config";
 import { dedupeExamCourses } from "@/lib/examSprint/catalog";
 import { getExamCatalog } from "@/lib/examSprint/server";
@@ -47,6 +47,14 @@ export default async function ExamSprintPage() {
   const activeAttempt = catalog.activeAttempts[0] ?? null;
   const activeDiagnostic = catalog.diagnostic?.resumable ? catalog.diagnostic : null;
   const activeSession = activeAttempt ?? activeDiagnostic;
+  const pricing = getExamSprintPricing();
+  const billingHref = "/study/billing?offer=exam-sprint&returnTo=/exam";
+  const passHref = user ? billingHref : `/login?next=${encodeURIComponent(billingHref)}`;
+  const promoEndLabel = new Intl.DateTimeFormat("en-NG", {
+    day: "numeric",
+    month: "short",
+    timeZone: "Africa/Lagos",
+  }).format(new Date(pricing.promoEndsAt));
   const structuredData = examSprintStructuredData(
     uniqueCourses.filter((course) => course.sets.length > 0),
   );
@@ -74,19 +82,13 @@ export default async function ExamSprintPage() {
         <div className="pointer-events-none absolute -right-16 -top-20 -z-10 h-52 w-52 rounded-full bg-primary/10 blur-2xl" />
         <div className="flex flex-wrap items-center justify-between gap-2">
           <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-primary">Supplementary CBT · 2026</p>
-          {user ? (
-            catalog.access.active ? (
-              <span className="inline-flex min-h-7 items-center gap-1.5 text-[10px] font-bold text-emerald-700 dark:text-emerald-300">
-                <CheckCircle2 className="h-3.5 w-3.5" aria-hidden="true" /> Access active
-              </span>
-            ) : (
-              <Link href="/study/billing?offer=exam-sprint&returnTo=/exam" className="inline-flex min-h-8 items-center rounded-lg bg-primary/10 px-2.5 text-[10px] font-bold text-primary no-underline">
-                30-day pass · {formatNaira(EXAM_SPRINT_PRICE_NAIRA)}
-              </Link>
-            )
+          {user && catalog.access.active ? (
+            <span className="inline-flex min-h-7 items-center gap-1.5 text-[10px] font-bold text-emerald-700 dark:text-emerald-300">
+              <CheckCircle2 className="h-3.5 w-3.5" aria-hidden="true" /> Access active
+            </span>
           ) : (
-            <Link href="/login?next=%2Fexam" className="inline-flex min-h-8 items-center rounded-lg bg-primary/10 px-2.5 text-[10px] font-bold text-primary no-underline">
-              Sign in
+            <Link href={passHref} className="inline-flex min-h-8 items-center rounded-lg bg-primary/10 px-2.5 text-[10px] font-bold text-primary no-underline">
+              {pricing.isPromo ? `Launch · ${formatNaira(pricing.currentPriceNaira)} until ${promoEndLabel}` : `30-day pass · ${formatNaira(pricing.currentPriceNaira)}`}
             </Link>
           )}
         </div>

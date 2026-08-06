@@ -4,7 +4,7 @@ import {
   EXAM_COURSES,
   EXAM_MOCK_DURATION_MINUTES,
   EXAM_MOCK_QUESTION_COUNT,
-  EXAM_SPRINT_PRICE_NAIRA,
+  getExamSprintPricing,
   normalizeExamCourseCode,
   type ExamCourse,
 } from "./config";
@@ -83,6 +83,7 @@ export function examCourseMetadata(course: ExamCourse): Metadata {
 
 export function examSprintStructuredData(readyCourses: readonly ExamCourse[]) {
   const url = publicUrl("/exam");
+  const pricing = getExamSprintPricing();
   return {
     "@context": "https://schema.org",
     "@type": "WebApplication",
@@ -99,10 +100,11 @@ export function examSprintStructuredData(readyCourses: readonly ExamCourse[]) {
     },
     offers: {
       "@type": "Offer",
-      price: String(EXAM_SPRINT_PRICE_NAIRA),
+      price: String(pricing.currentPriceNaira),
       priceCurrency: "NGN",
       description: "30-day Exam Sprint pass",
       url,
+      ...(pricing.isPromo ? { priceValidUntil: pricing.promoEndsAt.slice(0, 10) } : {}),
     },
     featureList: [
       `${EXAM_MOCK_QUESTION_COUNT}-question timed CBT mocks`,

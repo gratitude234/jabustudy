@@ -9,6 +9,7 @@ import {
   sanitizeBillingReturnPath,
 } from "@/lib/billingReturnPath";
 import { canReusePaystackCheckout } from "@/lib/billingWorkflow";
+import { getExamSprintPricing } from "@/lib/examSprint/config";
 import { projectedExamAccessUntil } from "@/lib/examSprint/offer";
 import { getExamOfferSummary } from "@/lib/examSprint/server";
 import { verifyPaystackTransaction } from "@/lib/paystack";
@@ -72,7 +73,7 @@ export const BILLING_PLANS: Record<BillingPlanKey, BillingPlan> = {
     key: "plus_monthly",
     productType: "plus",
     label: "JabuStudy Plus Monthly",
-    amountNaira: 1000,
+    amountNaira: 1300,
     credits: 100,
     plusDays: 30,
   },
@@ -159,6 +160,33 @@ function billingReturnPathForCurrentMode(value: unknown) {
   return path === EXAM_SPRINT_HOME || path.startsWith(`${EXAM_SPRINT_HOME}/`)
     ? path
     : EXAM_SPRINT_HOME;
+}
+
+function planForCheckout(plan: BillingPlan, returnPath: string): BillingPlan {
+  const isExamSprintCheckout = plan.key === EXAM_SPRINT_PLAN_KEY
+    && (returnPath === EXAM_SPRINT_HOME || returnPath.startsWith(`${EXAM_SPRINT_HOME}/`));
+  if (!isExamSprintCheckout) return plan;
+  return { ...plan, amountNaira: getExamSprintPricing().currentPriceNaira };
+}
+
+function assertPromisedCheckoutPrice(plan: BillingPlan, returnPath: string, expectedAmountNaira?: unknown) {
+  const expected = Number(expectedAmountNaira);
+  const isExamSprintCheckout = plan.key === EXAM_SPRINT_PLAN_KEY
+    && (returnPath === EXAM_SPRINT_HOME || returnPath.startsWith(`${EXAM_SPRINT_HOME}/`));
+  if (isExamSprintCheckout && !Number.isFinite(expected)) {
+    throw httpError(
+      "The Exam Sprint offer was updated. Refresh this page before opening checkout.",
+      409,
+      "CHECKOUT_PRICE_REFRESH_REQUIRED"
+    );
+  }
+  if (Number.isFinite(expected) && expected !== plan.amountNaira) {
+    throw httpError(
+      "The price changed while this page was open. Refresh to see the current Exam Sprint price before paying.",
+      409,
+      "CHECKOUT_PRICE_CHANGED"
+    );
+  }
 }
 
 export function getBillingPlan(planKey: unknown): BillingPlan {
@@ -374,12 +402,14 @@ export async function recordFreeAiTrialGeneration(userId: string, metadata: Reco
   };
 }
 
-export async function createBillingOrder(userId: string, planKey: unknown, returnPath?: unknown) {
-  const plan = getBillingPlan(planKey);
-  assertPlanAvailable(plan);
+export async function createBillingOrder(userId: string, planKey: unknown, returnPath?: unknown, expectedAmountNaira?: unknown) {
+  const basePlan = getBillingPlan(planKey);
+  assertPlanAvailable(basePlan);
+  const safeReturnPath = billingReturnPathForCurrentMode(returnPath);
+  const plan = planForCheckout(basePlan, safeReturnPath);
+  assertPromisedCheckoutPrice(plan, safeReturnPath, expectedAmountNaira);
   const reference = await uniqueReference();
   const now = new Date().toISOString();
-  const safeReturnPath = billingReturnPathForCurrentMode(returnPath);
   const insert = {
     user_id: userId,
     product_type: plan.productType,
@@ -652,6 +682,8 @@ export async function getBillingSnapshot(userId: string, options?: { includeExam
     ? [...recentRows, activePaystack].sort((a, b) => b.created_at.localeCompare(a.created_at))
     : recentRows;
 
+  const examPricing = examOffer ? getExamSprintPricing() : null;
+
   return {
     plus,
     credits: { balance: creditBalance },
@@ -663,6 +695,7 @@ export async function getBillingSnapshot(userId: string, options?: { includeExam
     plans: Object.values(BILLING_PLANS),
     examOffer: examOffer ? {
       ...examOffer,
+      pricing: examPricing,
       accessUntilIfPurchased: projectedExamAccessUntil({
         activeUntil: plus.activeUntil,
         days: BILLING_PLANS.plus_monthly.plusDays,
@@ -772,17 +805,19 @@ async function getActivePaystackOrder(userId: string) {
   return data as BillingOrderRow | null;
 }
 
-export async function createPaystackBillingOrder(userId: string, planKey: unknown, returnPath?: unknown) {
-  const plan = getBillingPlan(planKey);
-  assertPlanAvailable(plan);
+export async function createPaystackBillingOrder(userId: string, planKey: unknown, returnPath?: unknown, expectedAmountNaira?: unknown) {
+  const basePlan = getBillingPlan(planKey);
+  assertPlanAvailable(basePlan);
   const safeReturnPath = billingReturnPathForCurrentMode(returnPath);
+  const plan = planForCheckout(basePlan, safeReturnPath);
+  assertPromisedCheckoutPrice(plan, safeReturnPath, expectedAmountNaira);
   const now = Date.now();
   const existing = await getActivePaystackOrder(userId);
 
   if (existing) {
     const ageMs = now - new Date(existing.created_at).getTime();
-    const amountMatchesCurrentPlan = Number(existing.amount_naira) === plan.amountNaira;
-    if (amountMatchesCurrentPlan && canReusePaystackCheckout({
+    const existingAmountIsSafe = Number(existing.amount_naira) <= plan.amountNaira;
+    if (existingAmountIsSafe && canReusePaystackCheckout({
       paymentMethod: existing.payment_method,
       status: existing.status,
       planKey: existing.plan_key,
@@ -792,7 +827,7 @@ export async function createPaystackBillingOrder(userId: string, planKey: unknow
       return { order: normalizeOrder(existing), reused: true, authorizationUrl: existing.paystack_authorization_url };
     }
 
-    if (amountMatchesCurrentPlan && existing.plan_key === plan.key && existing.status === "initializing" && ageMs < 120_000) {
+    if (existingAmountIsSafe && existing.plan_key === plan.key && existing.status === "initializing" && ageMs < 120_000) {
       throw httpError("Your secure checkout is still opening. Try again in a moment.", 409, "PAYMENT_INITIALIZING");
     }
 
@@ -844,7 +879,7 @@ export async function createPaystackBillingOrder(userId: string, planKey: unknow
       const concurrent = await getActivePaystackOrder(userId);
       if (
         concurrent?.plan_key === plan.key
-        && Number(concurrent.amount_naira) === plan.amountNaira
+        && Number(concurrent.amount_naira) <= plan.amountNaira
         && concurrent.paystack_authorization_url
       ) {
         return {
@@ -922,8 +957,8 @@ export async function resumePaystackBillingOrder(orderId: string, userId: string
       "SYSTEM_MODE_RESTRICTED"
     );
   }
-  const currentPlan = getBillingPlan(row.plan_key);
-  if (Number(row.amount_naira) !== currentPlan.amountNaira) {
+  const currentPlan = planForCheckout(getBillingPlan(row.plan_key), restoreBillingReturnPath(row.return_path));
+  if (Number(row.amount_naira) > currentPlan.amountNaira) {
     throw httpError(
       "The price of this pass has changed. Start a new checkout to use the current price.",
       409,

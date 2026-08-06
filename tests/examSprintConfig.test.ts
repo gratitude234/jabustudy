@@ -1,9 +1,10 @@
 import { describe, expect, it } from "vitest";
 import {
   EXAM_COURSES,
-  EXAM_SPRINT_PRICE_NAIRA,
+  EXAM_SPRINT_REGULAR_PRICE_NAIRA,
   examCourseDateLabel,
   findExamCourse,
+  getExamSprintPricing,
   normalizeExamCourseCode,
 } from "../lib/examSprint/config";
 
@@ -44,9 +45,19 @@ describe("Exam Sprint course catalog", () => {
     expect(examCourseDateLabel(findExamCourse("GNS 121")!)).toMatch(/WAT$/);
   });
 
-  it("uses the confirmed summer timetable dates and current pass price", () => {
+  it("uses the confirmed summer timetable dates", () => {
     expect(findExamCourse("COS 101")?.examAt).toBe("2026-08-10T11:30:00+01:00");
     expect(findExamCourse("CHM 101")?.examAt).toBe("2026-08-13T08:00:00+01:00");
-    expect(EXAM_SPRINT_PRICE_NAIRA).toBe(1_000);
+  });
+
+  it("runs the launch price through 13 August then returns to the regular price", () => {
+    const duringPromo = getExamSprintPricing(new Date("2026-08-10T12:00:00+01:00"));
+    const afterPromo = getExamSprintPricing(new Date("2026-08-14T00:00:00+01:00"));
+
+    expect(duringPromo.isPromo).toBe(true);
+    expect(duringPromo.currentPriceNaira).toBe(1_000);
+    expect(afterPromo.isPromo).toBe(false);
+    expect(afterPromo.currentPriceNaira).toBe(EXAM_SPRINT_REGULAR_PRICE_NAIRA);
+    expect(EXAM_SPRINT_REGULAR_PRICE_NAIRA).toBe(1_300);
   });
 });

@@ -17,7 +17,6 @@ import {
 import { supabase } from "@/lib/supabase";
 import type { ExamDeviceSecurityOverview } from "@/lib/examSprint/device";
 import { formatNaira } from "@/lib/utils";
-import { EXAM_SPRINT_PRICE_NAIRA } from "@/lib/examSprint/config";
 
 type SecurityPayload = {
   ok?: boolean;
@@ -57,12 +56,14 @@ export default function ExamMeClient({
   email,
   passActive,
   passActiveUntil,
+  passPriceNaira,
   returnTo,
 }: {
   name: string;
   email: string;
   passActive: boolean;
   passActiveUntil: string | null;
+  passPriceNaira: number;
   returnTo: string;
 }) {
   const [security, setSecurity] = useState<ExamDeviceSecurityOverview | null>(null);
@@ -191,7 +192,7 @@ export default function ExamMeClient({
             </p>
             {!passActive ? (
               <Link href="/study/billing?offer=exam-sprint&returnTo=/exam/me" className="mt-2 inline-flex min-h-8 items-center gap-1 text-xs font-bold text-primary no-underline hover:underline">
-                Unlock 30 days · {formatNaira(EXAM_SPRINT_PRICE_NAIRA)} <ChevronRight className="h-3.5 w-3.5" aria-hidden="true" />
+                Unlock 30 days · {formatNaira(passPriceNaira)} <ChevronRight className="h-3.5 w-3.5" aria-hidden="true" />
               </Link>
             ) : null}
           </div>

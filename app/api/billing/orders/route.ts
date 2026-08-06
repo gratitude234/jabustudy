@@ -41,8 +41,8 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const body = await req.json().catch(() => null) as { planKey?: unknown; returnTo?: unknown } | null;
-    const order = await createBillingOrder(user.id, body?.planKey, body?.returnTo);
+    const body = await req.json().catch(() => null) as { planKey?: unknown; returnTo?: unknown; expectedAmountNaira?: unknown } | null;
+    const order = await createBillingOrder(user.id, body?.planKey, body?.returnTo, body?.expectedAmountNaira);
     return NextResponse.json({ ok: true, order, bank: getBankDetails() });
   } catch (error) {
     return errorResponse(error);

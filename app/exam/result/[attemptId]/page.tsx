@@ -16,7 +16,7 @@ import {
   TrendingUp,
 } from "lucide-react";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
-import { EXAM_SPRINT_PRICE_NAIRA, findExamCourse } from "@/lib/examSprint/config";
+import { findExamCourse, getExamSprintPricing } from "@/lib/examSprint/config";
 import { buildExamSprintBillingHref } from "@/lib/examSprint/offer";
 import { getExamResult, getMonthlyExamAccess } from "@/lib/examSprint/server";
 import { getExamPageDeviceSession } from "@/lib/examSprint/deviceSession";
@@ -91,6 +91,7 @@ export default async function ExamResultPage({ params }: { params: Promise<{ att
     getExamResult(user.id, attemptId),
     getMonthlyExamAccess(user.id),
   ]);
+  const pricing = getExamSprintPricing();
   const course = findExamCourse(result.courseCode);
   const status = readiness(result.percentage);
   const skipped = result.total - result.answered;
@@ -242,7 +243,7 @@ export default async function ExamResultPage({ params }: { params: Promise<{ att
           </div>
 
           <Link href={billingHref} className="mt-3 inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-xl bg-primary px-4 text-sm font-black text-primary-foreground no-underline shadow-sm">
-            <LockKeyhole className="h-4 w-4" aria-hidden="true" /> Unlock all mocks · {formatNaira(EXAM_SPRINT_PRICE_NAIRA)}
+            <LockKeyhole className="h-4 w-4" aria-hidden="true" /> Unlock all mocks · {formatNaira(pricing.currentPriceNaira)}
           </Link>
           <p className="mt-2 text-center text-[10px] font-medium text-muted-foreground">Your free corrections remain available below.</p>
         </section>

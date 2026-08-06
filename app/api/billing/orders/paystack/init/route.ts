@@ -17,7 +17,7 @@ export async function POST(req: NextRequest) {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return jsonError("Unauthorized.", 401, "UNAUTHORIZED");
 
-  const body = await req.json().catch(() => null) as { planKey?: unknown; returnTo?: unknown } | null;
+  const body = await req.json().catch(() => null) as { planKey?: unknown; returnTo?: unknown; expectedAmountNaira?: unknown } | null;
   const planKey = body?.planKey;
 
   const secretKey = process.env.PAYSTACK_SECRET_KEY;
@@ -33,7 +33,7 @@ export async function POST(req: NextRequest) {
 
   let checkout: Awaited<ReturnType<typeof createPaystackBillingOrder>>;
   try {
-    checkout = await createPaystackBillingOrder(user.id, planKey, body?.returnTo);
+    checkout = await createPaystackBillingOrder(user.id, planKey, body?.returnTo, body?.expectedAmountNaira);
   } catch (err: unknown) {
     const e = err as { status?: number; code?: string; message?: string };
     return jsonError(e.message || "Could not create order.", e.status || 500, e.code || "ORDER_CREATE_FAILED");

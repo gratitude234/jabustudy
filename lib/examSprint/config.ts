@@ -1,6 +1,9 @@
 export const EXAM_CAMPAIGN_KEY = "supplementary-2026";
 export const EXAM_SPRINT_NAME = "Exam Sprint";
-export const EXAM_SPRINT_PRICE_NAIRA = 1_000;
+export const EXAM_SPRINT_REGULAR_PRICE_NAIRA = 1_300;
+export const EXAM_SPRINT_PROMO_PRICE_NAIRA = 1_000;
+export const EXAM_SPRINT_PROMO_START_AT = "2026-08-06T00:00:00+01:00";
+export const EXAM_SPRINT_PROMO_END_AT = "2026-08-13T23:59:59+01:00";
 export const EXAM_BANK_MINIMUM = 60;
 export const EXAM_MOCK_QUESTION_COUNT = 40;
 export const EXAM_MOCK_DURATION_MINUTES = 40;
@@ -14,6 +17,35 @@ export type ExamCourse = {
   examAt: string | null;
   priority: boolean;
 };
+
+export type ExamSprintPricing = {
+  currentPriceNaira: number;
+  regularPriceNaira: number;
+  promoPriceNaira: number;
+  promoStartsAt: string;
+  promoEndsAt: string;
+  isPromo: boolean;
+};
+
+/**
+ * One source of truth for the Exam Sprint launch price. The timestamps include
+ * the WAT offset so the offer switches without relying on the server timezone.
+ */
+export function getExamSprintPricing(at: Date = new Date()): ExamSprintPricing {
+  const now = at.getTime();
+  const promoStart = new Date(EXAM_SPRINT_PROMO_START_AT).getTime();
+  const promoEnd = new Date(EXAM_SPRINT_PROMO_END_AT).getTime();
+  const isPromo = Number.isFinite(now) && now >= promoStart && now <= promoEnd;
+
+  return {
+    currentPriceNaira: isPromo ? EXAM_SPRINT_PROMO_PRICE_NAIRA : EXAM_SPRINT_REGULAR_PRICE_NAIRA,
+    regularPriceNaira: EXAM_SPRINT_REGULAR_PRICE_NAIRA,
+    promoPriceNaira: EXAM_SPRINT_PROMO_PRICE_NAIRA,
+    promoStartsAt: EXAM_SPRINT_PROMO_START_AT,
+    promoEndsAt: EXAM_SPRINT_PROMO_END_AT,
+    isPromo,
+  };
+}
 
 export const EXAM_COURSES: readonly ExamCourse[] = [
   { code: "GNS 121", slug: "gns-121", title: "Communication in English II", examAt: "2026-08-17T12:00:00+01:00", priority: true },

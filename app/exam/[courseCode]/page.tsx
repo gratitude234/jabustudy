@@ -20,9 +20,9 @@ import {
 } from "lucide-react";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import {
-  EXAM_SPRINT_PRICE_NAIRA,
   examCourseDateLabel,
   findExamCourse,
+  getExamSprintPricing,
   normalizeExamCourseCode,
 } from "@/lib/examSprint/config";
 import { examCourseMetadata, examCourseStructuredData } from "@/lib/examSprint/seo";
@@ -124,6 +124,7 @@ export default async function ExamCoursePage({ params }: ExamCoursePageProps) {
     ? await getExamWeeklyLeaderboard({ setIds: sets.map((set) => set.id), userId: user?.id })
     : null;
   const structuredData = examCourseStructuredData(course);
+  const pricing = getExamSprintPricing();
 
   const primaryAction = () => {
     if (campaignActiveAttempt) {
@@ -160,7 +161,7 @@ export default async function ExamCoursePage({ params }: ExamCoursePageProps) {
     if (!diagnostic && !user) {
       return <Link href={`/login?next=${encodeURIComponent(returnPath)}`} className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-xl bg-primary px-4 text-sm font-bold text-primary-foreground no-underline">Sign in to save your free check <ArrowRight className="h-4 w-4" aria-hidden="true" /></Link>;
     }
-    return <Link href={billingHref} className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-xl bg-primary px-4 text-sm font-bold text-primary-foreground no-underline"><LockKeyhole className="h-4 w-4" aria-hidden="true" /> Unlock Exam Sprint · {formatNaira(EXAM_SPRINT_PRICE_NAIRA)}</Link>;
+    return <Link href={billingHref} className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-xl bg-primary px-4 text-sm font-bold text-primary-foreground no-underline"><LockKeyhole className="h-4 w-4" aria-hidden="true" /> Unlock Exam Sprint · {formatNaira(pricing.currentPriceNaira)}</Link>;
   };
 
   const actionLabel = campaignActiveAttempt
