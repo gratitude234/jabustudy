@@ -1,5 +1,6 @@
 import { ArrowUpRight, MessageCircle } from "lucide-react";
 
+import { getExamSprintWhatsAppDestinationType } from "@/lib/examSprint/community";
 import { cn } from "@/lib/utils";
 
 export default function ExamCommunityCard({
@@ -12,6 +13,8 @@ export default function ExamCommunityCard({
   className?: string;
 }) {
   if (!href) return null;
+  const destinationType = getExamSprintWhatsAppDestinationType(href);
+  const isChannel = destinationType === "channel";
 
   return (
     <section
@@ -20,7 +23,7 @@ export default function ExamCommunityCard({
         compact ? "p-3.5" : "p-4 sm:p-5",
         className,
       )}
-      aria-label="Exam Sprint WhatsApp community"
+      aria-label={isChannel ? "Exam Sprint WhatsApp channel" : "Exam Sprint WhatsApp community"}
     >
       <div className="flex items-start gap-3">
         <span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-emerald-100 text-emerald-700 dark:bg-emerald-950/45 dark:text-emerald-300">
@@ -28,13 +31,19 @@ export default function ExamCommunityCard({
         </span>
         <div className="min-w-0 flex-1">
           <p className="text-[9px] font-black uppercase tracking-[0.15em] text-emerald-700 dark:text-emerald-300">
-            Gratitude Builds community
+            {isChannel ? "WhatsApp updates" : "Gratitude Builds community"}
           </p>
           <h2 className={cn("mt-0.5 font-extrabold leading-snug", compact ? "text-[13px]" : "text-sm")}>
-            {compact ? "Exam Sprint updates on WhatsApp" : "Don’t miss new Exam Sprint updates"}
+            {compact
+              ? "Exam Sprint updates on WhatsApp"
+              : isChannel
+                ? "Never miss an Exam Sprint update"
+                : "Don’t miss new Exam Sprint updates"}
           </h2>
           <p className={cn("mt-1 text-muted-foreground", compact ? "text-[11px] leading-4" : "text-xs leading-5")}>
-            New courses, question banks and important Exam Sprint updates — without interrupting your practice.
+            {isChannel
+              ? "New question banks, course availability, exam dates and important announcements from Gratitude Builds."
+              : "New courses, question banks and important Exam Sprint updates — without interrupting your practice."}
           </p>
         </div>
       </div>
@@ -49,7 +58,7 @@ export default function ExamCommunityCard({
             !compact && "min-h-10 px-3.5 text-xs",
           )}
         >
-          Join WhatsApp community <ArrowUpRight className="h-3.5 w-3.5" aria-hidden="true" />
+          {isChannel ? "Follow WhatsApp channel" : "Join WhatsApp community"} <ArrowUpRight className="h-3.5 w-3.5" aria-hidden="true" />
         </a>
         {!compact ? <span className="hidden text-[10px] text-muted-foreground sm:inline">Powered by Gratitude Builds</span> : null}
       </div>

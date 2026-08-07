@@ -146,6 +146,8 @@ export default async function ExamSprintPage() {
         materialRequestPhone={materialRequestPhone}
       />
 
+      <ExamCommunityCard href={communityHref} />
+
       <details className="group overflow-hidden rounded-2xl border border-border bg-card">
         <summary className="flex min-h-14 cursor-pointer list-none items-center gap-3 px-3.5 py-3 marker:hidden sm:px-4">
           <span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-primary/10 text-primary"><ShieldCheck className="h-4 w-4" aria-hidden="true" /></span>
@@ -165,8 +167,6 @@ export default async function ExamSprintPage() {
           ))}
         </div>
       </details>
-
-      <ExamCommunityCard href={communityHref} />
 
       <p className="border-t border-border px-1 pt-3.5 text-[10px] leading-4.5 text-muted-foreground">
         Exam Sprint is an independent revision tool. It does not provide leaked questions, official predictions or guaranteed examination results.
