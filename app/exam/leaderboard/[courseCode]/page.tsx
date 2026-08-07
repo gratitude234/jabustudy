@@ -70,7 +70,7 @@ export default async function ExamLeaderboardPage({ params }: LeaderboardPagePro
         <div className="p-4 sm:p-5">
           <p className="text-[9px] font-bold uppercase tracking-[0.16em] text-primary">This week · {leaderboard.weekLabel}</p>
           <h1 id="leaderboard-heading" className="mt-1 text-[1.4rem] font-extrabold tracking-[-0.025em] sm:text-3xl">{course.code} leaderboard</h1>
-          <p className="mt-1.5 max-w-xl text-xs leading-5 text-muted-foreground">Your best score from your first 3 full mocks this week counts. No speed bonus.</p>
+          <p className="mt-1.5 max-w-xl text-xs leading-5 text-muted-foreground">Your best submitted score from your first 3 mock slots this week counts. No speed bonus.</p>
         </div>
         <div className="grid grid-cols-2 divide-x divide-primary/10 border-t border-primary/10 bg-card/30">
           <div className="px-4 py-2.5">
@@ -79,7 +79,7 @@ export default async function ExamLeaderboardPage({ params }: LeaderboardPagePro
           </div>
           <div className="px-4 py-2.5">
             <p className="text-sm font-extrabold tabular-nums">3</p>
-            <p className="mt-0.5 text-[9px] font-medium text-muted-foreground">Attempts that count</p>
+            <p className="mt-0.5 text-[9px] font-medium text-muted-foreground">Weekly mock slots</p>
           </div>
         </div>
       </section>
@@ -96,7 +96,7 @@ export default async function ExamLeaderboardPage({ params }: LeaderboardPagePro
           </div>
           <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1.5 border-t border-primary/10 pt-2.5 text-[11px] font-medium text-muted-foreground">
             <span>{leaderboard.currentEntry.coverage} unique questions covered</span>
-            <span>{leaderboard.currentEntry.qualifyingAttempts}/3 attempts counted</span>
+            <span>{leaderboard.currentEntry.qualifyingAttempts}/3 leaderboard slots used</span>
           </div>
         </section>
       ) : leaderboard.available && user ? (
@@ -166,7 +166,8 @@ export default async function ExamLeaderboardPage({ params }: LeaderboardPagePro
           <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground transition-transform group-open:rotate-90" aria-hidden="true" />
         </summary>
         <div className="space-y-2 border-t border-border px-4 py-3 text-xs leading-5 text-muted-foreground">
-          <p><strong className="font-bold text-foreground">First 3 only.</strong> Your best score from your first three full mocks each week is used.</p>
+          <p><strong className="font-bold text-foreground">First 3 slots only.</strong> Your best submitted score from your first three full-mock slots each week is used.</p>
+          <p><strong className="font-bold text-foreground">Mistakes stay forgiving.</strong> An untouched mock cancelled inside the short mistake window uses no slot. Ending a mock later uses a slot, but never creates a 0% score.</p>
           <p><strong className="font-bold text-foreground">Coverage breaks ties.</strong> If scores match, the student who covered more unique questions ranks first.</p>
           <p><strong className="font-bold text-foreground">No rushing advantage.</strong> Completion time never improves your rank.</p>
           <p><strong className="font-bold text-foreground">Full mocks only.</strong> The free 10-question diagnostic is excluded. The board resets Monday at 00:00 WAT.</p>

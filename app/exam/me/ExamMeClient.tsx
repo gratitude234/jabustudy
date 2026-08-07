@@ -17,6 +17,7 @@ import {
 import { supabase } from "@/lib/supabase";
 import type { ExamDeviceSecurityOverview } from "@/lib/examSprint/device";
 import { formatNaira } from "@/lib/utils";
+import ExamCommunityCard from "../_components/ExamCommunityCard";
 
 type SecurityPayload = {
   ok?: boolean;
@@ -58,6 +59,7 @@ export default function ExamMeClient({
   passActiveUntil,
   passPriceNaira,
   returnTo,
+  communityHref,
 }: {
   name: string;
   email: string;
@@ -65,6 +67,7 @@ export default function ExamMeClient({
   passActiveUntil: string | null;
   passPriceNaira: number;
   returnTo: string;
+  communityHref: string | null;
 }) {
   const [security, setSecurity] = useState<ExamDeviceSecurityOverview | null>(null);
   const [loadingSecurity, setLoadingSecurity] = useState(true);
@@ -188,7 +191,7 @@ export default function ExamMeClient({
             <p className="mt-1 text-xs leading-5 text-muted-foreground">
               {passActive
                 ? passEnd ? `Your full mocks and corrections are available through ${passEnd}.` : "Your full mocks and corrections are active."
-                : "Your free diagnostic remains available if you have not used it yet. Full mocks require the 30-day pass."}
+                : "You get one free 10-question diagnostic every day. It resets at 00:00 WAT and does not stack; full mocks require the 30-day pass."}
             </p>
             {!passActive ? (
               <Link href="/study/billing?offer=exam-sprint&returnTo=/exam/me" className="mt-2 inline-flex min-h-8 items-center gap-1 text-xs font-bold text-primary no-underline hover:underline">
@@ -261,6 +264,8 @@ export default function ExamMeClient({
           {returnTo === "/exam" ? "Return to Exam Sprint" : "Continue where you left off"} <ChevronRight className="h-4 w-4" aria-hidden="true" />
         </Link>
       ) : null}
+
+      <ExamCommunityCard href={communityHref} compact />
 
       <section className="rounded-2xl border border-border bg-card p-4" aria-labelledby="logout-heading">
         <div className="flex items-start gap-3">

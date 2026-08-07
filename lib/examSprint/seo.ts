@@ -2,6 +2,7 @@ import type { Metadata, MetadataRoute } from "next";
 
 import {
   EXAM_COURSES,
+  EXAM_DIAGNOSTIC_QUESTION_COUNT,
   EXAM_MOCK_DURATION_MINUTES,
   EXAM_MOCK_QUESTION_COUNT,
   getExamSprintPricing,
@@ -12,14 +13,14 @@ import { publicUrl } from "../publicUrl";
 
 export const EXAM_SPRINT_SEO_TITLE = "JABU CBT Practice & Mock Exams | JabuStudy";
 export const EXAM_SPRINT_SEO_DESCRIPTION =
-  "Prepare for JABU exams with timed CBT mock questions, a free diagnostic, corrections, weak-topic review and progress tracking on JabuStudy Exam Sprint.";
+  `Practise JABU CBT mocks with a free daily ${EXAM_DIAGNOSTIC_QUESTION_COUNT}-question diagnostic, corrections, weak-topic review and progress tracking on JabuStudy Exam Sprint.`;
 
 export function examCourseSeoTitle(course: ExamCourse) {
   return `${course.code} CBT Mock Questions | JabuStudy`;
 }
 
 export function examCourseSeoDescription(course: ExamCourse) {
-  return `Practise ${course.title} (${course.code}) with ${EXAM_MOCK_QUESTION_COUNT}-question timed CBT mocks, a free diagnostic, corrections and progress tracking on JabuStudy.`;
+  return `Practise ${course.title} (${course.code}) with ${EXAM_MOCK_QUESTION_COUNT}-question timed CBT mocks, a free daily ${EXAM_DIAGNOSTIC_QUESTION_COUNT}-question diagnostic, corrections and progress tracking on JabuStudy.`;
 }
 
 export function examLandingMetadata(): Metadata {
@@ -109,7 +110,7 @@ export function examSprintStructuredData(readyCourses: readonly ExamCourse[]) {
     featureList: [
       `${EXAM_MOCK_QUESTION_COUNT}-question timed CBT mocks`,
       `${EXAM_MOCK_DURATION_MINUTES}-minute exam timer`,
-      "Free diagnostic",
+      `Free daily ${EXAM_DIAGNOSTIC_QUESTION_COUNT}-question diagnostic`,
       "Answer corrections and weak-topic review",
     ],
     hasPart: readyCourses.map((course) => ({

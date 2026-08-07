@@ -16,6 +16,7 @@ import {
 } from "@/lib/examSprint/server";
 import { partitionTimedExamAttempts } from "@/lib/examSprint/workflow";
 import { requireExamDeviceSession } from "@/lib/examSprint/deviceSession";
+import { examDiagnosticDayWindow } from "@/lib/examSprint/dailyDiagnostic";
 
 function jsonError(error: unknown) {
   const value = error as { message?: string; status?: number; code?: string };
@@ -89,12 +90,18 @@ export async function POST(req: NextRequest) {
     }
 
     if (kind === "diagnostic") {
+      const diagnosticDay = examDiagnosticDayWindow();
       const { data: used, error: usedError } = await adminSupabase
         .from("study_practice_attempts")
         .select("id,user_id,set_id,status,experience,campaign_key,started_at,deadline_at,submitted_at,submission_reason,delivery_snapshot,score,total_questions,time_spent_seconds")
         .eq("user_id", user.id)
         .eq("campaign_key", EXAM_CAMPAIGN_KEY)
         .eq("experience", "exam_diagnostic")
+        .neq("status", "cancelled")
+        .gte("started_at", diagnosticDay.startIso)
+        .lt("started_at", diagnosticDay.endIso)
+        .order("started_at", { ascending: false })
+        .limit(1)
         .maybeSingle();
       if (usedError) throw examHttpError(usedError.message, 500, "ATTEMPT_LOAD_FAILED");
       if (used) {
@@ -106,9 +113,9 @@ export async function POST(req: NextRequest) {
           await finalizeExamAttempt(previous, "timeup");
         }
         throw examHttpError(
-          "Your free diagnostic has already been used. Unlock Exam Sprint to continue.",
+          "Today's free diagnostic is complete. Another 10 questions unlock at 00:00 WAT, or unlock Exam Sprint to keep practising now.",
           409,
-          "DIAGNOSTIC_ALREADY_USED",
+          "DIAGNOSTIC_DAILY_LIMIT_REACHED",
         );
       }
     } else {
@@ -178,9 +185,9 @@ export async function POST(req: NextRequest) {
         }
         if (kind === "diagnostic") {
           throw examHttpError(
-            "Your free diagnostic has already been used. Unlock Exam Sprint to continue.",
+            "Today's free diagnostic is complete. Another 10 questions unlock at 00:00 WAT, or unlock Exam Sprint to keep practising now.",
             409,
-            "DIAGNOSTIC_ALREADY_USED",
+            "DIAGNOSTIC_DAILY_LIMIT_REACHED",
           );
         }
       }

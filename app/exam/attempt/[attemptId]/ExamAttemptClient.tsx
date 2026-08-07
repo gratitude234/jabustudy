@@ -33,6 +33,12 @@ type AttemptPayload = {
   deadlineAt: string;
   questions: ExamQuestion[];
   responses: Record<string, ExamResponse>;
+  switchPolicy: {
+    mistakeGraceAvailable: boolean;
+    mistakeGraceEndsAt: string;
+    hasServerInteraction: boolean;
+    mistakeGraceUsedToday: boolean;
+  };
 };
 
 type ResponseChanges = {
@@ -281,6 +287,7 @@ export default function ExamAttemptClient() {
           ok?: boolean;
           attempt?: AttemptPayload;
           resultUrl?: string;
+          redirectUrl?: string;
           code?: string;
           message?: string;
         } | null;
@@ -290,6 +297,10 @@ export default function ExamAttemptClient() {
         }
         if (response.status === 409 && data?.resultUrl) {
           router.replace(data.resultUrl);
+          return;
+        }
+        if (response.status === 409 && data?.redirectUrl) {
+          router.replace(data.redirectUrl);
           return;
         }
         if (isExamDeviceGuardErrorCode(data?.code)) {
@@ -371,7 +382,7 @@ export default function ExamAttemptClient() {
       const flushed = await flushPending();
       if (!flushed && Object.keys(pendingRef.current).length > 0) {
         throw new Error(reason === "timeup"
-          ? "Time is up. Changes that did not reach the server before 00:00 may not count. Reconnect to finish loading your result."
+          ? "Time is up. Changes that did not reach the server before the timer reached 00:00 may not count. Reconnect to finish loading your result."
           : "Some answers are still only on this phone. Reconnect or retry before submitting.");
       }
 
@@ -411,6 +422,52 @@ export default function ExamAttemptClient() {
       setLeaving(false);
     }
   }, [flushPending, leaving, persistPendingDraft, router]);
+
+  const endAndSwitch = useCallback(async (mode: "mistake" | "switch") => {
+    const currentAttempt = attemptRef.current;
+    if (!currentAttempt || leaving) return;
+    setLeaving(true);
+    setSaveError(null);
+    try {
+      const flushed = await flushPending();
+      if (!flushed && Object.keys(pendingRef.current).length > 0) {
+        throw new Error("Some recent changes are still only on this phone. Reconnect before ending this attempt.");
+      }
+
+      const response = await fetch(`/api/exam/attempts/${encodeURIComponent(currentAttempt.id)}/switch`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ mode }),
+      });
+      const data = await response.json().catch(() => null) as { ok?: boolean; outcome?: string; code?: string; message?: string } | null;
+      if (isExamDeviceGuardErrorCode(data?.code)) {
+        persistPendingDraft();
+        router.push(`/exam/me?returnTo=${encodeURIComponent(`/exam/attempt/${currentAttempt.id}`)}`);
+        return;
+      }
+      if (response.status === 409 && data?.code === "MISTAKE_GRACE_UNAVAILABLE") {
+        const nextAttempt = {
+          ...currentAttempt,
+          switchPolicy: { ...currentAttempt.switchPolicy, mistakeGraceAvailable: false },
+        };
+        attemptRef.current = nextAttempt;
+        setAttempt(nextAttempt);
+        setSaveError(data.message || "The no-impact mistake window has ended. You can still end this attempt and switch courses.");
+        return;
+      }
+      if (!response.ok || !data?.ok) throw new Error(data?.message || "Could not end this attempt safely.");
+
+      window.localStorage.removeItem(storageKey);
+      pendingRef.current = {};
+      updatePendingCount();
+      setLeaveDialogOpen(false);
+      router.push("/exam#courses");
+    } catch (cause) {
+      setSaveError(cause instanceof Error ? cause.message : "Could not end this attempt safely. Please retry.");
+    } finally {
+      setLeaving(false);
+    }
+  }, [flushPending, leaving, persistPendingDraft, router, storageKey, updatePendingCount]);
 
   useEffect(() => {
     if (!attempt) return;
@@ -499,6 +556,21 @@ export default function ExamAttemptClient() {
   const answered = useMemo(() => attempt?.questions.filter((question) => responses[question.id]?.selectedOptionId).length ?? 0, [attempt, responses]);
   const flagged = useMemo(() => attempt?.questions.filter((question) => responses[question.id]?.flagged).length ?? 0, [attempt, responses]);
   const unanswered = Math.max(0, (attempt?.questions.length ?? 0) - answered);
+  const hasResponseActivity = Object.values(responses).some((response) => Boolean(response.selectedOptionId || response.flagged || response.savedAt)) || pendingCount > 0;
+  const mistakeGraceEndMs = new Date(attempt?.switchPolicy.mistakeGraceEndsAt ?? 0).getTime();
+  const attemptDeadlineMs = new Date(attempt?.deadlineAt ?? 0).getTime();
+  const estimatedNowMs = remainingMs === null || !Number.isFinite(attemptDeadlineMs)
+    ? null
+    : attemptDeadlineMs - remainingMs;
+  const mistakeGraceRemainingMs = Number.isFinite(mistakeGraceEndMs) && estimatedNowMs !== null
+    ? Math.max(0, mistakeGraceEndMs - estimatedNowMs)
+    : 0;
+  const mistakeGraceOpen = Boolean(
+    attempt?.switchPolicy.mistakeGraceAvailable
+      && !hasResponseActivity
+      && mistakeGraceRemainingMs > 0,
+  );
+  const mistakeGraceSeconds = Math.max(0, Math.ceil(mistakeGraceRemainingMs / 1_000));
 
   useEffect(() => {
     if (!attempt || !current || submitting || timeExpired || overlayOpen) return;
@@ -575,7 +647,7 @@ export default function ExamAttemptClient() {
     <div className="min-h-dvh bg-background pb-20 text-foreground lg:pb-8">
       <header className="sticky top-0 z-40 border-b border-border bg-background/95 pt-[env(safe-area-inset-top)] backdrop-blur-xl">
         <div className="mx-auto flex h-[3.25rem] max-w-6xl items-center gap-2 px-3 sm:h-14 sm:px-5">
-          <button type="button" onClick={() => setLeaveDialogOpen(true)} className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-secondary/70 text-muted-foreground transition hover:bg-secondary hover:text-foreground focus-visible:ring-2 focus-visible:ring-primary" aria-label="Exit this exam"><X className="h-4 w-4" aria-hidden="true" /></button>
+          <button type="button" onClick={() => setLeaveDialogOpen(true)} className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-secondary/70 text-muted-foreground transition hover:bg-secondary hover:text-foreground focus-visible:ring-2 focus-visible:ring-primary" aria-label="Leave or switch course"><X className="h-4 w-4" aria-hidden="true" /></button>
           <div className="min-w-0 flex-1 text-center sm:text-left">
             <p className="truncate text-xs font-bold sm:text-sm">{attempt.courseCode}</p>
             <div className="mt-0.5 flex items-center justify-center gap-1.5 text-[9px] font-semibold text-muted-foreground sm:justify-start sm:text-[10px]">
@@ -703,14 +775,23 @@ export default function ExamAttemptClient() {
       {leaveDialogOpen ? (
         <div className="fixed inset-0 z-[60] flex items-end bg-zinc-950/60 backdrop-blur-sm sm:grid sm:place-items-center sm:p-4" onClick={(event) => { if (event.target === event.currentTarget && !leaving) setLeaveDialogOpen(false); }}>
           <div className="w-full rounded-t-[1.75rem] border border-border bg-background p-5 pb-[max(1rem,env(safe-area-inset-bottom))] shadow-2xl sm:max-w-md sm:rounded-2xl sm:p-6" role="dialog" aria-modal="true" aria-labelledby="leave-exam-title" aria-describedby="leave-exam-timer leave-exam-description">
-            <p id="leave-exam-timer" className="inline-flex items-center gap-1.5 text-[10px] font-black uppercase tracking-[0.13em] text-amber-700 dark:text-amber-300"><Clock3 className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />{msToClock(remainingMs ?? 0)} remaining · timer keeps running</p>
-            <h2 id="leave-exam-title" className="mt-1.5 text-2xl font-black">Leave this timed mock?</h2>
-            <p id="leave-exam-description" className="mt-2 text-sm leading-6 text-muted-foreground">Answers that reached the server are saved. You can return before time runs out, but the countdown cannot be paused.</p>
-            {pendingCount > 0 ? <p className="mt-4 flex items-start gap-2 rounded-xl bg-amber-100/60 px-3 py-2.5 text-xs font-bold text-amber-900 dark:bg-amber-950/35 dark:text-amber-200"><WifiOff className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />{pendingCount} recent change{pendingCount === 1 ? " is" : "s are"} still syncing. Reconnect before 00:00 so {pendingCount === 1 ? "it" : "they"} can count.</p> : null}
+            <p id="leave-exam-timer" className={cn("inline-flex items-center gap-1.5 text-[10px] font-black uppercase tracking-[0.13em]", mistakeGraceOpen ? "text-emerald-700 dark:text-emerald-300" : "text-amber-700 dark:text-amber-300")}><Clock3 className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />{mistakeGraceOpen ? `${mistakeGraceSeconds}s mistake window` : `${msToClock(remainingMs ?? 0)} remaining · timer keeps running`}</p>
+            <h2 id="leave-exam-title" className="mt-1.5 text-2xl font-black">{mistakeGraceOpen ? "Started the wrong course?" : `End ${attempt?.courseCode ?? "this attempt"} and switch?`}</h2>
+            <p id="leave-exam-description" className="mt-2 text-sm leading-6 text-muted-foreground">
+              {mistakeGraceOpen
+                ? "You have not interacted with a question yet. Change course now and this accidental start will not affect your score, progress or leaderboard."
+                : attempt?.kind === "diagnostic"
+                  ? "You can switch courses, but this will end the diagnostic and use today's free check. It will not create a 0% score."
+                  : "You can switch courses without creating a 0% score. This mock will be marked ended early and cannot be resumed."}
+            </p>
+            {!mistakeGraceOpen && attempt?.kind === "mock" ? <p className="mt-3 rounded-xl bg-secondary/60 px-3 py-2.5 text-xs font-semibold leading-5 text-muted-foreground">For leaderboard fairness, ending a progressed mock uses one of this week&apos;s first 3 leaderboard slots. Your best score is untouched.</p> : null}
+            {pendingCount > 0 ? <p className="mt-4 flex items-start gap-2 rounded-xl bg-amber-100/60 px-3 py-2.5 text-xs font-bold text-amber-900 dark:bg-amber-950/35 dark:text-amber-200"><WifiOff className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />{pendingCount} recent change{pendingCount === 1 ? " is" : "s are"} still syncing. Reconnect before the timer reaches 00:00 so {pendingCount === 1 ? "it" : "they"} can count.</p> : null}
+            {saveError ? <p className="mt-3 text-xs font-semibold leading-5 text-rose-600 dark:text-rose-300" role="alert">{saveError}</p> : null}
             <div className="mt-5 grid grid-cols-2 gap-3">
-              <button type="button" onClick={() => void leaveAttempt()} disabled={leaving} className="inline-flex min-h-12 items-center justify-center gap-2 whitespace-nowrap rounded-xl border border-border bg-card px-3 text-sm font-black text-muted-foreground disabled:opacity-60">{leaving ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : <ArrowLeft className="h-4 w-4" aria-hidden="true" />}{leaving ? "Saving…" : "Exit mock"}</button>
+              <button type="button" onClick={() => void endAndSwitch(mistakeGraceOpen ? "mistake" : "switch")} disabled={leaving} className="inline-flex min-h-12 items-center justify-center gap-2 rounded-xl border border-border bg-card px-3 text-sm font-black text-foreground disabled:opacity-60">{leaving ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : <ArrowLeft className="h-4 w-4" aria-hidden="true" />}{leaving ? "Changing…" : mistakeGraceOpen ? "Change course" : "End & switch"}</button>
               <button type="button" onClick={() => setLeaveDialogOpen(false)} disabled={leaving} className="min-h-12 rounded-xl bg-primary px-4 text-sm font-black text-primary-foreground">Keep answering</button>
             </div>
+            <button type="button" onClick={() => void leaveAttempt()} disabled={leaving} className="mt-2.5 min-h-9 w-full text-xs font-bold text-muted-foreground underline-offset-4 hover:text-foreground hover:underline disabled:opacity-60">Leave and resume later · timer keeps running</button>
           </div>
         </div>
       ) : null}
@@ -727,7 +808,7 @@ export default function ExamAttemptClient() {
             {!timeExpired && unanswered > 0 ? <p className="mt-4 flex items-start gap-2 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2.5 text-xs font-bold text-amber-950 dark:border-amber-900/60 dark:bg-amber-950/30 dark:text-amber-100"><AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />{unanswered} unanswered question{unanswered === 1 ? "" : "s"} will count as unanswered if you submit now.</p> : null}
             <p className={cn("mt-4 flex items-start gap-2 rounded-xl px-3 py-2.5 text-xs font-bold", pendingCount > 0 ? "bg-amber-100/60 text-amber-900 dark:bg-amber-950/35 dark:text-amber-200" : "bg-emerald-100/60 text-emerald-900 dark:bg-emerald-950/35 dark:text-emerald-200")}>
               {pendingCount > 0 ? <Loader2 className="mt-0.5 h-4 w-4 shrink-0 animate-spin" /> : <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0" />}
-              {pendingCount > 0 ? `${pendingCount} answer change${pendingCount === 1 ? " is" : "s are"} still syncing. Reconnect before 00:00; submission will wait.` : "Every answer change has reached the server."}
+              {pendingCount > 0 ? `${pendingCount} answer change${pendingCount === 1 ? " is" : "s are"} still syncing. Reconnect before the timer reaches 00:00; submission will wait.` : "Every answer change has reached the server."}
             </p>
             {saveError ? <p className="mt-3 text-sm font-semibold text-rose-600 dark:text-rose-300" role="alert">{saveError}</p> : null}
             <div className="mt-5 grid grid-cols-2 gap-3">

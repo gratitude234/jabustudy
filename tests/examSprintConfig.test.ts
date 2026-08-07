@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   EXAM_COURSES,
   EXAM_SPRINT_REGULAR_PRICE_NAIRA,
+  examCourseBankNeedsMaterial,
   examCourseDateLabel,
   findExamCourse,
   getExamSprintPricing,
@@ -48,6 +49,11 @@ describe("Exam Sprint course catalog", () => {
   it("uses the confirmed summer timetable dates", () => {
     expect(findExamCourse("COS 101")?.examAt).toBe("2026-08-10T11:30:00+01:00");
     expect(findExamCourse("CHM 101")?.examAt).toBe("2026-08-13T08:00:00+01:00");
+  });
+
+  it("keeps the mismatched GNS 121 bank out of new mocks until proper material is supplied", () => {
+    expect(examCourseBankNeedsMaterial(findExamCourse("GNS 121"))).toBe(true);
+    expect(examCourseBankNeedsMaterial(findExamCourse("CHM 101"))).toBe(false);
   });
 
   it("runs the launch price through 13 August then returns to the regular price", () => {

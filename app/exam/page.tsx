@@ -15,6 +15,9 @@ import { examLandingMetadata, examSprintStructuredData } from "@/lib/examSprint/
 import { formatNaira } from "@/lib/utils";
 import { isExamSprintOnlyMode } from "@/lib/systemMode";
 import ExamCatalogClient from "./_components/ExamCatalogClient";
+import ExamCommunityCard from "./_components/ExamCommunityCard";
+import { getExamSprintCommunityUrl } from "@/lib/examSprint/community";
+import { getExamMaterialRequestPhone } from "@/lib/examSprint/materialRequest";
 
 export const dynamic = "force-dynamic";
 
@@ -58,6 +61,8 @@ export default async function ExamSprintPage() {
   const structuredData = examSprintStructuredData(
     uniqueCourses.filter((course) => course.sets.length > 0),
   );
+  const communityHref = getExamSprintCommunityUrl();
+  const materialRequestPhone = getExamMaterialRequestPhone();
 
   return (
     <div className="mx-auto max-w-3xl space-y-5 pb-10">
@@ -127,13 +132,18 @@ export default async function ExamSprintPage() {
             <p className="mt-0.5 text-[10px] font-medium leading-4 text-muted-foreground">Questions / mock</p>
           </div>
           <div className="py-2.5 pl-2.5 sm:py-3 sm:pl-4">
-            <p className="text-sm font-extrabold tabular-nums sm:text-base">1</p>
-            <p className="mt-0.5 text-[10px] font-medium leading-4 text-muted-foreground">Free diagnostic</p>
+            <p className="text-sm font-extrabold tabular-nums sm:text-base">{diagnosticQuestions}</p>
+            <p className="mt-0.5 text-[10px] font-medium leading-4 text-muted-foreground">Free questions / day</p>
           </div>
         </div>
       </section>
 
-      <ExamCatalogClient courses={courses} activeAttempts={catalog.activeAttempts} activeDiagnostic={activeDiagnostic} />
+      <ExamCatalogClient
+        courses={courses}
+        activeAttempts={catalog.activeAttempts}
+        activeDiagnostic={activeDiagnostic}
+        materialRequestPhone={materialRequestPhone}
+      />
 
       <details className="group overflow-hidden rounded-2xl border border-border bg-card">
         <summary className="flex min-h-14 cursor-pointer list-none items-center gap-3 px-3.5 py-3 marker:hidden sm:px-4">
@@ -143,7 +153,7 @@ export default async function ExamSprintPage() {
         </summary>
         <div className="border-t border-border">
           {[
-            { icon: Target, title: "Try it before paying", body: `Use one free ${diagnosticQuestions}-question diagnostic on the course you choose. It is one free attempt across this campaign.` },
+            { icon: Target, title: "A free check every day", body: `Answer ${diagnosticQuestions} questions from one Ready course each day. Your allowance resets at 00:00 WAT and does not stack.` },
             { icon: Clock3, title: "Real exam rhythm", body: "One question at a time, a fixed timer and automatic submission." },
             { icon: ShieldCheck, title: "Smarter review", body: `See corrections and weak topics, then practise from the reviewed ${bankSize}+ question pool.` },
           ].map(({ icon: Icon, title, body }, index) => (
@@ -154,6 +164,8 @@ export default async function ExamSprintPage() {
           ))}
         </div>
       </details>
+
+      <ExamCommunityCard href={communityHref} />
 
       <p className="border-t border-border px-1 pt-3.5 text-[10px] leading-4.5 text-muted-foreground">
         Exam Sprint is an independent revision tool. It does not provide leaked questions, official predictions or guaranteed examination results.

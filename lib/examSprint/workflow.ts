@@ -5,6 +5,23 @@ export type TimedExamAttemptCandidate = {
   started_at?: string | null;
 };
 
+export const EXAM_MISTAKE_GRACE_MS = 60_000;
+
+/**
+ * A genuine accidental start gets a short, server-verifiable escape hatch.
+ * This only models the clock; the server additionally requires zero persisted
+ * interactions and limits the grace cancellation to once per WAT day.
+ */
+export function examMistakeGraceEndsAt(startedAt: string) {
+  const startedMs = new Date(startedAt).getTime();
+  return Number.isFinite(startedMs) ? startedMs + EXAM_MISTAKE_GRACE_MS : 0;
+}
+
+export function examMistakeGraceIsOpen(startedAt: string, now = Date.now()) {
+  const endsAt = examMistakeGraceEndsAt(startedAt);
+  return endsAt > 0 && now < endsAt;
+}
+
 /**
  * Splits persisted attempt rows into expired and genuinely live attempts.
  * Live attempts are ordered by urgency so every screen and API sends the

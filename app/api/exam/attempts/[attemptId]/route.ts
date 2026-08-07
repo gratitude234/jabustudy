@@ -7,6 +7,7 @@ import {
   examHttpError,
   finalizeExamAttempt,
   getOwnedExamAttempt,
+  getExamSwitchPolicy,
   parseExamSnapshot,
 } from "@/lib/examSprint/server";
 import { requireExamDeviceSession } from "@/lib/examSprint/deviceSession";
@@ -41,6 +42,14 @@ export async function GET(
         resultUrl: `/exam/result/${encodeURIComponent(attempt.id)}`,
       }, { status: 409 });
     }
+    if (attempt.status === "cancelled" || attempt.status === "abandoned") {
+      return NextResponse.json({
+        ok: false,
+        code: "ATTEMPT_ENDED",
+        message: attempt.status === "cancelled" ? "This accidental start was cleared." : "This attempt was ended early.",
+        redirectUrl: "/exam#courses",
+      }, { status: 409 });
+    }
     if (attempt.status !== "in_progress") throw examHttpError("This attempt is no longer active.", 409, "ATTEMPT_SUBMITTED");
 
     const snapshot = parseExamSnapshot(attempt.delivery_snapshot);
@@ -54,6 +63,7 @@ export async function GET(
       flagged: Boolean(row.flagged),
       savedAt: row.answered_at,
     }]));
+    const switchPolicy = await getExamSwitchPolicy(user.id, attempt);
 
     return NextResponse.json({
       ok: true,
@@ -72,6 +82,7 @@ export async function GET(
           options: question.options,
         })),
         responses,
+        switchPolicy,
       },
     });
   } catch (error) {

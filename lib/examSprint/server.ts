@@ -5,6 +5,8 @@ import { adminSupabase } from "@/lib/supabase/admin";
 import {
   EXAM_CAMPAIGN_KEY,
   EXAM_COURSES,
+  EXAM_DIAGNOSTIC_PREVIEW_POOL_SIZE,
+  examCourseBankNeedsMaterial,
   findExamCourse,
   normalizeExamCourseCode,
   type ExamCourse,
@@ -17,6 +19,12 @@ import {
   type ExamQuestionExposure,
   type ExamQuestionHistory,
 } from "@/lib/examSprint/coverage";
+import {
+  buildExamDiagnosticPreviewPool,
+  examAttemptStartedInDiagnosticDay,
+  examDiagnosticDayWindow,
+} from "@/lib/examSprint/dailyDiagnostic";
+import { examMistakeGraceEndsAt, examMistakeGraceIsOpen } from "@/lib/examSprint/workflow";
 
 export type ExamAttemptKind = "diagnostic" | "mock";
 export type ExamAttemptExperience = "exam_diagnostic" | "exam_mock";
@@ -54,7 +62,7 @@ export type ExamAttemptRow = {
   started_at: string;
   deadline_at: string;
   submitted_at: string | null;
-  submission_reason: "manual" | "timeup" | null;
+  submission_reason: "manual" | "timeup" | "mistake" | "switched" | null;
   delivery_snapshot: unknown;
   score: number | null;
   total_questions: number | null;
@@ -225,14 +233,19 @@ function historyFromAttempts(
   return buildExamQuestionHistory(exposures);
 }
 
-async function getSubmittedMockHistory(userId: string, setId: string, excludeAttemptId?: string) {
+async function getSubmittedExamHistory(
+  userId: string,
+  setId: string,
+  experience: ExamAttemptExperience,
+  excludeAttemptId?: string,
+) {
   let query = adminSupabase
     .from("study_practice_attempts")
     .select("id,submitted_at,delivery_snapshot")
     .eq("user_id", userId)
     .eq("set_id", setId)
-    .eq("experience", "exam_mock")
-    .eq("status", "submitted")
+    .eq("experience", experience)
+    .in("status", ["submitted", "abandoned"])
     .order("submitted_at", { ascending: true });
   if (excludeAttemptId) query = query.neq("id", excludeAttemptId);
   const { data: attemptRows, error: attemptError } = await query;
@@ -246,6 +259,14 @@ async function getSubmittedMockHistory(userId: string, setId: string, excludeAtt
     .in("attempt_id", attempts.map((attempt) => attempt.id));
   if (answerError) throw examHttpError(answerError.message, 500, "ANSWER_HISTORY_FAILED");
   return historyFromAttempts(attempts, (answerRows ?? []) as ExamHistoryAnswer[]);
+}
+
+async function getSubmittedMockHistory(userId: string, setId: string, excludeAttemptId?: string) {
+  return getSubmittedExamHistory(userId, setId, "exam_mock", excludeAttemptId);
+}
+
+async function getSubmittedDiagnosticHistory(userId: string, setId: string) {
+  return getSubmittedExamHistory(userId, setId, "exam_diagnostic");
 }
 
 async function getEligibleQuestionIdsBySet(setIds: readonly string[]) {
@@ -339,8 +360,13 @@ export async function getPublishedExamSets(course?: ExamCourse | null) {
 
   const { data, error } = await query;
   if (error) throw examHttpError(error.message, 500, "EXAM_CATALOG_FAILED");
-  const sets = ((data ?? []) as Array<Record<string, unknown>>).map(publicExamSet);
-  if (!course) return sets;
+  const sets = ((data ?? []) as Array<Record<string, unknown>>)
+    .map(publicExamSet)
+    .filter((set) => {
+      const attachedCourse = findExamCourse(set.courseCode);
+      return attachedCourse && !examCourseBankNeedsMaterial(attachedCourse);
+    });
+  if (!course || examCourseBankNeedsMaterial(course)) return course ? [] : sets;
   const wanted = normalizeExamCourseCode(course.code);
   return sets.filter((set) => normalizeExamCourseCode(set.courseCode) === wanted);
 }
@@ -387,7 +413,7 @@ export async function getExamCatalog(userId?: string | null) {
   const coverageBySet = new Map<string, ExamQuestionCoverage>();
   for (const set of sets) {
     const submittedMockAttempts = attempts
-      .filter((attempt) => attempt.status === "submitted"
+      .filter((attempt) => (attempt.status === "submitted" || attempt.status === "abandoned")
         && attempt.experience === "exam_mock"
         && String(attempt.set_id) === set.id)
       .map((attempt) => ({
@@ -403,11 +429,20 @@ export async function getExamCatalog(userId?: string | null) {
       ),
     );
   }
-  // The free diagnostic is one-per-campaign, so a single attempt row decides the
-  // state of every course page. Callers need more than a boolean: an attempt that
-  // is still running has to stay resumable, and a finished one should link to its
-  // result instead of dead-ending on "already used".
-  const diagnosticRow = attempts.find((attempt) => attempt.experience === "exam_diagnostic") ?? null;
+  // Free diagnostics reset at 00:00 WAT. A diagnostic that started just before
+  // midnight may still be live after the reset, so keep that resumable even
+  // though it does not consume the new day's allowance.
+  const now = Date.now();
+  const diagnosticWindow = examDiagnosticDayWindow(new Date(now));
+  const todayDiagnosticRow = attempts.find((attempt) => attempt.experience === "exam_diagnostic"
+    && attempt.status !== "cancelled"
+    && examAttemptStartedInDiagnosticDay(attempt.started_at, diagnosticWindow)) ?? null;
+  const liveDiagnosticRow = attempts.find((attempt) => {
+    if (attempt.experience !== "exam_diagnostic" || attempt.status !== "in_progress") return false;
+    const deadlineMs = new Date(String(attempt.deadline_at ?? "")).getTime();
+    return Number.isFinite(deadlineMs) && deadlineMs > now;
+  }) ?? null;
+  const diagnosticRow = liveDiagnosticRow ?? todayDiagnosticRow;
   const diagnostic = diagnosticRow
     ? (() => {
         const deadlineMs = new Date(String(diagnosticRow.deadline_at ?? "")).getTime();
@@ -428,7 +463,7 @@ export async function getExamCatalog(userId?: string | null) {
         };
       })()
     : null;
-  const diagnosticUsed = diagnostic !== null;
+  const diagnosticUsed = todayDiagnosticRow !== null;
   const activeAttempts: ExamActiveAttempt[] = attempts.flatMap((attempt) => {
     if (attempt.status !== "in_progress" || attempt.experience !== "exam_mock") return [];
     const deadlineAt = String(attempt.deadline_at ?? "");
@@ -491,7 +526,7 @@ export async function getExamCatalog(userId?: string | null) {
         ...set,
         coverage: coverageBySet.get(set.id) ?? calculateExamQuestionCoverage([], new Map()),
       } satisfies PublicExamSetWithCoverage));
-      const recentAttempts: ExamRecentAttempt[] = attempts
+      const recentAttempts: ExamRecentAttempt[] = examCourseBankNeedsMaterial(course) ? [] : attempts
         .filter((attempt) => attempt.status === "submitted")
         .filter((attempt) => normalizeExamCourseCode(
           setById.get(String(attempt.set_id))?.courseCode
@@ -540,6 +575,9 @@ export async function getPublishedExamSet(setId: string) {
   }
   const course = findExamCourse(data.course_code);
   if (!course) throw examHttpError("This mock is not attached to a campaign course.", 422, "UNKNOWN_EXAM_COURSE");
+  if (examCourseBankNeedsMaterial(course)) {
+    throw examHttpError("This course needs verified source material before a new mock can start.", 409, "EXAM_COURSE_NEEDS_MATERIAL");
+  }
   return { row: data as Record<string, unknown>, set: publicExamSet(data as Record<string, unknown>), course };
 }
 
@@ -596,7 +634,15 @@ export async function buildExamSnapshot(args: {
         questionCount: args.questionCount,
         shuffle,
       }).questions
-    : shuffle(candidates).slice(0, args.questionCount);
+    : selectExamQuestions({
+        candidates: buildExamDiagnosticPreviewPool(
+          candidates,
+          Math.max(EXAM_DIAGNOSTIC_PREVIEW_POOL_SIZE, args.questionCount),
+        ),
+        history: await getSubmittedDiagnosticHistory(args.userId, args.setId),
+        questionCount: args.questionCount,
+        shuffle,
+      }).questions;
 
   return {
     version: 1,
@@ -624,6 +670,120 @@ export async function getOwnedExamAttempt(userId: string, attemptId: string) {
 
 export function attemptExpired(attempt: Pick<ExamAttemptRow, "deadline_at">, now = Date.now()) {
   return new Date(attempt.deadline_at).getTime() <= now;
+}
+
+export type ExamSwitchPolicy = {
+  mistakeGraceAvailable: boolean;
+  mistakeGraceEndsAt: string;
+  hasServerInteraction: boolean;
+  mistakeGraceUsedToday: boolean;
+};
+
+export async function getExamSwitchPolicy(
+  userId: string,
+  attempt: ExamAttemptRow,
+  now = new Date(),
+): Promise<ExamSwitchPolicy> {
+  const graceEndMs = examMistakeGraceEndsAt(attempt.started_at);
+  const diagnosticDay = examDiagnosticDayWindow(now);
+  const [{ count: interactionCount, error: interactionError }, { data: priorGrace, error: priorGraceError }] = await Promise.all([
+    adminSupabase
+      .from("study_attempt_answers")
+      .select("id", { count: "exact", head: true })
+      .eq("attempt_id", attempt.id),
+    adminSupabase
+      .from("study_practice_attempts")
+      .select("id")
+      .eq("user_id", userId)
+      .eq("campaign_key", EXAM_CAMPAIGN_KEY)
+      .eq("submission_reason", "mistake")
+      .gte("started_at", diagnosticDay.startIso)
+      .lt("started_at", diagnosticDay.endIso)
+      .limit(1)
+      .maybeSingle(),
+  ]);
+  if (interactionError) throw examHttpError(interactionError.message, 500, "ANSWER_LOAD_FAILED");
+  if (priorGraceError) throw examHttpError(priorGraceError.message, 500, "ATTEMPT_HISTORY_FAILED");
+
+  const hasServerInteraction = Math.max(0, Number(interactionCount ?? 0)) > 0;
+  const mistakeGraceUsedToday = Boolean(priorGrace?.id);
+  const mistakeGraceAvailable = attempt.status === "in_progress"
+    && !attemptExpired(attempt, now.getTime())
+    && !hasServerInteraction
+    && !mistakeGraceUsedToday
+    && examMistakeGraceIsOpen(attempt.started_at, now.getTime());
+
+  return {
+    mistakeGraceAvailable,
+    mistakeGraceEndsAt: new Date(graceEndMs || 0).toISOString(),
+    hasServerInteraction,
+    mistakeGraceUsedToday,
+  };
+}
+
+export type ExamSwitchOutcome = "mistake_cancelled" | "ended_early" | "timeup" | "already_closed";
+
+export async function endExamAttemptForSwitch(
+  userId: string,
+  attemptId: string,
+  mode: "mistake" | "switch" | "auto" = "auto",
+) {
+  let attempt = await getOwnedExamAttempt(userId, attemptId);
+  if (attempt.status === "cancelled") return { outcome: "mistake_cancelled" as const, attempt };
+  if (attempt.status === "abandoned") return { outcome: "ended_early" as const, attempt };
+  if (attempt.status === "submitted") return { outcome: "already_closed" as const, attempt };
+  if (attempt.status !== "in_progress") {
+    throw examHttpError("This attempt is already closed.", 409, "ATTEMPT_CLOSED");
+  }
+  if (attemptExpired(attempt)) {
+    attempt = await finalizeExamAttempt(attempt, "timeup");
+    return { outcome: "timeup" as const, attempt };
+  }
+
+  const policy = await getExamSwitchPolicy(userId, attempt);
+  if (mode === "mistake" && !policy.mistakeGraceAvailable) {
+    throw examHttpError(
+      "The no-impact mistake window has ended. You can still end this attempt and switch courses.",
+      409,
+      "MISTAKE_GRACE_UNAVAILABLE",
+    );
+  }
+  const cancelAsMistake = mode === "mistake" || (mode === "auto" && policy.mistakeGraceAvailable);
+  const endedAt = new Date();
+  const startedMs = new Date(attempt.started_at).getTime();
+  const timeSpentSeconds = Number.isFinite(startedMs)
+    ? Math.max(0, Math.floor((endedAt.getTime() - startedMs) / 1_000))
+    : 0;
+  const nextStatus = cancelAsMistake ? "cancelled" : "abandoned";
+  const submissionReason = cancelAsMistake ? "mistake" : "switched";
+  const { data, error } = await adminSupabase
+    .from("study_practice_attempts")
+    .update({
+      status: nextStatus,
+      submitted_at: endedAt.toISOString(),
+      updated_at: endedAt.toISOString(),
+      submission_reason: submissionReason,
+      score: null,
+      time_spent_seconds: timeSpentSeconds,
+    })
+    .eq("id", attempt.id)
+    .eq("user_id", userId)
+    .eq("status", "in_progress")
+    .select("id,user_id,set_id,status,experience,campaign_key,started_at,deadline_at,submitted_at,submission_reason,delivery_snapshot,score,total_questions,time_spent_seconds")
+    .maybeSingle();
+  if (error) throw examHttpError(error.message, 500, "ATTEMPT_SWITCH_FAILED");
+  if (!data) {
+    const latest = await getOwnedExamAttempt(userId, attempt.id);
+    if (latest.status === "cancelled") return { outcome: "mistake_cancelled" as const, attempt: latest };
+    if (latest.status === "abandoned") return { outcome: "ended_early" as const, attempt: latest };
+    if (latest.status === "submitted") return { outcome: "already_closed" as const, attempt: latest };
+    throw examHttpError("This attempt could not be ended safely. Please retry.", 409, "ATTEMPT_SWITCH_FAILED");
+  }
+
+  return {
+    outcome: cancelAsMistake ? "mistake_cancelled" as const : "ended_early" as const,
+    attempt: data as ExamAttemptRow,
+  };
 }
 
 export async function finalizeExamAttempt(

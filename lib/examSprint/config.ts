@@ -9,6 +9,7 @@ export const EXAM_MOCK_QUESTION_COUNT = 40;
 export const EXAM_MOCK_DURATION_MINUTES = 40;
 export const EXAM_DIAGNOSTIC_QUESTION_COUNT = 10;
 export const EXAM_DIAGNOSTIC_DURATION_MINUTES = 10;
+export const EXAM_DIAGNOSTIC_PREVIEW_POOL_SIZE = 30;
 
 export type ExamCourse = {
   code: string;
@@ -16,6 +17,11 @@ export type ExamCourse = {
   title: string;
   examAt: string | null;
   priority: boolean;
+  /**
+   * Safety override for a course whose currently attached bank must not be used.
+   * Remove this once verified source material has been used to build the real bank.
+   */
+  bankStateOverride?: "needs_material";
 };
 
 export type ExamSprintPricing = {
@@ -48,7 +54,7 @@ export function getExamSprintPricing(at: Date = new Date()): ExamSprintPricing {
 }
 
 export const EXAM_COURSES: readonly ExamCourse[] = [
-  { code: "GNS 121", slug: "gns-121", title: "Communication in English II", examAt: "2026-08-17T12:00:00+01:00", priority: true },
+  { code: "GNS 121", slug: "gns-121", title: "Communication in English II", examAt: "2026-08-17T12:00:00+01:00", priority: true, bankStateOverride: "needs_material" },
   { code: "GNS 123", slug: "gns-123", title: "Nigeria People and Culture", examAt: "2026-08-17T12:00:00+01:00", priority: true },
   { code: "GNS 124", slug: "gns-124", title: "Communication in French", examAt: "2026-08-17T12:00:00+01:00", priority: false },
   { code: "GNS 125", slug: "gns-125", title: "Fresher Induction Seminar", examAt: "2026-08-17T12:00:00+01:00", priority: false },
@@ -82,6 +88,10 @@ export function findExamCourse(value: unknown) {
   return EXAM_COURSES.find(
     (course) => course.slug === raw || normalizeExamCourseCode(course.code) === normalized,
   ) ?? null;
+}
+
+export function examCourseBankNeedsMaterial(course: ExamCourse | null | undefined) {
+  return course?.bankStateOverride === "needs_material";
 }
 
 export function examCourseDateLabel(course: ExamCourse) {

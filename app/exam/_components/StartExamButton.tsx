@@ -132,7 +132,7 @@ export default function StartExamButton({
   const descriptionId = `exam-instructions-description-${setId}`;
   const reviewDescription = kind === "mock"
     ? "Check the format and begin when you are settled."
-    : "You receive one free diagnostic across this Exam Sprint campaign. Starting now uses it for this course.";
+    : "You get one free 10-question diagnostic each day across Exam Sprint. Starting now uses today's check for this course; it resets at 00:00 WAT.";
 
   return (
     <div>
@@ -184,7 +184,7 @@ export default function StartExamButton({
             </div>
 
             <div className="mt-3 divide-y divide-border rounded-xl border border-border bg-card">
-              <div className="flex gap-2.5 px-3 py-2.5"><span className="grid h-7 w-7 shrink-0 place-items-center rounded-lg bg-emerald-100 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300"><CheckCircle2 className="h-3.5 w-3.5" aria-hidden="true" /></span><div><p className="text-xs font-bold">Short network drops are protected</p><p className="mt-0.5 text-[10px] leading-4 text-muted-foreground">This phone retries recent changes. Reconnect before 00:00 so they can count.</p></div></div>
+              <div className="flex gap-2.5 px-3 py-2.5"><span className="grid h-7 w-7 shrink-0 place-items-center rounded-lg bg-emerald-100 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300"><CheckCircle2 className="h-3.5 w-3.5" aria-hidden="true" /></span><div><p className="text-xs font-bold">Short network drops are protected</p><p className="mt-0.5 text-[10px] leading-4 text-muted-foreground">This phone retries recent changes. Reconnect before the timer reaches 00:00 so they can count.</p></div></div>
               <div className="flex gap-2.5 px-3 py-2.5"><span className="grid h-7 w-7 shrink-0 place-items-center rounded-lg bg-primary/10 text-primary"><ShieldCheck className="h-3.5 w-3.5" aria-hidden="true" /></span><div><p className="text-xs font-bold">Corrections come afterwards</p><p className="mt-0.5 text-[10px] leading-4 text-muted-foreground">Answers and explanations unlock after submission.</p></div></div>
             </div>
 

@@ -6,6 +6,7 @@ import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { getExamSprintPricing } from "@/lib/examSprint/config";
 import { getMonthlyExamAccess } from "@/lib/examSprint/server";
 import { sanitizeExamSecurityReturnPath } from "@/lib/examSprint/device";
+import { getExamSprintCommunityUrl } from "@/lib/examSprint/community";
 import ExamMeClient from "./ExamMeClient";
 
 export const dynamic = "force-dynamic";
@@ -38,6 +39,7 @@ export default async function ExamMePage({
 
   const access = await getMonthlyExamAccess(user.id);
   const pricing = getExamSprintPricing();
+  const communityHref = getExamSprintCommunityUrl();
 
   return (
     <div className="mx-auto max-w-2xl space-y-4 pb-10">
@@ -54,6 +56,7 @@ export default async function ExamMePage({
         passActiveUntil={access.activeUntil}
         passPriceNaira={pricing.currentPriceNaira}
         returnTo={returnTo}
+        communityHref={communityHref}
       />
     </div>
   );

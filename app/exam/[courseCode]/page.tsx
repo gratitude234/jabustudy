@@ -13,6 +13,7 @@ import {
   FileQuestion,
   History,
   LockKeyhole,
+  MessageCircle,
   PlayCircle,
   ShieldCheck,
   Sparkles,
@@ -27,12 +28,14 @@ import {
 } from "@/lib/examSprint/config";
 import { examCourseMetadata, examCourseStructuredData } from "@/lib/examSprint/seo";
 import { getExamWeeklyLeaderboard } from "@/lib/examSprint/leaderboardServer";
+import { buildExamMaterialRequestWhatsAppUrl, getExamMaterialRequestPhone } from "@/lib/examSprint/materialRequest";
 import { getExamCatalog, type ExamRecentAttempt } from "@/lib/examSprint/server";
 import { cn, formatNaira } from "@/lib/utils";
 import StartExamButton from "../_components/StartExamButton";
 import CoverageMeter from "../_components/CoverageMeter";
 import ExamRemainingTime from "../_components/ExamRemainingTime";
 import ExamRouteTop from "../_components/ExamRouteTop";
+import SwitchExamCourseButton from "../_components/SwitchExamCourseButton";
 
 export const dynamic = "force-dynamic";
 const ATTEMPT_PREVIEW_COUNT = 3;
@@ -125,6 +128,11 @@ export default async function ExamCoursePage({ params }: ExamCoursePageProps) {
     : null;
   const structuredData = examCourseStructuredData(course);
   const pricing = getExamSprintPricing();
+  const materialRequestHref = buildExamMaterialRequestWhatsAppUrl({
+    phone: getExamMaterialRequestPhone(),
+    courseCode: course.code,
+    courseTitle: course.title,
+  });
 
   const primaryAction = () => {
     if (campaignActiveAttempt) {
@@ -142,7 +150,7 @@ export default async function ExamCoursePage({ params }: ExamCoursePageProps) {
       );
     }
     if (!primarySet) {
-      return <span className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-xl bg-secondary px-4 text-sm font-bold text-muted-foreground"><FileQuestion className="h-4 w-4" aria-hidden="true" /> Course coming soon</span>;
+      return <a href={materialRequestHref} target="_blank" rel="noopener noreferrer" className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-xl bg-emerald-600 px-4 text-sm font-bold text-white no-underline shadow-sm transition hover:bg-emerald-700 focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-2"><MessageCircle className="h-4 w-4" aria-hidden="true" /> Send course material</a>;
     }
     if (catalog.access.active) {
       return (
@@ -169,31 +177,31 @@ export default async function ExamCoursePage({ params }: ExamCoursePageProps) {
     : resumableDiagnostic
       ? diagnosticBelongsToCourse ? "Your diagnostic is still running" : `Your ${diagnosticCourse?.code ?? "other"} diagnostic is still running`
       : !primarySet
-        ? "This question bank is being reviewed"
+        ? "This question bank needs material"
         : catalog.access.active
           ? mockAttempts > 0 ? "Build on your last attempt" : "Take your first full mock"
           : !diagnostic
-            ? "Check your level for free"
+            ? `Take today's free ${diagnosticSet?.diagnosticQuestionCount ?? 10}-question check`
             : diagnosticScore !== null
               ? `Build beyond your ${diagnosticScore}% diagnostic`
               : "Unlock the complete practice bank";
   const actionDetail = campaignActiveAttempt
     ? campaignAttemptBelongsToCourse
       ? "Return to your saved answers before time runs out."
-      : `Finish the ${campaignActiveAttempt.courseCode} mock before starting ${course.code}. Only one timed mock can run at once.`
+      : `Resume ${campaignActiveAttempt.courseCode} if you meant to start it, or safely end it and switch to ${course.code}. Only one timer runs at a time.`
     : resumableDiagnostic
       ? diagnosticBelongsToCourse
         ? "Finish your free check before its timer runs out."
-        : `Finish the ${diagnosticCourse?.code ?? "active"} free check before starting another course.`
+        : `Resume the ${diagnosticCourse?.code ?? "active"} free check if you meant to start it, or safely end it and switch to ${course.code}.`
       : !primarySet
-        ? "We will open this course as soon as its reviewed questions are published."
+        ? `We do not have enough usable source material for ${course.code} yet. If you take this course, send your notes, slides, handouts or past questions so we can build the bank.`
         : catalog.access.active
           ? "You will get a fresh mix that prioritises questions you have not seen."
           : !diagnostic
-            ? `You get one free ${diagnosticSet?.diagnosticQuestionCount ?? 10}-question diagnostic across this Exam Sprint campaign. Choose this course to use it here; your score and corrections will be saved.`
+            ? `You get one free ${diagnosticSet?.diagnosticQuestionCount ?? 10}-question diagnostic every day across Exam Sprint. Use today's check here; your score and corrections will be saved.`
             : diagnosticScore !== null
-              ? `Unlock every ready course, including ${reviewedQuestionCount} reviewed questions for ${course.code}, fresh timed mocks and full corrections.`
-              : "Your free diagnostic has been used. Unlock every ready course, fresh timed mocks and full corrections.";
+              ? `Your free ${diagnosticSet?.diagnosticQuestionCount ?? 10}-question check refreshes daily at 00:00 WAT. Unlock now for ${reviewedQuestionCount} reviewed questions for ${course.code}, fresh 40-question mocks and full corrections.`
+              : `Today's free diagnostic is complete. Your ${diagnosticSet?.diagnosticQuestionCount ?? 10}-question allowance refreshes at 00:00 WAT, or unlock now for unrestricted full mocks.`;
   const showMockDetails = Boolean(primarySet && !campaignActiveAttempt && !resumableDiagnostic);
 
   return (
@@ -260,6 +268,24 @@ export default async function ExamCoursePage({ params }: ExamCoursePageProps) {
 
         {campaignActiveAttempt ? <p className="mt-1.5 inline-flex items-center gap-1.5 text-xs font-bold text-amber-700 dark:text-amber-300"><Clock3 className="h-3.5 w-3.5" aria-hidden="true" /><ExamRemainingTime deadlineAt={campaignActiveAttempt.deadlineAt} /></p> : null}
         <div className={campaignActiveAttempt ? "mt-2.5" : "mt-3"}>{primaryAction()}</div>
+        {primarySet && campaignActiveAttempt && !campaignAttemptBelongsToCourse ? (
+          <SwitchExamCourseButton
+            attemptId={campaignActiveAttempt.attemptId}
+            currentCode={campaignActiveAttempt.courseCode}
+            targetCode={course.code}
+            targetHref={returnPath}
+            kind="mock"
+          />
+        ) : primarySet && resumableDiagnostic && !diagnosticBelongsToCourse ? (
+          <SwitchExamCourseButton
+            attemptId={resumableDiagnostic.attemptId}
+            currentCode={diagnosticCourse?.code ?? resumableDiagnostic.courseCode ?? "Diagnostic"}
+            targetCode={course.code}
+            targetHref={returnPath}
+            kind="diagnostic"
+          />
+        ) : null}
+        {!primarySet && !campaignActiveAttempt && !resumableDiagnostic ? <p className="mt-2 text-center text-[10px] leading-4 text-muted-foreground">After we receive usable material, we aim to prepare and review the bank within 24 hours.</p> : null}
         {!catalog.access.active && diagnostic ? <p className="mt-2.5 text-center text-[10px] font-semibold text-muted-foreground">All ready courses · 30 days · unlimited fresh mocks</p> : null}
       </section>
 
@@ -296,7 +322,7 @@ export default async function ExamCoursePage({ params }: ExamCoursePageProps) {
                 ? `You're #${leaderboard.currentEntry.rank} this week · ${leaderboard.currentEntry.bestPercentage}%`
                 : leaderboard?.available && leaderboard.participantCount > 0
                   ? `${leaderboard.participantCount} ${leaderboard.participantCount === 1 ? "student" : "students"} ranked this week`
-                  : "Best of your first 3 full mocks each week"}
+                  : "Best score from your first 3 mock slots each week"}
             </span>
           </span>
           <span className="inline-flex shrink-0 items-center gap-0.5 text-[11px] font-bold text-primary">View <ChevronRight className="h-3.5 w-3.5 transition-transform group-hover:translate-x-0.5" aria-hidden="true" /></span>
@@ -351,18 +377,19 @@ export default async function ExamCoursePage({ params }: ExamCoursePageProps) {
           </div>
         </section>
       ) : (
-        <section className="rounded-2xl border border-dashed border-border bg-card p-8 text-center">
-          <FileQuestion className="mx-auto h-8 w-8 text-muted-foreground" aria-hidden="true" />
-          <h2 className="mt-3 text-xl font-extrabold">Question bank coming soon</h2>
-          <p className="mx-auto mt-2 max-w-lg text-sm text-muted-foreground">This course will open after its questions have been reviewed and published.</p>
-          <Link href="/exam#courses" className="mt-5 inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border border-border px-4 text-sm font-extrabold text-primary no-underline">See ready courses <ArrowRight className="h-4 w-4" aria-hidden="true" /></Link>
+        <section className="rounded-2xl border border-emerald-200/70 bg-emerald-50/40 p-5 text-center dark:border-emerald-900/50 dark:bg-emerald-950/10">
+          <span className="mx-auto grid h-10 w-10 place-items-center rounded-xl bg-emerald-100 text-emerald-700 dark:bg-emerald-950/45 dark:text-emerald-300"><FileQuestion className="h-5 w-5" aria-hidden="true" /></span>
+          <h2 className="mt-3 text-lg font-extrabold">Help make {course.code} ready</h2>
+          <p className="mx-auto mt-1.5 max-w-lg text-xs leading-5 text-muted-foreground">This course is on Exam Sprint, but its question bank needs reliable source material. Send what your class uses and we will review against it before publishing.</p>
+          <a href={materialRequestHref} target="_blank" rel="noopener noreferrer" className="mt-4 inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-emerald-600 px-4 text-sm font-bold text-white no-underline transition hover:bg-emerald-700"><MessageCircle className="h-4 w-4" aria-hidden="true" /> Send material on WhatsApp</a>
+          <div><Link href="/exam#courses" className="mt-3 inline-flex min-h-9 items-center justify-center gap-1.5 text-xs font-bold text-primary no-underline hover:underline">See ready courses <ArrowRight className="h-3.5 w-3.5" aria-hidden="true" /></Link></div>
         </section>
       )}
 
       {!diagnostic && catalog.access.active && diagnosticSet ? (
         <section className="flex items-center gap-3 rounded-2xl border border-border bg-card p-4" aria-labelledby="diagnostic-heading">
           <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-primary/10 text-primary"><BarChart3 className="h-[18px] w-[18px]" aria-hidden="true" /></span>
-          <div className="min-w-0 flex-1"><h2 id="diagnostic-heading" className="text-sm font-extrabold">Want a quicker check?</h2><p className="mt-0.5 text-xs text-muted-foreground">Try a shorter {diagnosticSet.diagnosticQuestionCount}-question diagnostic.</p></div>
+          <div className="min-w-0 flex-1"><h2 id="diagnostic-heading" className="text-sm font-extrabold">Want a quicker check?</h2><p className="mt-0.5 text-xs text-muted-foreground">Today&apos;s {diagnosticSet.diagnosticQuestionCount}-question diagnostic is available.</p></div>
           <StartExamButton setId={diagnosticSet.id} kind="diagnostic" questionCount={diagnosticSet.diagnosticQuestionCount} timeLimitMinutes={diagnosticSet.diagnosticTimeLimitMinutes} className="min-h-10 w-auto rounded-xl bg-secondary px-3 text-foreground shadow-none">
             Start
           </StartExamButton>

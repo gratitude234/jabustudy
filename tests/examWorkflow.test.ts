@@ -1,9 +1,29 @@
 import { describe, expect, it } from "vitest";
 import {
+  EXAM_MISTAKE_GRACE_MS,
+  examMistakeGraceEndsAt,
+  examMistakeGraceIsOpen,
   examTabLeaseBelongsToAnotherTab,
   parseExamTabLease,
   partitionTimedExamAttempts,
 } from "../lib/examSprint/workflow";
+
+describe("Exam Sprint accidental-start grace", () => {
+  const startedAt = "2026-08-07T10:00:00.000Z";
+  const startedMs = new Date(startedAt).getTime();
+
+  it("keeps the mistake window open for exactly the first 60 seconds", () => {
+    expect(EXAM_MISTAKE_GRACE_MS).toBe(60_000);
+    expect(examMistakeGraceEndsAt(startedAt)).toBe(startedMs + 60_000);
+    expect(examMistakeGraceIsOpen(startedAt, startedMs + 59_999)).toBe(true);
+    expect(examMistakeGraceIsOpen(startedAt, startedMs + 60_000)).toBe(false);
+  });
+
+  it("fails closed for an invalid start timestamp", () => {
+    expect(examMistakeGraceEndsAt("not-a-date")).toBe(0);
+    expect(examMistakeGraceIsOpen("not-a-date", startedMs)).toBe(false);
+  });
+});
 
 describe("Exam Sprint timed-attempt workflow", () => {
   const now = new Date("2026-08-04T20:00:00.000Z").getTime();
