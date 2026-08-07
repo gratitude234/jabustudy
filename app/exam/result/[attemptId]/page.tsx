@@ -21,10 +21,12 @@ import { buildExamSprintBillingHref } from "@/lib/examSprint/offer";
 import { getExamResult, getMonthlyExamAccess } from "@/lib/examSprint/server";
 import { getExamPageDeviceSession } from "@/lib/examSprint/deviceSession";
 import { getExamSprintCommunityUrl } from "@/lib/examSprint/community";
+import { examDiagnosticCooldownEndsAt } from "@/lib/examSprint/dailyDiagnostic";
 import { cn, formatDuration, formatNaira } from "@/lib/utils";
 import ExamCorrections from "../../_components/ExamCorrections";
 import CoverageMeter from "../../_components/CoverageMeter";
 import ExamCommunityCard from "../../_components/ExamCommunityCard";
+import ExamDiagnosticCooldown from "../../_components/ExamDiagnosticCooldown";
 
 export const dynamic = "force-dynamic";
 export const metadata: Metadata = {
@@ -117,6 +119,9 @@ export default async function ExamResultPage({ params }: { params: Promise<{ att
     focusTopic: result.kind === "diagnostic" ? topWeakTopic : null,
   });
   const communityHref = getExamSprintCommunityUrl();
+  const diagnosticNextAvailableAt = result.kind === "diagnostic"
+    ? new Date(examDiagnosticCooldownEndsAt(result.startedAt)).toISOString()
+    : null;
 
   return (
     <div className="mx-auto max-w-3xl space-y-5 pb-12">
@@ -236,7 +241,7 @@ export default async function ExamResultPage({ params }: { params: Promise<{ att
                   ? `Start with ${topWeakTopic}, then practise with fresh 40-question mocks across every ready course.`
                   : "Keep building with fresh 40-question mocks across every ready course."}
               </p>
-              <p className="mt-1 text-[11px] font-semibold text-primary">Your free 10-question diagnostic refreshes daily at 00:00 WAT.</p>
+              {diagnosticNextAvailableAt ? <p className="mt-1 text-[11px] font-semibold text-primary">Next 10 free questions: <ExamDiagnosticCooldown nextAvailableAt={diagnosticNextAvailableAt} />.</p> : null}
             </div>
           </div>
 
@@ -249,6 +254,7 @@ export default async function ExamResultPage({ params }: { params: Promise<{ att
           <Link href={billingHref} className="mt-3 inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-xl bg-primary px-4 text-sm font-black text-primary-foreground no-underline shadow-sm">
             <LockKeyhole className="h-4 w-4" aria-hidden="true" /> Unlock all mocks · {formatNaira(pricing.currentPriceNaira)}
           </Link>
+          {pricing.isPromo ? <p className="mt-1.5 text-center text-[10px] font-semibold text-muted-foreground">Promo price {formatNaira(pricing.currentPriceNaira)} · normally {formatNaira(pricing.regularPriceNaira)}</p> : null}
           <Link href="/exam" className="mt-1.5 inline-flex min-h-9 w-full items-center justify-center gap-1.5 text-xs font-bold text-primary no-underline hover:underline">
             Back to Exam Sprint <ArrowRight className="h-3.5 w-3.5" aria-hidden="true" />
           </Link>

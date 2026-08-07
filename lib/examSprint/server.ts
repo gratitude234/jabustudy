@@ -21,7 +21,8 @@ import {
 } from "@/lib/examSprint/coverage";
 import {
   buildExamDiagnosticPreviewPool,
-  examAttemptStartedInDiagnosticDay,
+  examDiagnosticCooldownEndsAt,
+  examDiagnosticCooldownIsActive,
   examDiagnosticDayWindow,
 } from "@/lib/examSprint/dailyDiagnostic";
 import { examMistakeGraceEndsAt, examMistakeGraceIsOpen } from "@/lib/examSprint/workflow";
@@ -429,20 +430,22 @@ export async function getExamCatalog(userId?: string | null) {
       ),
     );
   }
-  // Free diagnostics reset at 00:00 WAT. A diagnostic that started just before
-  // midnight may still be live after the reset, so keep that resumable even
-  // though it does not consume the new day's allowance.
+  // A non-cancelled diagnostic starts a rolling free-check cooldown. Cancelled
+  // accidental starts are deliberately excluded so the mistake grace remains
+  // genuinely forgiving. Attempts are already newest-first.
   const now = Date.now();
-  const diagnosticWindow = examDiagnosticDayWindow(new Date(now));
-  const todayDiagnosticRow = attempts.find((attempt) => attempt.experience === "exam_diagnostic"
-    && attempt.status !== "cancelled"
-    && examAttemptStartedInDiagnosticDay(attempt.started_at, diagnosticWindow)) ?? null;
+  const latestDiagnosticRow = attempts.find((attempt) => attempt.experience === "exam_diagnostic"
+    && attempt.status !== "cancelled") ?? null;
+  const cooldownDiagnosticRow = latestDiagnosticRow
+    && examDiagnosticCooldownIsActive(latestDiagnosticRow.started_at, new Date(now))
+    ? latestDiagnosticRow
+    : null;
   const liveDiagnosticRow = attempts.find((attempt) => {
     if (attempt.experience !== "exam_diagnostic" || attempt.status !== "in_progress") return false;
     const deadlineMs = new Date(String(attempt.deadline_at ?? "")).getTime();
     return Number.isFinite(deadlineMs) && deadlineMs > now;
   }) ?? null;
-  const diagnosticRow = liveDiagnosticRow ?? todayDiagnosticRow;
+  const diagnosticRow = liveDiagnosticRow ?? cooldownDiagnosticRow;
   const diagnostic = diagnosticRow
     ? (() => {
         const deadlineMs = new Date(String(diagnosticRow.deadline_at ?? "")).getTime();
@@ -463,7 +466,10 @@ export async function getExamCatalog(userId?: string | null) {
         };
       })()
     : null;
-  const diagnosticUsed = todayDiagnosticRow !== null;
+  const diagnosticUsed = cooldownDiagnosticRow !== null;
+  const diagnosticNextAvailableAt = cooldownDiagnosticRow
+    ? new Date(examDiagnosticCooldownEndsAt(cooldownDiagnosticRow.started_at)).toISOString()
+    : null;
   const activeAttempts: ExamActiveAttempt[] = attempts.flatMap((attempt) => {
     if (attempt.status !== "in_progress" || attempt.experience !== "exam_mock") return [];
     const deadlineAt = String(attempt.deadline_at ?? "");
@@ -516,6 +522,7 @@ export async function getExamCatalog(userId?: string | null) {
   return {
     access,
     diagnosticUsed,
+    diagnosticNextAvailableAt,
     diagnostic,
     activeAttempts,
     courses: EXAM_COURSES.map((course) => {
@@ -880,6 +887,7 @@ export async function getExamResult(userId: string, attemptId: string) {
   return {
     attemptId: attempt.id,
     kind: attemptKind(attempt.experience),
+    startedAt: attempt.started_at,
     setId: snapshot.setId,
     setTitle: snapshot.setTitle,
     courseCode: snapshot.courseCode,

@@ -21,6 +21,7 @@ import {
 } from "lucide-react";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import {
+  EXAM_DIAGNOSTIC_COOLDOWN_HOURS,
   examCourseDateLabel,
   findExamCourse,
   getExamSprintPricing,
@@ -36,6 +37,7 @@ import CoverageMeter from "../_components/CoverageMeter";
 import ExamRemainingTime from "../_components/ExamRemainingTime";
 import ExamRouteTop from "../_components/ExamRouteTop";
 import SwitchExamCourseButton from "../_components/SwitchExamCourseButton";
+import ExamDiagnosticCooldown from "../_components/ExamDiagnosticCooldown";
 
 export const dynamic = "force-dynamic";
 const ATTEMPT_PREVIEW_COUNT = 3;
@@ -105,6 +107,7 @@ export default async function ExamCoursePage({ params }: ExamCoursePageProps) {
   const recentAttempts = courseState?.recentAttempts ?? [];
   const progress = courseState?.progress ?? null;
   const diagnostic = catalog.diagnostic;
+  const diagnosticNextAvailableAt = catalog.diagnosticNextAvailableAt;
   const resumableDiagnostic = diagnostic?.resumable ? diagnostic : null;
   const diagnosticCourse = resumableDiagnostic?.courseCode ? findExamCourse(resumableDiagnostic.courseCode) : null;
   const diagnosticBelongsToCourse = diagnostic?.courseCode
@@ -133,6 +136,13 @@ export default async function ExamCoursePage({ params }: ExamCoursePageProps) {
     courseCode: course.code,
     courseTitle: course.title,
   });
+  const showDiagnosticCooldown = Boolean(
+    !catalog.access.active
+    && diagnostic
+    && diagnosticNextAvailableAt
+    && !resumableDiagnostic
+    && !campaignActiveAttempt,
+  );
 
   const primaryAction = () => {
     if (campaignActiveAttempt) {
@@ -181,10 +191,10 @@ export default async function ExamCoursePage({ params }: ExamCoursePageProps) {
         : catalog.access.active
           ? mockAttempts > 0 ? "Build on your last attempt" : "Take your first full mock"
           : !diagnostic
-            ? `Take today's free ${diagnosticSet?.diagnosticQuestionCount ?? 10}-question check`
+            ? `Take a free ${diagnosticSet?.diagnosticQuestionCount ?? 10}-question check`
             : diagnosticScore !== null
               ? `Build beyond your ${diagnosticScore}% diagnostic`
-              : "Unlock the complete practice bank";
+              : "Your next free check is counting down";
   const actionDetail = campaignActiveAttempt
     ? campaignAttemptBelongsToCourse
       ? "Return to your saved answers before time runs out."
@@ -198,10 +208,10 @@ export default async function ExamCoursePage({ params }: ExamCoursePageProps) {
         : catalog.access.active
           ? "You will get a fresh mix that prioritises questions you have not seen."
           : !diagnostic
-            ? `You get one free ${diagnosticSet?.diagnosticQuestionCount ?? 10}-question diagnostic every day across Exam Sprint. Use today's check here; your score and corrections will be saved.`
+            ? `You get one free ${diagnosticSet?.diagnosticQuestionCount ?? 10}-question diagnostic every ${EXAM_DIAGNOSTIC_COOLDOWN_HOURS} hours across Exam Sprint. Start it here; your score and corrections will be saved.`
             : diagnosticScore !== null
-              ? `Your free ${diagnosticSet?.diagnosticQuestionCount ?? 10}-question check refreshes daily at 00:00 WAT. Unlock now for ${reviewedQuestionCount} reviewed questions for ${course.code}, fresh 40-question mocks and full corrections.`
-              : `Today's free diagnostic is complete. Your ${diagnosticSet?.diagnosticQuestionCount ?? 10}-question allowance refreshes at 00:00 WAT, or unlock now for unrestricted full mocks.`;
+              ? `Your next free check unlocks ${EXAM_DIAGNOSTIC_COOLDOWN_HOURS} hours after the last one started. You can wait, or keep practising now with ${reviewedQuestionCount} reviewed questions for ${course.code}, fresh 40-question mocks and full corrections.`
+              : `Your next ${diagnosticSet?.diagnosticQuestionCount ?? 10} free questions unlock ${EXAM_DIAGNOSTIC_COOLDOWN_HOURS} hours after your previous check started. You can wait, or unlock full mocks now.`;
   const showMockDetails = Boolean(primarySet && !campaignActiveAttempt && !resumableDiagnostic);
 
   return (
@@ -267,6 +277,13 @@ export default async function ExamCoursePage({ params }: ExamCoursePageProps) {
         ) : null}
 
         {campaignActiveAttempt ? <p className="mt-1.5 inline-flex items-center gap-1.5 text-xs font-bold text-amber-700 dark:text-amber-300"><Clock3 className="h-3.5 w-3.5" aria-hidden="true" /><ExamRemainingTime deadlineAt={campaignActiveAttempt.deadlineAt} /></p> : null}
+        {showDiagnosticCooldown && diagnosticNextAvailableAt ? (
+          <div className="mt-3 flex flex-wrap items-center gap-x-1.5 gap-y-1 rounded-xl bg-secondary/55 px-3 py-2 text-[11px] font-semibold text-muted-foreground" role="status">
+            <Clock3 className="h-3.5 w-3.5 shrink-0 text-primary" aria-hidden="true" />
+            <span>Next 10 free questions in <strong className="font-extrabold text-foreground"><ExamDiagnosticCooldown nextAvailableAt={diagnosticNextAvailableAt} refreshOnReady /></strong>.</span>
+            <span className="text-primary">{pricing.isPromo ? `Unlock now · ${formatNaira(pricing.currentPriceNaira)} promo (normally ${formatNaira(pricing.regularPriceNaira)}).` : `Unlock now · ${formatNaira(pricing.currentPriceNaira)}.`}</span>
+          </div>
+        ) : null}
         <div className={campaignActiveAttempt ? "mt-2.5" : "mt-3"}>{primaryAction()}</div>
         {primarySet && campaignActiveAttempt && !campaignAttemptBelongsToCourse ? (
           <SwitchExamCourseButton
@@ -389,7 +406,7 @@ export default async function ExamCoursePage({ params }: ExamCoursePageProps) {
       {!diagnostic && catalog.access.active && diagnosticSet ? (
         <section className="flex items-center gap-3 rounded-2xl border border-border bg-card p-4" aria-labelledby="diagnostic-heading">
           <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-primary/10 text-primary"><BarChart3 className="h-[18px] w-[18px]" aria-hidden="true" /></span>
-          <div className="min-w-0 flex-1"><h2 id="diagnostic-heading" className="text-sm font-extrabold">Want a quicker check?</h2><p className="mt-0.5 text-xs text-muted-foreground">Today&apos;s {diagnosticSet.diagnosticQuestionCount}-question diagnostic is available.</p></div>
+          <div className="min-w-0 flex-1"><h2 id="diagnostic-heading" className="text-sm font-extrabold">Want a quicker check?</h2><p className="mt-0.5 text-xs text-muted-foreground">Your {diagnosticSet.diagnosticQuestionCount}-question free diagnostic is ready.</p></div>
           <StartExamButton setId={diagnosticSet.id} kind="diagnostic" questionCount={diagnosticSet.diagnosticQuestionCount} timeLimitMinutes={diagnosticSet.diagnosticTimeLimitMinutes} className="min-h-10 w-auto rounded-xl bg-secondary px-3 text-foreground shadow-none">
             Start
           </StartExamButton>

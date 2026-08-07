@@ -460,7 +460,7 @@ export default function ExamCatalogClient({
               {activeSessionKind === "mock" ? (
                 <p>If you just started and have not interacted, Exam Sprint will treat this as your one daily mistake change. Otherwise the current mock ends early: <strong className="font-bold text-foreground">no 0% score</strong>, but it uses a weekly leaderboard slot.</p>
               ) : (
-                <p>If you just started and have not interacted, Exam Sprint will treat this as your one daily mistake change. Otherwise the current diagnostic ends early and <strong className="font-bold text-foreground">today&apos;s free diagnostic is used</strong>.</p>
+                <p>If you just started and have not interacted, Exam Sprint will treat this as your one daily mistake change. Otherwise the current diagnostic ends early and <strong className="font-bold text-foreground">its 5-hour free-check cooldown continues</strong>.</p>
               )}
             </div>
 

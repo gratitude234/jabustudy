@@ -4,6 +4,7 @@ import { ArrowDown, CheckCircle2, ChevronDown, Clock3, LockKeyhole, ShieldCheck,
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import {
   EXAM_BANK_MINIMUM,
+  EXAM_DIAGNOSTIC_COOLDOWN_HOURS,
   EXAM_DIAGNOSTIC_QUESTION_COUNT,
   EXAM_MOCK_QUESTION_COUNT,
   examCourseDateLabel,
@@ -93,7 +94,7 @@ export default async function ExamSprintPage() {
             </span>
           ) : (
             <Link href={passHref} className="inline-flex min-h-8 items-center rounded-lg bg-primary/10 px-2.5 text-[10px] font-bold text-primary no-underline">
-              {pricing.isPromo ? `Launch · ${formatNaira(pricing.currentPriceNaira)} until ${promoEndLabel}` : `30-day pass · ${formatNaira(pricing.currentPriceNaira)}`}
+              {pricing.isPromo ? `Promo · ${formatNaira(pricing.currentPriceNaira)} · ends ${promoEndLabel}` : `30-day pass · ${formatNaira(pricing.currentPriceNaira)}`}
             </Link>
           )}
         </div>
@@ -133,7 +134,7 @@ export default async function ExamSprintPage() {
           </div>
           <div className="py-2.5 pl-2.5 sm:py-3 sm:pl-4">
             <p className="text-sm font-extrabold tabular-nums sm:text-base">{diagnosticQuestions}</p>
-            <p className="mt-0.5 text-[10px] font-medium leading-4 text-muted-foreground">Free questions / day</p>
+            <p className="mt-0.5 text-[10px] font-medium leading-4 text-muted-foreground">Free questions / {EXAM_DIAGNOSTIC_COOLDOWN_HOURS}h</p>
           </div>
         </div>
       </section>
@@ -153,7 +154,7 @@ export default async function ExamSprintPage() {
         </summary>
         <div className="border-t border-border">
           {[
-            { icon: Target, title: "A free check every day", body: `Answer ${diagnosticQuestions} questions from one Ready course each day. Your allowance resets at 00:00 WAT and does not stack.` },
+            { icon: Target, title: `A free check every ${EXAM_DIAGNOSTIC_COOLDOWN_HOURS} hours`, body: `Answer ${diagnosticQuestions} questions from one Ready course, then your next free check unlocks ${EXAM_DIAGNOSTIC_COOLDOWN_HOURS} hours after that attempt starts. Free checks do not stack.` },
             { icon: Clock3, title: "Real exam rhythm", body: "One question at a time, a fixed timer and automatic submission." },
             { icon: ShieldCheck, title: "Smarter review", body: `See corrections and weak topics, then practise from the reviewed ${bankSize}+ question pool.` },
           ].map(({ icon: Icon, title, body }, index) => (

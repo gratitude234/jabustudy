@@ -132,7 +132,7 @@ export default function StartExamButton({
   const descriptionId = `exam-instructions-description-${setId}`;
   const reviewDescription = kind === "mock"
     ? "Check the format and begin when you are settled."
-    : "You get one free 10-question diagnostic each day across Exam Sprint. Starting now uses today's check for this course; it resets at 00:00 WAT.";
+    : "You get one free 10-question diagnostic every 5 hours across Exam Sprint. Starting now begins that 5-hour interval; cancelled accidental starts do not use it.";
 
   return (
     <div>

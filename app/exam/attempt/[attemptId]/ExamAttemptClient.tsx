@@ -781,7 +781,7 @@ export default function ExamAttemptClient() {
               {mistakeGraceOpen
                 ? "You have not interacted with a question yet. Change course now and this accidental start will not affect your score, progress or leaderboard."
                 : attempt?.kind === "diagnostic"
-                  ? "You can switch courses, but this will end the diagnostic and use today's free check. It will not create a 0% score."
+                  ? "You can switch courses. If the accidental-start grace no longer applies, this ends the diagnostic and its 5-hour free-check cooldown continues. It will not create a 0% score."
                   : "You can switch courses without creating a 0% score. This mock will be marked ended early and cannot be resumed."}
             </p>
             {!mistakeGraceOpen && attempt?.kind === "mock" ? <p className="mt-3 rounded-xl bg-secondary/60 px-3 py-2.5 text-xs font-semibold leading-5 text-muted-foreground">For leaderboard fairness, ending a progressed mock uses one of this week&apos;s first 3 leaderboard slots. Your best score is untouched.</p> : null}

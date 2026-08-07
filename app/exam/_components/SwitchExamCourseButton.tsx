@@ -93,7 +93,7 @@ export default function SwitchExamCourseButton({
               {kind === "mock" ? (
                 <p>An untouched attempt can use your one daily mistake change. Otherwise {currentCode} ends early with <strong className="font-bold text-foreground">no 0% score</strong>, but it uses one weekly leaderboard slot.</p>
               ) : (
-                <p>An untouched attempt can use your one daily mistake change. Otherwise the {currentCode} diagnostic ends early and <strong className="font-bold text-foreground">today&apos;s free diagnostic is used</strong>.</p>
+                <p>An untouched attempt can use your one daily mistake change. Otherwise the {currentCode} diagnostic ends early and <strong className="font-bold text-foreground">its 5-hour free-check cooldown continues</strong>.</p>
               )}
             </div>
 

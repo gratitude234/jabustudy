@@ -11,7 +11,7 @@ describe("Exam Sprint course-switching migration", () => {
     expect(migration).toContain("'manual', 'timeup', 'mistake', 'switched'");
   });
 
-  it("does not let a grace-cancelled diagnostic consume the daily allowance", () => {
+  it("kept grace-cancelled diagnostics out of the prior allowance index", () => {
     expect(migration).toContain("experience = 'exam_diagnostic' and status <> 'cancelled'");
   });
 

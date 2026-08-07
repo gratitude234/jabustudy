@@ -637,7 +637,7 @@ export default function StudyBillingPage() {
             </p>
             {examPricing?.isPromo && promoEndDate ? (
               <p className="mt-1.5 text-[11px] font-bold text-primary">
-                Launch price through {promoEndDate}. Regular price {money(examPricing.regularPriceNaira)} afterwards.
+                Promo price through {promoEndDate}. Regular price {money(examPricing.regularPriceNaira)} afterwards.
               </p>
             ) : null}
             {examOfferInsight ? (
@@ -829,7 +829,7 @@ export default function StudyBillingPage() {
                       <>
                         <div className="flex items-start justify-between gap-3">
                           <div className="min-w-0">
-                            <p className="text-[10px] font-black uppercase tracking-[0.16em] text-primary">{examPricing?.isPromo ? "Launch price" : "Your Exam Sprint pass"}</p>
+                            <p className="text-[10px] font-black uppercase tracking-[0.16em] text-primary">{examPricing?.isPromo ? "Promo price" : "Your Exam Sprint pass"}</p>
                             <h3 className="mt-1 font-extrabold">{examCourse ? `${examCourse.code} + all ready courses` : readyCourseCount > 0 ? readyCourseLabel : "Every ready course"}</h3>
                           </div>
                           <div className="shrink-0 text-right">

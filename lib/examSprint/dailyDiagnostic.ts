@@ -1,7 +1,11 @@
-import { EXAM_DIAGNOSTIC_PREVIEW_POOL_SIZE } from "./config";
+import {
+  EXAM_DIAGNOSTIC_COOLDOWN_HOURS,
+  EXAM_DIAGNOSTIC_PREVIEW_POOL_SIZE,
+} from "./config";
 
 const WAT_OFFSET_MS = 60 * 60 * 1_000;
 const DAY_MS = 24 * 60 * 60 * 1_000;
+export const EXAM_DIAGNOSTIC_COOLDOWN_MS = EXAM_DIAGNOSTIC_COOLDOWN_HOURS * 60 * 60 * 1_000;
 
 export type ExamDiagnosticDayWindow = {
   key: string;
@@ -10,8 +14,9 @@ export type ExamDiagnosticDayWindow = {
 };
 
 /**
- * Exam Sprint resets daily diagnostics at 00:00 WAT (UTC+1), independent of
- * the server's timezone.
+ * WAT-day helper retained for policies that are intentionally calendar-day
+ * based (for example, the once-per-day accidental-start grace). Diagnostic
+ * availability itself uses the rolling cooldown helpers below.
  */
 export function examDiagnosticDayWindow(at: Date = new Date()): ExamDiagnosticDayWindow {
   const now = at.getTime();
@@ -38,6 +43,18 @@ export function examAttemptStartedInDiagnosticDay(
     && timestamp < new Date(window.endIso).getTime();
 }
 
+export function examDiagnosticCooldownEndsAt(startedAt: unknown) {
+  if (typeof startedAt !== "string" || !startedAt) return 0;
+  const startedAtMs = new Date(startedAt).getTime();
+  return Number.isFinite(startedAtMs) ? startedAtMs + EXAM_DIAGNOSTIC_COOLDOWN_MS : 0;
+}
+
+export function examDiagnosticCooldownIsActive(startedAt: unknown, at: Date = new Date()) {
+  const cooldownEndsAt = examDiagnosticCooldownEndsAt(startedAt);
+  const now = at.getTime();
+  return Number.isFinite(now) && cooldownEndsAt > now;
+}
+
 function stableQuestionHash(value: string) {
   let hash = 2_166_136_261;
   for (let index = 0; index < value.length; index += 1) {
@@ -49,7 +66,7 @@ function stableQuestionHash(value: string) {
 
 /**
  * Free diagnostics intentionally draw from a stable subset of each reviewed
- * bank. This keeps the daily free habit useful without slowly exposing the
+ * bank. This keeps repeat free checks useful without slowly exposing the
  * complete paid question bank.
  */
 export function buildExamDiagnosticPreviewPool<T extends { id: string }>(

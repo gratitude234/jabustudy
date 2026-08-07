@@ -56,7 +56,7 @@ describe("Exam Sprint course catalog", () => {
     expect(examCourseBankNeedsMaterial(findExamCourse("CHM 101"))).toBe(false);
   });
 
-  it("runs the launch price through 13 August then returns to the regular price", () => {
+  it("runs the promo price through 13 August then returns to the regular price", () => {
     const duringPromo = getExamSprintPricing(new Date("2026-08-10T12:00:00+01:00"));
     const afterPromo = getExamSprintPricing(new Date("2026-08-14T00:00:00+01:00"));
 
@@ -64,6 +64,6 @@ describe("Exam Sprint course catalog", () => {
     expect(duringPromo.currentPriceNaira).toBe(1_000);
     expect(afterPromo.isPromo).toBe(false);
     expect(afterPromo.currentPriceNaira).toBe(EXAM_SPRINT_REGULAR_PRICE_NAIRA);
-    expect(EXAM_SPRINT_REGULAR_PRICE_NAIRA).toBe(1_300);
+    expect(EXAM_SPRINT_REGULAR_PRICE_NAIRA).toBe(1_500);
   });
 });

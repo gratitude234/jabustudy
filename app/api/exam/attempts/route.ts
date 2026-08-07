@@ -16,7 +16,10 @@ import {
 } from "@/lib/examSprint/server";
 import { partitionTimedExamAttempts } from "@/lib/examSprint/workflow";
 import { requireExamDeviceSession } from "@/lib/examSprint/deviceSession";
-import { examDiagnosticDayWindow } from "@/lib/examSprint/dailyDiagnostic";
+import {
+  examDiagnosticCooldownEndsAt,
+  examDiagnosticCooldownIsActive,
+} from "@/lib/examSprint/dailyDiagnostic";
 
 function jsonError(error: unknown) {
   const value = error as { message?: string; status?: number; code?: string };
@@ -90,7 +93,6 @@ export async function POST(req: NextRequest) {
     }
 
     if (kind === "diagnostic") {
-      const diagnosticDay = examDiagnosticDayWindow();
       const { data: used, error: usedError } = await adminSupabase
         .from("study_practice_attempts")
         .select("id,user_id,set_id,status,experience,campaign_key,started_at,deadline_at,submitted_at,submission_reason,delivery_snapshot,score,total_questions,time_spent_seconds")
@@ -98,13 +100,11 @@ export async function POST(req: NextRequest) {
         .eq("campaign_key", EXAM_CAMPAIGN_KEY)
         .eq("experience", "exam_diagnostic")
         .neq("status", "cancelled")
-        .gte("started_at", diagnosticDay.startIso)
-        .lt("started_at", diagnosticDay.endIso)
         .order("started_at", { ascending: false })
         .limit(1)
         .maybeSingle();
       if (usedError) throw examHttpError(usedError.message, 500, "ATTEMPT_LOAD_FAILED");
-      if (used) {
+      if (used && examDiagnosticCooldownIsActive(used.started_at)) {
         const previous = used as ExamAttemptRow;
         if (previous.status === "in_progress" && !attemptExpired(previous) && previous.set_id === setId) {
           return NextResponse.json(startPayload(previous, true, "same_set"));
@@ -112,10 +112,16 @@ export async function POST(req: NextRequest) {
         if (previous.status === "in_progress" && attemptExpired(previous)) {
           await finalizeExamAttempt(previous, "timeup");
         }
+        const nextAvailableAt = new Date(examDiagnosticCooldownEndsAt(previous.started_at));
+        const nextAvailableLabel = new Intl.DateTimeFormat("en-NG", {
+          hour: "numeric",
+          minute: "2-digit",
+          timeZone: "Africa/Lagos",
+        }).format(nextAvailableAt);
         throw examHttpError(
-          "Today's free diagnostic is complete. Another 10 questions unlock at 00:00 WAT, or unlock Exam Sprint to keep practising now.",
+          `Your next free 10-question diagnostic unlocks at ${nextAvailableLabel} WAT. Free checks return 5 hours after the previous one starts, or you can unlock Exam Sprint now.`,
           409,
-          "DIAGNOSTIC_DAILY_LIMIT_REACHED",
+          "DIAGNOSTIC_COOLDOWN_ACTIVE",
         );
       }
     } else {
@@ -185,9 +191,9 @@ export async function POST(req: NextRequest) {
         }
         if (kind === "diagnostic") {
           throw examHttpError(
-            "Today's free diagnostic is complete. Another 10 questions unlock at 00:00 WAT, or unlock Exam Sprint to keep practising now.",
+            "Your next free diagnostic is not available yet. Refresh in a moment to check the 5-hour cooldown, or unlock Exam Sprint to keep practising now.",
             409,
-            "DIAGNOSTIC_DAILY_LIMIT_REACHED",
+            "DIAGNOSTIC_COOLDOWN_ACTIVE",
           );
         }
       }

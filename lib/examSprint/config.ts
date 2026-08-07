@@ -1,6 +1,6 @@
 export const EXAM_CAMPAIGN_KEY = "supplementary-2026";
 export const EXAM_SPRINT_NAME = "Exam Sprint";
-export const EXAM_SPRINT_REGULAR_PRICE_NAIRA = 1_300;
+export const EXAM_SPRINT_REGULAR_PRICE_NAIRA = 1_500;
 export const EXAM_SPRINT_PROMO_PRICE_NAIRA = 1_000;
 export const EXAM_SPRINT_PROMO_START_AT = "2026-08-06T00:00:00+01:00";
 export const EXAM_SPRINT_PROMO_END_AT = "2026-08-13T23:59:59+01:00";
@@ -10,6 +10,7 @@ export const EXAM_MOCK_DURATION_MINUTES = 40;
 export const EXAM_DIAGNOSTIC_QUESTION_COUNT = 10;
 export const EXAM_DIAGNOSTIC_DURATION_MINUTES = 10;
 export const EXAM_DIAGNOSTIC_PREVIEW_POOL_SIZE = 30;
+export const EXAM_DIAGNOSTIC_COOLDOWN_HOURS = 5;
 
 export type ExamCourse = {
   code: string;
@@ -34,7 +35,7 @@ export type ExamSprintPricing = {
 };
 
 /**
- * One source of truth for the Exam Sprint launch price. The timestamps include
+ * One source of truth for the Exam Sprint promotional price. The timestamps include
  * the WAT offset so the offer switches without relying on the server timezone.
  */
 export function getExamSprintPricing(at: Date = new Date()): ExamSprintPricing {
