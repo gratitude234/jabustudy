@@ -778,7 +778,18 @@ export async function endExamAttemptForSwitch(
     .eq("status", "in_progress")
     .select("id,user_id,set_id,status,experience,campaign_key,started_at,deadline_at,submitted_at,submission_reason,delivery_snapshot,score,total_questions,time_spent_seconds")
     .maybeSingle();
-  if (error) throw examHttpError(error.message, 500, "ATTEMPT_SWITCH_FAILED");
+  if (error) {
+    const schemaConstraintIsStale = error.code === "23514"
+      && error.message.includes("study_practice_attempts_submission_reason_check");
+    if (schemaConstraintIsStale) {
+      throw examHttpError(
+        "Course switching needs the latest Exam Sprint database update. Keep answering for now and try again after the update is deployed.",
+        503,
+        "EXAM_SCHEMA_UPDATE_REQUIRED",
+      );
+    }
+    throw examHttpError(error.message, 500, "ATTEMPT_SWITCH_FAILED");
+  }
   if (!data) {
     const latest = await getOwnedExamAttempt(userId, attempt.id);
     if (latest.status === "cancelled") return { outcome: "mistake_cancelled" as const, attempt: latest };

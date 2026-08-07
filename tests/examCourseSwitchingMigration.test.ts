@@ -19,4 +19,9 @@ describe("Exam Sprint course-switching migration", () => {
     expect(migration).toContain("a.status in ('submitted', 'abandoned')");
     expect(migration).toContain("where s.status = 'submitted'");
   });
+
+  it("does not expose position as an unquoted SQL output parameter", () => {
+    expect(migration).toContain('"position" bigint');
+    expect(migration).toContain('leaderboard_position as "position"');
+  });
 });

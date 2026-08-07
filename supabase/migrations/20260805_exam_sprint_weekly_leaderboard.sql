@@ -20,7 +20,7 @@ create or replace function public.get_exam_sprint_weekly_leaderboard(
 )
 returns table (
   user_id uuid,
-  position bigint,
+  "position" bigint,
   best_percentage integer,
   coverage bigint,
   qualifying_attempts bigint,
@@ -95,7 +95,7 @@ as $$
       metrics.user_id,
       rank() over (
         order by metrics.best_percentage desc, metrics.coverage desc
-      ) as position,
+      ) as leaderboard_position,
       metrics.best_percentage,
       metrics.coverage,
       metrics.qualifying_attempts
@@ -109,15 +109,15 @@ as $$
   )
   select
     ranked.user_id,
-    ranked.position,
+    ranked.leaderboard_position as "position",
     ranked.best_percentage,
     ranked.coverage,
     ranked.qualifying_attempts,
     ranked.participant_count
   from ranked_with_total ranked
-  where ranked.position <= 10
+  where ranked.leaderboard_position <= 10
      or (p_user_id is not null and ranked.user_id = p_user_id)
-  order by ranked.position asc, ranked.user_id asc;
+  order by ranked.leaderboard_position asc, ranked.user_id asc;
 $$;
 
 revoke all on function public.get_exam_sprint_weekly_leaderboard(
