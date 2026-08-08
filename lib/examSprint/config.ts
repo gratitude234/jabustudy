@@ -1,12 +1,9 @@
 export const EXAM_CAMPAIGN_KEY = "supplementary-2026";
 export const EXAM_SPRINT_NAME = "Exam Sprint";
 export const EXAM_SPRINT_WEEKLY_PRICE_NAIRA = 400;
-export const EXAM_SPRINT_REGULAR_PRICE_NAIRA = 1_500;
-export const EXAM_SPRINT_PROMO_PRICE_NAIRA = 1_000;
+export const EXAM_SPRINT_MONTHLY_PRICE_NAIRA = 1_500;
 export const EXAM_SPRINT_WEEKLY_DAYS = 7;
 export const EXAM_SPRINT_MONTHLY_DAYS = 30;
-export const EXAM_SPRINT_PROMO_START_AT = "2026-08-06T00:00:00+01:00";
-export const EXAM_SPRINT_PROMO_END_AT = "2026-08-13T23:59:59+01:00";
 export const EXAM_BANK_MINIMUM = 60;
 export const EXAM_MOCK_QUESTION_COUNT = 40;
 export const EXAM_MOCK_DURATION_MINUTES = 40;
@@ -29,41 +26,19 @@ export type ExamCourse = {
 };
 
 export type ExamSprintPricing = {
-  currentPriceNaira: number;
-  regularPriceNaira: number;
   weeklyPriceNaira: number;
-  promoPriceNaira: number;
+  monthlyPriceNaira: number;
   weeklyDays: number;
   monthlyDays: number;
-  weeklyAvailable: boolean;
-  promoStartsAt: string;
-  promoEndsAt: string;
-  isPromo: boolean;
 };
 
-/**
- * One source of truth for the Exam Sprint promotional price. The timestamps include
- * the WAT offset so the offer switches without relying on the server timezone.
- */
-export function getExamSprintPricing(at: Date = new Date()): ExamSprintPricing {
-  const now = at.getTime();
-  const promoStart = new Date(EXAM_SPRINT_PROMO_START_AT).getTime();
-  const promoEnd = new Date(EXAM_SPRINT_PROMO_END_AT).getTime();
-  const isPromo = Number.isFinite(now) && now >= promoStart && now <= promoEnd;
-
+/** One source of truth for the standard Exam Sprint passes. */
+export function getExamSprintPricing(): ExamSprintPricing {
   return {
-    currentPriceNaira: isPromo ? EXAM_SPRINT_PROMO_PRICE_NAIRA : EXAM_SPRINT_REGULAR_PRICE_NAIRA,
-    regularPriceNaira: EXAM_SPRINT_REGULAR_PRICE_NAIRA,
     weeklyPriceNaira: EXAM_SPRINT_WEEKLY_PRICE_NAIRA,
-    promoPriceNaira: EXAM_SPRINT_PROMO_PRICE_NAIRA,
+    monthlyPriceNaira: EXAM_SPRINT_MONTHLY_PRICE_NAIRA,
     weeklyDays: EXAM_SPRINT_WEEKLY_DAYS,
     monthlyDays: EXAM_SPRINT_MONTHLY_DAYS,
-    // Keep the live 30-day promo simple. The weekly option becomes a normal
-    // post-promo choice rather than competing with a better temporary offer.
-    weeklyAvailable: !isPromo,
-    promoStartsAt: EXAM_SPRINT_PROMO_START_AT,
-    promoEndsAt: EXAM_SPRINT_PROMO_END_AT,
-    isPromo,
   };
 }
 

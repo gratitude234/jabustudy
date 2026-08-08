@@ -131,7 +131,6 @@ export default async function ExamCoursePage({ params }: ExamCoursePageProps) {
     : null;
   const structuredData = examCourseStructuredData(course);
   const pricing = getExamSprintPricing();
-  const unlockPriceNaira = pricing.isPromo ? pricing.currentPriceNaira : pricing.weeklyPriceNaira;
   const materialRequestHref = buildExamMaterialRequestWhatsAppUrl({
     phone: getExamMaterialRequestPhone(),
     courseCode: course.code,
@@ -180,7 +179,7 @@ export default async function ExamCoursePage({ params }: ExamCoursePageProps) {
     if (!diagnostic && !user) {
       return <Link href={`/login?next=${encodeURIComponent(returnPath)}`} className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-xl bg-primary px-4 text-sm font-bold text-primary-foreground no-underline">Sign in to save your free check <ArrowRight className="h-4 w-4" aria-hidden="true" /></Link>;
     }
-    return <Link href={billingHref} className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-xl bg-primary px-4 text-sm font-bold text-primary-foreground no-underline"><LockKeyhole className="h-4 w-4" aria-hidden="true" /> Unlock Exam Sprint · {pricing.isPromo ? formatNaira(unlockPriceNaira) : `from ${formatNaira(unlockPriceNaira)}`}</Link>;
+    return <Link href={billingHref} className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-xl bg-primary px-4 text-sm font-bold text-primary-foreground no-underline"><LockKeyhole className="h-4 w-4" aria-hidden="true" /> Unlock Exam Sprint · from {formatNaira(pricing.weeklyPriceNaira)}</Link>;
   };
 
   const actionLabel = campaignActiveAttempt
@@ -282,7 +281,7 @@ export default async function ExamCoursePage({ params }: ExamCoursePageProps) {
           <div className="mt-3 flex flex-wrap items-center gap-x-1.5 gap-y-1 rounded-xl bg-secondary/55 px-3 py-2 text-[11px] font-semibold text-muted-foreground" role="status">
             <Clock3 className="h-3.5 w-3.5 shrink-0 text-primary" aria-hidden="true" />
             <span>Next 10 free questions in <strong className="font-extrabold text-foreground"><ExamDiagnosticCooldown nextAvailableAt={diagnosticNextAvailableAt} refreshOnReady /></strong>.</span>
-            <span className="text-primary">{pricing.isPromo ? `Unlock now · ${formatNaira(pricing.currentPriceNaira)} promo (normally ${formatNaira(pricing.regularPriceNaira)}).` : `Passes from ${formatNaira(pricing.weeklyPriceNaira)}.`}</span>
+            <span className="text-primary">Passes from {formatNaira(pricing.weeklyPriceNaira)}.</span>
           </div>
         ) : null}
         <div className={campaignActiveAttempt ? "mt-2.5" : "mt-3"}>{primaryAction()}</div>

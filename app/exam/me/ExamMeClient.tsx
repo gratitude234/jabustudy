@@ -57,9 +57,7 @@ export default function ExamMeClient({
   email,
   passActive,
   passActiveUntil,
-  passPriceNaira,
   passWeeklyPriceNaira,
-  passIsPromo,
   returnTo,
   communityHref,
 }: {
@@ -67,9 +65,7 @@ export default function ExamMeClient({
   email: string;
   passActive: boolean;
   passActiveUntil: string | null;
-  passPriceNaira: number;
   passWeeklyPriceNaira: number;
-  passIsPromo: boolean;
   returnTo: string;
   communityHref: string | null;
 }) {
@@ -199,9 +195,7 @@ export default function ExamMeClient({
             </p>
             {!passActive ? (
               <Link href="/study/billing?offer=exam-sprint&returnTo=/exam/me" className="mt-2 inline-flex min-h-8 items-center gap-1 text-xs font-bold text-primary no-underline hover:underline">
-                {passIsPromo
-                  ? `Unlock 30 days · ${formatNaira(passPriceNaira)}`
-                  : `View passes · from ${formatNaira(passWeeklyPriceNaira)}`} <ChevronRight className="h-3.5 w-3.5" aria-hidden="true" />
+                View passes · from {formatNaira(passWeeklyPriceNaira)} <ChevronRight className="h-3.5 w-3.5" aria-hidden="true" />
               </Link>
             ) : null}
           </div>

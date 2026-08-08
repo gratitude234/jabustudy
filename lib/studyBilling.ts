@@ -14,7 +14,6 @@ import {
   EXAM_SPRINT_WEEKLY_DAYS,
   getExamSprintPricing,
 } from "@/lib/examSprint/config";
-import { projectedExamAccessUntil } from "@/lib/examSprint/offer";
 import { getExamOfferSummary } from "@/lib/examSprint/server";
 import { verifyPaystackTransaction } from "@/lib/paystack";
 import {
@@ -154,24 +153,12 @@ function isExamSprintCheckout(plan: BillingPlan, returnPath: string) {
     && (returnPath === EXAM_SPRINT_HOME || returnPath.startsWith(`${EXAM_SPRINT_HOME}/`));
 }
 
-function assertPlanAvailable(plan: BillingPlan, returnPath: string) {
+function assertPlanAvailable(plan: BillingPlan) {
   if (!isBillingPlanAllowedInSystemMode(plan.key, isExamSprintOnlyMode())) {
     throw httpError(
       "Only Exam Sprint passes are available during the examination period.",
       423,
       "SYSTEM_MODE_RESTRICTED"
-    );
-  }
-
-  if (
-    isExamSprintCheckout(plan, returnPath)
-    && plan.key === EXAM_SPRINT_WEEKLY_PLAN_KEY
-    && !getExamSprintPricing().weeklyAvailable
-  ) {
-    throw httpError(
-      "The 7-day pass becomes available after the current 30-day promotion ends.",
-      409,
-      "EXAM_WEEKLY_PASS_NOT_AVAILABLE"
     );
   }
 }
@@ -190,7 +177,7 @@ function planForCheckout(plan: BillingPlan, returnPath: string): BillingPlan {
   if (plan.key === EXAM_SPRINT_WEEKLY_PLAN_KEY) {
     return { ...plan, amountNaira: pricing.weeklyPriceNaira, plusDays: EXAM_SPRINT_WEEKLY_DAYS };
   }
-  return { ...plan, amountNaira: pricing.currentPriceNaira, plusDays: EXAM_SPRINT_MONTHLY_DAYS };
+  return { ...plan, amountNaira: pricing.monthlyPriceNaira, plusDays: EXAM_SPRINT_MONTHLY_DAYS };
 }
 
 function assertPromisedCheckoutPrice(plan: BillingPlan, returnPath: string, expectedAmountNaira?: unknown) {
@@ -428,7 +415,7 @@ export async function recordFreeAiTrialGeneration(userId: string, metadata: Reco
 export async function createBillingOrder(userId: string, planKey: unknown, returnPath?: unknown, expectedAmountNaira?: unknown) {
   const basePlan = getBillingPlan(planKey);
   const safeReturnPath = billingReturnPathForCurrentMode(returnPath);
-  assertPlanAvailable(basePlan, safeReturnPath);
+  assertPlanAvailable(basePlan);
   const plan = planForCheckout(basePlan, safeReturnPath);
   assertPromisedCheckoutPrice(plan, safeReturnPath, expectedAmountNaira);
   const reference = await uniqueReference();
@@ -719,10 +706,6 @@ export async function getBillingSnapshot(userId: string, options?: { includeExam
     examOffer: examOffer ? {
       ...examOffer,
       pricing: examPricing,
-      accessUntilIfPurchased: projectedExamAccessUntil({
-        activeUntil: plus.activeUntil,
-        days: BILLING_PLANS.plus_monthly.plusDays,
-      }),
     } : null,
     orders: visibleRows.map(normalizeOrder),
     historyNextCursor: recentRows.length >= 10 ? recentRows.at(-1)?.created_at ?? null : null,
@@ -831,7 +814,7 @@ async function getActivePaystackOrder(userId: string) {
 export async function createPaystackBillingOrder(userId: string, planKey: unknown, returnPath?: unknown, expectedAmountNaira?: unknown) {
   const basePlan = getBillingPlan(planKey);
   const safeReturnPath = billingReturnPathForCurrentMode(returnPath);
-  assertPlanAvailable(basePlan, safeReturnPath);
+  assertPlanAvailable(basePlan);
   const plan = planForCheckout(basePlan, safeReturnPath);
   assertPromisedCheckoutPrice(plan, safeReturnPath, expectedAmountNaira);
   const now = Date.now();
@@ -839,7 +822,9 @@ export async function createPaystackBillingOrder(userId: string, planKey: unknow
 
   if (existing) {
     const ageMs = now - new Date(existing.created_at).getTime();
-    const existingAmountIsSafe = Number(existing.amount_naira) <= plan.amountNaira;
+    const existingAmountIsSafe = isExamSprintCheckout(plan, safeReturnPath)
+      ? Number(existing.amount_naira) === plan.amountNaira
+      : Number(existing.amount_naira) <= plan.amountNaira;
     if (existingAmountIsSafe && canReusePaystackCheckout({
       paymentMethod: existing.payment_method,
       status: existing.status,
@@ -982,9 +967,12 @@ export async function resumePaystackBillingOrder(orderId: string, userId: string
   }
   const rowReturnPath = restoreBillingReturnPath(row.return_path);
   const basePlan = getBillingPlan(row.plan_key);
-  assertPlanAvailable(basePlan, rowReturnPath);
+  assertPlanAvailable(basePlan);
   const currentPlan = planForCheckout(basePlan, rowReturnPath);
-  if (Number(row.amount_naira) > currentPlan.amountNaira) {
+  const checkoutAmountChanged = isExamSprintCheckout(currentPlan, rowReturnPath)
+    ? Number(row.amount_naira) !== currentPlan.amountNaira
+    : Number(row.amount_naira) > currentPlan.amountNaira;
+  if (checkoutAmountChanged) {
     throw httpError(
       "The price of this pass has changed. Start a new checkout to use the current price.",
       409,

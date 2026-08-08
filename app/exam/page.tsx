@@ -54,11 +54,6 @@ export default async function ExamSprintPage() {
   const pricing = getExamSprintPricing();
   const billingHref = "/study/billing?offer=exam-sprint&returnTo=/exam";
   const passHref = user ? billingHref : `/login?next=${encodeURIComponent(billingHref)}`;
-  const promoEndLabel = new Intl.DateTimeFormat("en-NG", {
-    day: "numeric",
-    month: "short",
-    timeZone: "Africa/Lagos",
-  }).format(new Date(pricing.promoEndsAt));
   const structuredData = examSprintStructuredData(
     uniqueCourses.filter((course) => course.sets.length > 0),
   );
@@ -94,9 +89,7 @@ export default async function ExamSprintPage() {
             </span>
           ) : (
             <Link href={passHref} className="inline-flex min-h-8 items-center rounded-lg bg-primary/10 px-2.5 text-[10px] font-bold text-primary no-underline">
-              {pricing.isPromo
-                ? `30-day promo · ${formatNaira(pricing.currentPriceNaira)} · ends ${promoEndLabel}`
-                : `Passes from ${formatNaira(pricing.weeklyPriceNaira)}`}
+              Passes from {formatNaira(pricing.weeklyPriceNaira)}
             </Link>
           )}
         </div>

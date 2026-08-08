@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   EXAM_COURSES,
-  EXAM_SPRINT_REGULAR_PRICE_NAIRA,
+  EXAM_SPRINT_MONTHLY_PRICE_NAIRA,
   EXAM_SPRINT_WEEKLY_PRICE_NAIRA,
   examCourseBankNeedsMaterial,
   examCourseDateLabel,
@@ -57,20 +57,14 @@ describe("Exam Sprint course catalog", () => {
     expect(examCourseBankNeedsMaterial(findExamCourse("CHM 101"))).toBe(false);
   });
 
-  it("runs the promo price through 13 August then returns to the regular price", () => {
-    const duringPromo = getExamSprintPricing(new Date("2026-08-10T12:00:00+01:00"));
-    const afterPromo = getExamSprintPricing(new Date("2026-08-14T00:00:00+01:00"));
+  it("uses the standard 7-day and 30-day Exam Sprint prices", () => {
+    const pricing = getExamSprintPricing();
 
-    expect(duringPromo.isPromo).toBe(true);
-    expect(duringPromo.currentPriceNaira).toBe(1_000);
-    expect(duringPromo.weeklyAvailable).toBe(false);
-    expect(afterPromo.isPromo).toBe(false);
-    expect(afterPromo.currentPriceNaira).toBe(EXAM_SPRINT_REGULAR_PRICE_NAIRA);
-    expect(afterPromo.weeklyAvailable).toBe(true);
-    expect(afterPromo.weeklyPriceNaira).toBe(EXAM_SPRINT_WEEKLY_PRICE_NAIRA);
-    expect(afterPromo.weeklyDays).toBe(7);
-    expect(afterPromo.monthlyDays).toBe(30);
+    expect(pricing.weeklyPriceNaira).toBe(EXAM_SPRINT_WEEKLY_PRICE_NAIRA);
+    expect(pricing.monthlyPriceNaira).toBe(EXAM_SPRINT_MONTHLY_PRICE_NAIRA);
+    expect(pricing.weeklyDays).toBe(7);
+    expect(pricing.monthlyDays).toBe(30);
     expect(EXAM_SPRINT_WEEKLY_PRICE_NAIRA).toBe(400);
-    expect(EXAM_SPRINT_REGULAR_PRICE_NAIRA).toBe(1_500);
+    expect(EXAM_SPRINT_MONTHLY_PRICE_NAIRA).toBe(1_500);
   });
 });

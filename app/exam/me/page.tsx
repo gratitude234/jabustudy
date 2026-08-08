@@ -54,9 +54,7 @@ export default async function ExamMePage({
         email={user.email ?? ""}
         passActive={access.active}
         passActiveUntil={access.activeUntil}
-        passPriceNaira={pricing.currentPriceNaira}
         passWeeklyPriceNaira={pricing.weeklyPriceNaira}
-        passIsPromo={pricing.isPromo}
         returnTo={returnTo}
         communityHref={communityHref}
       />

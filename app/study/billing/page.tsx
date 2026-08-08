@@ -98,18 +98,11 @@ type BillingSnapshot = {
   examOffer: {
     readyCourseCount: number;
     reviewedQuestionCount: number;
-    accessUntilIfPurchased: string;
     pricing: {
-      currentPriceNaira: number;
-      regularPriceNaira: number;
       weeklyPriceNaira: number;
-      promoPriceNaira: number;
+      monthlyPriceNaira: number;
       weeklyDays: number;
       monthlyDays: number;
-      weeklyAvailable: boolean;
-      promoStartsAt: string;
-      promoEndsAt: string;
-      isPromo: boolean;
     };
   } | null;
   orders: BillingOrder[];
@@ -363,26 +356,15 @@ export default function StudyBillingPage() {
       const advertisedExamPrice = target?.planKey === "plus_weekly"
         ? advertisedExamPricing?.weeklyPriceNaira
         : target?.planKey === "plus_monthly"
-          ? advertisedExamPricing?.currentPriceNaira
+          ? advertisedExamPricing?.monthlyPriceNaira
           : null;
-      if (
-        isExamOffer
-        && target
-        && target.status !== "approved"
-        && target.planKey === "plus_weekly"
-        && advertisedExamPricing
-        && !advertisedExamPricing.weeklyAvailable
-      ) {
-        setCheckoutOrderId(null);
-        return;
-      }
       if (
         isExamOffer
         && target
         && target.status !== "approved"
         && (target.planKey === "plus_weekly" || target.planKey === "plus_monthly")
         && typeof advertisedExamPrice === "number"
-        && target.amountNaira > advertisedExamPrice
+        && target.amountNaira !== advertisedExamPrice
       ) {
         setCheckoutOrderId(null);
         return;
@@ -410,12 +392,12 @@ export default function StudyBillingPage() {
     () => {
       if (offer !== "exam-sprint") return plusPlans;
       return plusPlans
-        .filter((plan) => plan.key === "plus_monthly" || (plan.key === "plus_weekly" && examPricing?.weeklyAvailable))
+        .filter((plan) => plan.key === "plus_weekly" || plan.key === "plus_monthly")
         .map((plan) => {
           if (!examPricing) return plan;
           return plan.key === "plus_weekly"
             ? { ...plan, amountNaira: examPricing.weeklyPriceNaira, plusDays: examPricing.weeklyDays }
-            : { ...plan, amountNaira: examPricing.currentPriceNaira, plusDays: examPricing.monthlyDays };
+            : { ...plan, amountNaira: examPricing.monthlyPriceNaira, plusDays: examPricing.monthlyDays };
         })
         .sort((a, b) => Number(a.plusDays ?? 0) - Number(b.plusDays ?? 0));
     },
@@ -428,15 +410,10 @@ export default function StudyBillingPage() {
   const examCourseSlug = returnPath.match(/^\/exam\/([^/?#]+)/)?.[1] ?? null;
   const examCourse = offer === "exam-sprint" ? findExamCourse(examCourseSlug) : null;
   const examReturnLabel = examCourse ? examCourse.code : "Exam Sprint";
-  const examPlan = visiblePlusPlans.find((plan) => plan.key === "plus_monthly") ?? null;
-  const promoEndDate = examPricing?.isPromo ? formatDateOnly(examPricing.promoEndsAt) : null;
   const readyCourseCount = snapshot?.examOffer?.readyCourseCount ?? 0;
   const reviewedQuestionCount = snapshot?.examOffer?.reviewedQuestionCount ?? 0;
-  const projectedAccessDate = formatDateOnly(snapshot?.examOffer?.accessUntilIfPurchased);
   const readyCourseLabel = `${readyCourseCount} ready course${readyCourseCount === 1 ? "" : "s"}`;
-  const examOfferHeadline = examPricing?.isPromo
-    ? snapshot?.plus.active ? "Extend full Exam Sprint access by 30 days" : "Unlock every Exam Sprint mock for 30 days"
-    : snapshot?.plus.active ? "Extend your Exam Sprint access" : "Choose how long you need full access";
+  const examOfferHeadline = snapshot?.plus.active ? "Extend your Exam Sprint access" : "Choose how long you need full access";
   const examOfferInsight = examContext.diagnosticScore !== null
     ? examContext.focusTopic
       ? `Your ${examContext.diagnosticScore}% diagnostic shows ${examContext.focusTopic} is a useful first focus.`
@@ -655,18 +632,11 @@ export default function StudyBillingPage() {
         <header>
           <Link href={returnPath} className={cn("inline-flex min-h-10 items-center gap-1.5 text-sm font-bold text-muted-foreground no-underline transition hover:text-primary", focusRing)}><ArrowLeft className="h-4 w-4" aria-hidden="true" /> Back to {examReturnLabel}</Link>
           <div className="mt-2">
-            <p className="inline-flex items-center gap-1.5 text-[10px] font-black uppercase tracking-[0.16em] text-primary"><LockKeyhole className="h-3.5 w-3.5" aria-hidden="true" /> {examPricing?.isPromo ? "30-Day Exam Sprint Promo" : snapshot?.plus.active ? "Extend your pass" : "Exam Sprint Passes"}</p>
+            <p className="inline-flex items-center gap-1.5 text-[10px] font-black uppercase tracking-[0.16em] text-primary"><LockKeyhole className="h-3.5 w-3.5" aria-hidden="true" /> {snapshot?.plus.active ? "Extend your pass" : "Exam Sprint Passes"}</p>
             <h1 className="mt-1.5 max-w-xl text-2xl font-black leading-tight tracking-tight">{examOfferHeadline}</h1>
             <p className="mt-2 max-w-xl text-sm leading-5.5 text-muted-foreground">
-              {examPricing?.isPromo
-                ? `${examPlan ? `One ${money(examPlan.amountNaira)} payment.` : "One payment."} No subscription. 30 days of access through ${projectedAccessDate}.`
-                : `7 days for ${money(examPricing?.weeklyPriceNaira ?? 400)} or 30 days for ${money(examPricing?.regularPriceNaira ?? 1_500)}. One payment, no subscription.`}
+              7 days for {money(examPricing?.weeklyPriceNaira ?? 400)} or 30 days for {money(examPricing?.monthlyPriceNaira ?? 1_500)}. One payment, no subscription.
             </p>
-            {examPricing?.isPromo && promoEndDate ? (
-              <p className="mt-1.5 text-[11px] font-bold text-primary">
-                The {money(examPricing.currentPriceNaira)} price is for 30 days of access and is available through {promoEndDate}.
-              </p>
-            ) : null}
             {examOfferInsight ? (
               <p className="mt-3 max-w-xl rounded-xl border border-primary/15 bg-primary/[0.06] px-3.5 py-3 text-xs font-semibold leading-5 text-foreground/80">
                 {examOfferInsight}
@@ -733,7 +703,7 @@ export default function StudyBillingPage() {
         </div>
       ) : snapshot && offer === "exam-sprint" && snapshot.plus.active ? (
         <div className="flex items-start gap-3 rounded-2xl border border-emerald-300/50 bg-emerald-100/45 p-4 text-emerald-900 dark:bg-emerald-950/25 dark:text-emerald-200">
-          <BadgeCheck className="mt-0.5 h-5 w-5 shrink-0" aria-hidden="true" /><div><p className="text-sm font-extrabold">Your Exam Sprint Pass is already active</p><p className="mt-0.5 text-xs leading-5">Your current access lasts until {formatDate(snapshot.plus.activeUntil)}. {examPricing?.isPromo ? `Extending now keeps your remaining time and moves your access end date to ${projectedAccessDate}.` : "Choose 7 or 30 more days below. Your extension starts after your current access ends, so you keep every day you already paid for."}</p></div>
+          <BadgeCheck className="mt-0.5 h-5 w-5 shrink-0" aria-hidden="true" /><div><p className="text-sm font-extrabold">Your Exam Sprint Pass is already active</p><p className="mt-0.5 text-xs leading-5">Your current access lasts until {formatDate(snapshot.plus.activeUntil)}. Choose 7 or 30 more days below. Your extension starts after your current access ends, so you keep every day you already paid for.</p></div>
         </div>
       ) : null}
 
@@ -849,7 +819,7 @@ export default function StudyBillingPage() {
             <div className={cn(
               "grid gap-3",
               offer === "exam-sprint"
-                ? examPricing?.isPromo ? "max-w-2xl" : "max-w-2xl sm:grid-cols-2"
+                ? "max-w-2xl sm:grid-cols-2"
                 : "mt-4 sm:grid-cols-2",
             )}>
               {visiblePlusPlans.map((plan) => {
@@ -867,14 +837,13 @@ export default function StudyBillingPage() {
                       <>
                         <div className="flex items-start justify-between gap-3">
                           <div className="min-w-0">
-                            <p className="text-[10px] font-black uppercase tracking-[0.16em] text-primary">{examPricing?.isPromo ? "Limited-time 30-day price" : `${planDays}-day pass`}</p>
-                            <h3 className="mt-1 font-extrabold">{examPricing?.isPromo ? "Full Exam Sprint access" : planDays === 7 ? "One exam week" : "More time across courses"}</h3>
-                            {!examPricing?.isPromo ? <p className="mt-1 text-[11px] leading-4 text-muted-foreground">{planDays === 7 ? "A smaller commitment for the week ahead." : "Best when you are preparing for several courses."}</p> : null}
+                            <p className="text-[10px] font-black uppercase tracking-[0.16em] text-primary">{planDays}-day pass</p>
+                            <h3 className="mt-1 font-extrabold">{planDays === 7 ? "One exam week" : "More time across courses"}</h3>
+                            <p className="mt-1 text-[11px] leading-4 text-muted-foreground">{planDays === 7 ? "A smaller commitment for the week ahead." : "Best when you are preparing for several courses."}</p>
                           </div>
                           <div className="shrink-0 text-right">
                             <p className="text-3xl font-black tracking-tight">{money(plan.amountNaira)}</p>
                             <p className="text-[10px] font-bold text-muted-foreground">about {money(planDailyEquivalent)}/day</p>
-                            {examPricing?.isPromo ? <p className="mt-0.5 text-[9px] font-semibold text-muted-foreground">Regular {money(examPricing.regularPriceNaira)} afterwards</p> : null}
                           </div>
                         </div>
                         <div className="mt-3 flex flex-wrap gap-x-3 gap-y-1.5 text-[10px] font-bold text-foreground/70">
