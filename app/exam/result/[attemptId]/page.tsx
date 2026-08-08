@@ -18,7 +18,7 @@ import {
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { findExamCourse, getExamSprintPricing } from "@/lib/examSprint/config";
 import { buildExamSprintBillingHref } from "@/lib/examSprint/offer";
-import { getExamResult, getMonthlyExamAccess } from "@/lib/examSprint/server";
+import { getExamPassAccess, getExamResult } from "@/lib/examSprint/server";
 import { getExamPageDeviceSession } from "@/lib/examSprint/deviceSession";
 import { getExamSprintCommunityUrl } from "@/lib/examSprint/community";
 import { examDiagnosticCooldownEndsAt } from "@/lib/examSprint/dailyDiagnostic";
@@ -93,7 +93,7 @@ export default async function ExamResultPage({ params }: { params: Promise<{ att
 
   const [result, access] = await Promise.all([
     getExamResult(user.id, attemptId),
-    getMonthlyExamAccess(user.id),
+    getExamPassAccess(user.id),
   ]);
   const pricing = getExamSprintPricing();
   const course = findExamCourse(result.courseCode);
@@ -247,12 +247,12 @@ export default async function ExamResultPage({ params }: { params: Promise<{ att
 
           <div className="mt-3 flex flex-wrap gap-x-3 gap-y-1.5 border-y border-primary/10 py-2.5 text-[10px] font-bold text-foreground/75">
             <span className="inline-flex items-center gap-1"><CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" aria-hidden="true" /> Every ready course</span>
-            <span className="inline-flex items-center gap-1"><CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" aria-hidden="true" /> 30 days</span>
+            <span className="inline-flex items-center gap-1"><CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" aria-hidden="true" /> {pricing.isPromo ? "30 days" : "7 or 30 days"}</span>
             <span className="inline-flex items-center gap-1"><CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" aria-hidden="true" /> No subscription</span>
           </div>
 
           <Link href={billingHref} className="mt-3 inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-xl bg-primary px-4 text-sm font-black text-primary-foreground no-underline shadow-sm">
-            <LockKeyhole className="h-4 w-4" aria-hidden="true" /> Unlock all mocks · {formatNaira(pricing.currentPriceNaira)}
+            <LockKeyhole className="h-4 w-4" aria-hidden="true" /> Unlock all mocks · {pricing.isPromo ? formatNaira(pricing.currentPriceNaira) : `from ${formatNaira(pricing.weeklyPriceNaira)}`}
           </Link>
           {pricing.isPromo ? <p className="mt-1.5 text-center text-[10px] font-semibold text-muted-foreground">Promo price {formatNaira(pricing.currentPriceNaira)} · normally {formatNaira(pricing.regularPriceNaira)}</p> : null}
           <Link href="/exam" className="mt-1.5 inline-flex min-h-9 w-full items-center justify-center gap-1.5 text-xs font-bold text-primary no-underline hover:underline">

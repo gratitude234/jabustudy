@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   EXAM_COURSES,
   EXAM_SPRINT_REGULAR_PRICE_NAIRA,
+  EXAM_SPRINT_WEEKLY_PRICE_NAIRA,
   examCourseBankNeedsMaterial,
   examCourseDateLabel,
   findExamCourse,
@@ -62,8 +63,14 @@ describe("Exam Sprint course catalog", () => {
 
     expect(duringPromo.isPromo).toBe(true);
     expect(duringPromo.currentPriceNaira).toBe(1_000);
+    expect(duringPromo.weeklyAvailable).toBe(false);
     expect(afterPromo.isPromo).toBe(false);
     expect(afterPromo.currentPriceNaira).toBe(EXAM_SPRINT_REGULAR_PRICE_NAIRA);
+    expect(afterPromo.weeklyAvailable).toBe(true);
+    expect(afterPromo.weeklyPriceNaira).toBe(EXAM_SPRINT_WEEKLY_PRICE_NAIRA);
+    expect(afterPromo.weeklyDays).toBe(7);
+    expect(afterPromo.monthlyDays).toBe(30);
+    expect(EXAM_SPRINT_WEEKLY_PRICE_NAIRA).toBe(400);
     expect(EXAM_SPRINT_REGULAR_PRICE_NAIRA).toBe(1_500);
   });
 });

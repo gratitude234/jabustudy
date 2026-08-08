@@ -26,6 +26,7 @@ import {
   examDiagnosticDayWindow,
 } from "@/lib/examSprint/dailyDiagnostic";
 import { examMistakeGraceEndsAt, examMistakeGraceIsOpen } from "@/lib/examSprint/workflow";
+import { EXAM_SPRINT_PLAN_KEYS, isExamSprintBillingPlan } from "@/lib/systemMode";
 
 export type ExamAttemptKind = "diagnostic" | "mock";
 export type ExamAttemptExperience = "exam_diagnostic" | "exam_mock";
@@ -299,7 +300,7 @@ async function getEligibleQuestionIdsBySet(setIds: readonly string[]) {
   return bySet;
 }
 
-export async function getMonthlyExamAccess(userId: string | null | undefined) {
+export async function getExamPassAccess(userId: string | null | undefined) {
   if (!userId) return { active: false, activeUntil: null as string | null };
 
   const now = Date.now();
@@ -313,14 +314,14 @@ export async function getMonthlyExamAccess(userId: string | null | undefined) {
       .from("study_billing_orders")
       .select("plan_key,status,plus_days,paid_at,reviewed_at,created_at")
       .eq("user_id", userId)
-      .eq("plan_key", "plus_monthly")
+      .in("plan_key", [...EXAM_SPRINT_PLAN_KEYS])
       .eq("status", "approved")
       .order("created_at", { ascending: false })
       .limit(10),
   ]);
 
   const entitlementUntil = entitlement?.active_until ? new Date(entitlement.active_until).getTime() : 0;
-  const entitlementQualifies = entitlement?.plan_key === "plus_monthly" && entitlementUntil > now;
+  const entitlementQualifies = isExamSprintBillingPlan(entitlement?.plan_key) && entitlementUntil > now;
   let orderUntil = 0;
   for (const order of orders ?? []) {
     const activatedAt = order.paid_at || order.reviewed_at || order.created_at;
@@ -396,7 +397,7 @@ export async function getExamOfferSummary(): Promise<ExamOfferSummary> {
 export async function getExamCatalog(userId?: string | null) {
   const [sets, access, attemptsResult] = await Promise.all([
     getPublishedExamSets(),
-    getMonthlyExamAccess(userId),
+    getExamPassAccess(userId),
     userId
       ? adminSupabase
           .from("study_practice_attempts")

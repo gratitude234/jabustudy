@@ -100,14 +100,31 @@ export function examSprintStructuredData(readyCourses: readonly ExamCourse[]) {
       name: "JabuStudy",
       url: publicUrl("/"),
     },
-    offers: {
-      "@type": "Offer",
-      price: String(pricing.currentPriceNaira),
-      priceCurrency: "NGN",
-      description: "30-day Exam Sprint pass",
-      url,
-      ...(pricing.isPromo ? { priceValidUntil: pricing.promoEndsAt.slice(0, 10) } : {}),
-    },
+    offers: pricing.isPromo
+      ? {
+          "@type": "Offer",
+          price: String(pricing.currentPriceNaira),
+          priceCurrency: "NGN",
+          description: "30-day Exam Sprint promotional pass",
+          url,
+          priceValidUntil: pricing.promoEndsAt.slice(0, 10),
+        }
+      : [
+          {
+            "@type": "Offer",
+            price: String(pricing.weeklyPriceNaira),
+            priceCurrency: "NGN",
+            description: "7-day Exam Sprint pass",
+            url,
+          },
+          {
+            "@type": "Offer",
+            price: String(pricing.regularPriceNaira),
+            priceCurrency: "NGN",
+            description: "30-day Exam Sprint pass",
+            url,
+          },
+        ],
     featureList: [
       `${EXAM_MOCK_QUESTION_COUNT}-question timed CBT mocks`,
       `${EXAM_MOCK_DURATION_MINUTES}-minute exam timer`,

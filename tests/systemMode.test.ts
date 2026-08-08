@@ -1,8 +1,11 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  EXAM_SPRINT_MONTHLY_PLAN_KEY,
   EXAM_SPRINT_PLAN_KEY,
+  EXAM_SPRINT_WEEKLY_PLAN_KEY,
   isBillingPlanAllowedInSystemMode,
+  isExamSprintBillingPlan,
   isExamOnlyApiAllowed,
   isExamOnlyBillingEntryAllowed,
   isExamOnlyPageAllowed,
@@ -92,9 +95,12 @@ describe("Exam Sprint-only system mode", () => {
     })).toBe("/study/library");
   });
 
-  it("restricts new purchases to the Exam Sprint plan", () => {
+  it("restricts new purchases to the two Exam Sprint pass durations", () => {
     expect(isBillingPlanAllowedInSystemMode(EXAM_SPRINT_PLAN_KEY, true)).toBe(true);
-    expect(isBillingPlanAllowedInSystemMode("plus_weekly", true)).toBe(false);
+    expect(isBillingPlanAllowedInSystemMode(EXAM_SPRINT_WEEKLY_PLAN_KEY, true)).toBe(true);
+    expect(isBillingPlanAllowedInSystemMode(EXAM_SPRINT_MONTHLY_PLAN_KEY, true)).toBe(true);
+    expect(isExamSprintBillingPlan(EXAM_SPRINT_WEEKLY_PLAN_KEY)).toBe(true);
+    expect(isExamSprintBillingPlan(EXAM_SPRINT_MONTHLY_PLAN_KEY)).toBe(true);
     expect(isBillingPlanAllowedInSystemMode("credits_100", true)).toBe(false);
     expect(isBillingPlanAllowedInSystemMode("credits_100", false)).toBe(true);
   });

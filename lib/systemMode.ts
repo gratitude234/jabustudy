@@ -1,5 +1,12 @@
 export const EXAM_SPRINT_ONLY_ENV = "EXAM_SPRINT_ONLY_MODE";
-export const EXAM_SPRINT_PLAN_KEY = "plus_monthly";
+export const EXAM_SPRINT_WEEKLY_PLAN_KEY = "plus_weekly";
+export const EXAM_SPRINT_MONTHLY_PLAN_KEY = "plus_monthly";
+/** @deprecated Prefer the explicit monthly key or isExamSprintBillingPlan(). */
+export const EXAM_SPRINT_PLAN_KEY = EXAM_SPRINT_MONTHLY_PLAN_KEY;
+export const EXAM_SPRINT_PLAN_KEYS = [
+  EXAM_SPRINT_WEEKLY_PLAN_KEY,
+  EXAM_SPRINT_MONTHLY_PLAN_KEY,
+] as const;
 export const EXAM_SPRINT_HOME = "/exam";
 
 type Environment = Record<string, string | undefined>;
@@ -62,8 +69,13 @@ export function isExamOnlyBillingEntryAllowed(searchParams: URLSearchParams) {
   return searchParams.get("offer") === "exam-sprint";
 }
 
+export function isExamSprintBillingPlan(planKey: unknown) {
+  return typeof planKey === "string"
+    && (EXAM_SPRINT_PLAN_KEYS as readonly string[]).includes(planKey);
+}
+
 export function isBillingPlanAllowedInSystemMode(planKey: unknown, examOnlyMode: boolean) {
-  return !examOnlyMode || planKey === EXAM_SPRINT_PLAN_KEY;
+  return !examOnlyMode || isExamSprintBillingPlan(planKey);
 }
 
 function normalizeInternalDestination(value: string | null | undefined, fallback: string) {

@@ -94,7 +94,9 @@ export default async function ExamSprintPage() {
             </span>
           ) : (
             <Link href={passHref} className="inline-flex min-h-8 items-center rounded-lg bg-primary/10 px-2.5 text-[10px] font-bold text-primary no-underline">
-              {pricing.isPromo ? `Promo · ${formatNaira(pricing.currentPriceNaira)} · ends ${promoEndLabel}` : `30-day pass · ${formatNaira(pricing.currentPriceNaira)}`}
+              {pricing.isPromo
+                ? `30-day promo · ${formatNaira(pricing.currentPriceNaira)} · ends ${promoEndLabel}`
+                : `Passes from ${formatNaira(pricing.weeklyPriceNaira)}`}
             </Link>
           )}
         </div>

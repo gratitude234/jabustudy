@@ -54,8 +54,8 @@ export default async function BillingReceiptPage({ params }: { params: Promise<{
         <div className="flex items-start justify-between gap-4 border-b border-border pb-6">
           <div>
             <p className="text-xs font-bold uppercase tracking-[0.2em] text-primary">JabuStudy receipt</p>
-            <h1 className="mt-2 text-2xl font-extrabold">{order.planLabel}</h1>
-            <p className="mt-1 text-sm text-muted-foreground">{isExamPurchase ? "Includes 30 days of Exam Sprint access." : "A record of your JabuStudy purchase."}</p>
+            <h1 className="mt-2 text-2xl font-extrabold">{isExamPurchase ? `${order.plusDays ?? 30}-Day Exam Sprint Pass` : order.planLabel}</h1>
+            <p className="mt-1 text-sm text-muted-foreground">{isExamPurchase ? `Includes ${order.plusDays ?? 30} days of Exam Sprint access.` : "A record of your JabuStudy purchase."}</p>
           </div>
           <p className="text-2xl font-black">{money(order.amountNaira)}</p>
         </div>

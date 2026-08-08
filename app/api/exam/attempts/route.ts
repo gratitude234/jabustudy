@@ -8,7 +8,7 @@ import {
   examExperience,
   examHttpError,
   finalizeExamAttempt,
-  getMonthlyExamAccess,
+  getExamPassAccess,
   getOwnedExamAttempt,
   getPublishedExamSet,
   type ExamAttemptKind,
@@ -125,13 +125,13 @@ export async function POST(req: NextRequest) {
         );
       }
     } else {
-      const access = await getMonthlyExamAccess(user.id);
+      const access = await getExamPassAccess(user.id);
       if (!access.active || setRow.access_tier !== "plus_monthly") {
         return NextResponse.json(
           {
             ok: false,
             code: "EXAM_ACCESS_REQUIRED",
-            message: "A 30-Day Exam Sprint Pass is required for full mocks.",
+            message: "An active Exam Sprint Pass is required for full mocks.",
             checkoutUrl: `/study/billing?offer=exam-sprint&returnTo=${encodeURIComponent(`/exam/${course.slug}`)}`,
           },
           { status: 402 },

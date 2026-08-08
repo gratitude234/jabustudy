@@ -4,7 +4,7 @@ import { redirect } from "next/navigation";
 import { ArrowLeft } from "lucide-react";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { getExamSprintPricing } from "@/lib/examSprint/config";
-import { getMonthlyExamAccess } from "@/lib/examSprint/server";
+import { getExamPassAccess } from "@/lib/examSprint/server";
 import { sanitizeExamSecurityReturnPath } from "@/lib/examSprint/device";
 import { getExamSprintCommunityUrl } from "@/lib/examSprint/community";
 import ExamMeClient from "./ExamMeClient";
@@ -37,7 +37,7 @@ export default async function ExamMePage({
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) redirect(`/login?next=${encodeURIComponent("/exam/me")}`);
 
-  const access = await getMonthlyExamAccess(user.id);
+  const access = await getExamPassAccess(user.id);
   const pricing = getExamSprintPricing();
   const communityHref = getExamSprintCommunityUrl();
 
@@ -55,6 +55,8 @@ export default async function ExamMePage({
         passActive={access.active}
         passActiveUntil={access.activeUntil}
         passPriceNaira={pricing.currentPriceNaira}
+        passWeeklyPriceNaira={pricing.weeklyPriceNaira}
+        passIsPromo={pricing.isPromo}
         returnTo={returnTo}
         communityHref={communityHref}
       />

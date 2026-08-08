@@ -58,6 +58,8 @@ export default function ExamMeClient({
   passActive,
   passActiveUntil,
   passPriceNaira,
+  passWeeklyPriceNaira,
+  passIsPromo,
   returnTo,
   communityHref,
 }: {
@@ -66,6 +68,8 @@ export default function ExamMeClient({
   passActive: boolean;
   passActiveUntil: string | null;
   passPriceNaira: number;
+  passWeeklyPriceNaira: number;
+  passIsPromo: boolean;
   returnTo: string;
   communityHref: string | null;
 }) {
@@ -191,11 +195,13 @@ export default function ExamMeClient({
             <p className="mt-1 text-xs leading-5 text-muted-foreground">
               {passActive
                 ? passEnd ? `Your full mocks and corrections are available through ${passEnd}.` : "Your full mocks and corrections are active."
-                : "You get one free 10-question diagnostic every 5 hours. The next check unlocks 5 hours after the last one starts and free checks do not stack; full mocks require the 30-day pass."}
+                : "You get one free 10-question diagnostic every 5 hours. The next check unlocks 5 hours after the last one starts and free checks do not stack; full mocks require an Exam Sprint pass."}
             </p>
             {!passActive ? (
               <Link href="/study/billing?offer=exam-sprint&returnTo=/exam/me" className="mt-2 inline-flex min-h-8 items-center gap-1 text-xs font-bold text-primary no-underline hover:underline">
-                Unlock 30 days · {formatNaira(passPriceNaira)} <ChevronRight className="h-3.5 w-3.5" aria-hidden="true" />
+                {passIsPromo
+                  ? `Unlock 30 days · ${formatNaira(passPriceNaira)}`
+                  : `View passes · from ${formatNaira(passWeeklyPriceNaira)}`} <ChevronRight className="h-3.5 w-3.5" aria-hidden="true" />
               </Link>
             ) : null}
           </div>

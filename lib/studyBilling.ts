@@ -9,14 +9,19 @@ import {
   sanitizeBillingReturnPath,
 } from "@/lib/billingReturnPath";
 import { canReusePaystackCheckout } from "@/lib/billingWorkflow";
-import { getExamSprintPricing } from "@/lib/examSprint/config";
+import {
+  EXAM_SPRINT_MONTHLY_DAYS,
+  EXAM_SPRINT_WEEKLY_DAYS,
+  getExamSprintPricing,
+} from "@/lib/examSprint/config";
 import { projectedExamAccessUntil } from "@/lib/examSprint/offer";
 import { getExamOfferSummary } from "@/lib/examSprint/server";
 import { verifyPaystackTransaction } from "@/lib/paystack";
 import {
   EXAM_SPRINT_HOME,
-  EXAM_SPRINT_PLAN_KEY,
+  EXAM_SPRINT_WEEKLY_PLAN_KEY,
   isBillingPlanAllowedInSystemMode,
+  isExamSprintBillingPlan,
   isExamSprintOnlyMode,
 } from "@/lib/systemMode";
 
@@ -73,7 +78,7 @@ export const BILLING_PLANS: Record<BillingPlanKey, BillingPlan> = {
     key: "plus_monthly",
     productType: "plus",
     label: "JabuStudy Plus Monthly",
-    amountNaira: 1300,
+    amountNaira: 1500,
     credits: 100,
     plusDays: 30,
   },
@@ -144,12 +149,29 @@ function httpError(message: string, status: number, code: string) {
   return Object.assign(new Error(message), { status, code });
 }
 
-function assertPlanAvailable(plan: BillingPlan) {
+function isExamSprintCheckout(plan: BillingPlan, returnPath: string) {
+  return isExamSprintBillingPlan(plan.key)
+    && (returnPath === EXAM_SPRINT_HOME || returnPath.startsWith(`${EXAM_SPRINT_HOME}/`));
+}
+
+function assertPlanAvailable(plan: BillingPlan, returnPath: string) {
   if (!isBillingPlanAllowedInSystemMode(plan.key, isExamSprintOnlyMode())) {
     throw httpError(
-      "Only the 30-day Exam Sprint pass is available during the examination period.",
+      "Only Exam Sprint passes are available during the examination period.",
       423,
       "SYSTEM_MODE_RESTRICTED"
+    );
+  }
+
+  if (
+    isExamSprintCheckout(plan, returnPath)
+    && plan.key === EXAM_SPRINT_WEEKLY_PLAN_KEY
+    && !getExamSprintPricing().weeklyAvailable
+  ) {
+    throw httpError(
+      "The 7-day pass becomes available after the current 30-day promotion ends.",
+      409,
+      "EXAM_WEEKLY_PASS_NOT_AVAILABLE"
     );
   }
 }
@@ -163,17 +185,18 @@ function billingReturnPathForCurrentMode(value: unknown) {
 }
 
 function planForCheckout(plan: BillingPlan, returnPath: string): BillingPlan {
-  const isExamSprintCheckout = plan.key === EXAM_SPRINT_PLAN_KEY
-    && (returnPath === EXAM_SPRINT_HOME || returnPath.startsWith(`${EXAM_SPRINT_HOME}/`));
-  if (!isExamSprintCheckout) return plan;
-  return { ...plan, amountNaira: getExamSprintPricing().currentPriceNaira };
+  if (!isExamSprintCheckout(plan, returnPath)) return plan;
+  const pricing = getExamSprintPricing();
+  if (plan.key === EXAM_SPRINT_WEEKLY_PLAN_KEY) {
+    return { ...plan, amountNaira: pricing.weeklyPriceNaira, plusDays: EXAM_SPRINT_WEEKLY_DAYS };
+  }
+  return { ...plan, amountNaira: pricing.currentPriceNaira, plusDays: EXAM_SPRINT_MONTHLY_DAYS };
 }
 
 function assertPromisedCheckoutPrice(plan: BillingPlan, returnPath: string, expectedAmountNaira?: unknown) {
   const expected = Number(expectedAmountNaira);
-  const isExamSprintCheckout = plan.key === EXAM_SPRINT_PLAN_KEY
-    && (returnPath === EXAM_SPRINT_HOME || returnPath.startsWith(`${EXAM_SPRINT_HOME}/`));
-  if (isExamSprintCheckout && !Number.isFinite(expected)) {
+  const examCheckout = isExamSprintCheckout(plan, returnPath);
+  if (examCheckout && !Number.isFinite(expected)) {
     throw httpError(
       "The Exam Sprint offer was updated. Refresh this page before opening checkout.",
       409,
@@ -404,8 +427,8 @@ export async function recordFreeAiTrialGeneration(userId: string, metadata: Reco
 
 export async function createBillingOrder(userId: string, planKey: unknown, returnPath?: unknown, expectedAmountNaira?: unknown) {
   const basePlan = getBillingPlan(planKey);
-  assertPlanAvailable(basePlan);
   const safeReturnPath = billingReturnPathForCurrentMode(returnPath);
+  assertPlanAvailable(basePlan, safeReturnPath);
   const plan = planForCheckout(basePlan, safeReturnPath);
   assertPromisedCheckoutPrice(plan, safeReturnPath, expectedAmountNaira);
   const reference = await uniqueReference();
@@ -807,8 +830,8 @@ async function getActivePaystackOrder(userId: string) {
 
 export async function createPaystackBillingOrder(userId: string, planKey: unknown, returnPath?: unknown, expectedAmountNaira?: unknown) {
   const basePlan = getBillingPlan(planKey);
-  assertPlanAvailable(basePlan);
   const safeReturnPath = billingReturnPathForCurrentMode(returnPath);
+  assertPlanAvailable(basePlan, safeReturnPath);
   const plan = planForCheckout(basePlan, safeReturnPath);
   assertPromisedCheckoutPrice(plan, safeReturnPath, expectedAmountNaira);
   const now = Date.now();
@@ -950,14 +973,17 @@ export async function resumePaystackBillingOrder(orderId: string, userId: string
   if (error) throw httpError(error.message, 500, "DB_ERROR");
   if (!data?.id) throw httpError("Order not found.", 404, "ORDER_NOT_FOUND");
   const row = data as BillingOrderRow;
-  if (isExamSprintOnlyMode() && row.plan_key !== EXAM_SPRINT_PLAN_KEY) {
+  if (isExamSprintOnlyMode() && !isExamSprintBillingPlan(row.plan_key)) {
     throw httpError(
       "This checkout belongs to a study plan that is paused during Exam Sprint mode.",
       423,
       "SYSTEM_MODE_RESTRICTED"
     );
   }
-  const currentPlan = planForCheckout(getBillingPlan(row.plan_key), restoreBillingReturnPath(row.return_path));
+  const rowReturnPath = restoreBillingReturnPath(row.return_path);
+  const basePlan = getBillingPlan(row.plan_key);
+  assertPlanAvailable(basePlan, rowReturnPath);
+  const currentPlan = planForCheckout(basePlan, rowReturnPath);
   if (Number(row.amount_naira) > currentPlan.amountNaira) {
     throw httpError(
       "The price of this pass has changed. Start a new checkout to use the current price.",
